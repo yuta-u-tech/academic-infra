@@ -1,0 +1,35 @@
+# academic.yml — 科目リポジトリの構造宣言
+#
+# このファイルの目的は「AIにリポジトリ構造を推測させないこと」。
+# 新しい科目を追加するときは、これをコピーして値を書き換えるだけでよい。
+
+# 科目ID。courses.yml のキーと一致させる。英小文字とハイフンのみ。
+course_id: logic
+
+# 人間向けの科目名。Drive のフォルダ名と latest.md の見出しに使われる。
+course_name: 論理学
+
+# 親ファイル。リポジトリルートからの相対パス。
+main_tex: src/main.tex
+
+# TeX ソースのルート。
+source_dir: src
+
+# 章ファイル (chNN.tex) が並ぶディレクトリ。REVIEW-ID はここの .tex から集める。
+chapters_dir: src/chapters
+
+# 組版エンジン。現在は lualatex のみ対応。
+engine: lualatex
+
+# 成果物の出力先。git 管理下には置かない (.gitignore に入れる)。
+output_dir: dist
+
+# Google Drive 上のフォルダ名。省略時は course_name。
+drive_folder_name: 論理学
+
+# 生成・公開の対象外にするパス。
+# 受領資料 (教授の講義スライド等) や提出物は、自分の著作物ではないため
+# ここに入れて配布物から除外する。
+exclude_from_publish:
+  - Lecture_Materials
+  - Code

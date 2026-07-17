@@ -1,0 +1,34 @@
+# courses.yml — 全科目の対応表
+#
+# 「論理学の自然演繹を添削して」から対象リポジトリを解決するための索引。
+# aliases には、口頭で使いそうな呼び方をすべて入れておく。
+#
+# 新しい科目を追加する手順:
+#   1. ここに 1 エントリ追加する
+#   2. 科目リポジトリに templates/academic.yml と templates/AGENTS.md を置く
+#   3. 科目リポジトリに .github/workflows/document.yml を置く（README 参照）
+
+courses:
+  dsa:
+    course_name: データ構造とアルゴリズム
+    repository: yuta-u-tech/Data_Structure_And_Algorithms
+    visibility: private
+    aliases:
+      - データ構造
+      - アルゴリズム
+      - データ構造とアルゴリズム
+      - data structure
+      - algorithms
+    drive_folder: データ構造とアルゴリズム
+    status: pilot
+
+  logic:
+    course_name: 論理学
+    repository: yuta-u-tech/Logic
+    visibility: public
+    aliases:
+      - 論理学
+      - ロジック
+      - logic
+    drive_folder: 論理学
+    status: planned

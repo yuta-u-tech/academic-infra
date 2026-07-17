@@ -1,0 +1,26 @@
+# 科目リポジトリの .github/workflows/document.yml に置く。
+# 中身はこれだけでよい。実処理は academic-infra 側にある。
+name: document
+
+on:
+  pull_request:
+    paths:
+      - "src/**"
+      - "academic.yml"
+      - ".github/workflows/document.yml"
+  push:
+    branches: [main]
+    paths:
+      - "src/**"
+      - "academic.yml"
+  workflow_dispatch:
+
+jobs:
+  document:
+    uses: yuta-u-tech/academic-infra/.github/workflows/build-document.yml@main
+    with:
+      # main への push のときだけ Drive を更新する。
+      publish: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+    secrets:
+      GDRIVE_SERVICE_ACCOUNT_JSON: ${{ secrets.GDRIVE_SERVICE_ACCOUNT_JSON }}
+      GDRIVE_PARENT_FOLDER_ID: ${{ secrets.GDRIVE_PARENT_FOLDER_ID }}
