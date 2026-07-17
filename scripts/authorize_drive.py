@@ -52,6 +52,12 @@ def _parse_arguments() -> argparse.Namespace:
         action="store_true",
         help="ブラウザを自動で開かず、URL を表示してコンソールで認証する",
     )
+    parser.add_argument(
+        "--out",
+        type=Path,
+        default=None,
+        help="値を標準出力せずこのファイルに書く（トークンを画面に出さない）",
+    )
     return parser.parse_args()
 
 
@@ -86,11 +92,21 @@ def main() -> int:
     client_config = json.loads(arguments.client_secret.read_text(encoding="utf-8"))
     installed = client_config.get("installed") or client_config.get("web") or {}
 
-    print("\n===== GitHub Secrets に登録する値 =====\n")
-    print(f"GDRIVE_OAUTH_CLIENT_ID={installed.get('client_id', '')}")
-    print(f"GDRIVE_OAUTH_CLIENT_SECRET={installed.get('client_secret', '')}")
-    print(f"GDRIVE_OAUTH_REFRESH_TOKEN={credentials.refresh_token}")
-    print("\n(この3つはパスワード同然です。共有しないこと)")
+    lines = [
+        f"GDRIVE_OAUTH_CLIENT_ID={installed.get('client_id', '')}",
+        f"GDRIVE_OAUTH_CLIENT_SECRET={installed.get('client_secret', '')}",
+        f"GDRIVE_OAUTH_REFRESH_TOKEN={credentials.refresh_token}",
+    ]
+
+    if arguments.out is not None:
+        # Written with owner-only permissions so the token never touches stdout.
+        arguments.out.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        arguments.out.chmod(0o600)
+        print(f"認証成功。値を {arguments.out} に書き込みました（画面には出していません）。")
+    else:
+        print("\n===== GitHub Secrets に登録する値 =====\n")
+        print("\n".join(lines))
+        print("\n(この3つはパスワード同然です。共有しないこと)")
     return 0
 
 
