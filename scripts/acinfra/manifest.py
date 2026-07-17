@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
@@ -16,7 +17,17 @@ MANIFEST_VERSION = 1
 
 
 def current_commit(repo_root: Path) -> str:
-    """Return the checked-out commit, or "unknown" outside a git checkout."""
+    """Return the checked-out commit, or "unknown" when it cannot be resolved.
+
+    In GitHub Actions the container often refuses `git rev-parse` over the
+    mounted workspace ("dubious ownership"), so GITHUB_SHA is the reliable
+    source there. It is preferred precisely because the git call is the one
+    that fails in CI, which is where a correct commit matters most: the Issue
+    template's Base Commit keys off it.
+    """
+    github_sha = os.environ.get("GITHUB_SHA", "").strip()
+    if github_sha:
+        return github_sha
     try:
         completed = subprocess.run(
             ["git", "rev-parse", "HEAD"],
