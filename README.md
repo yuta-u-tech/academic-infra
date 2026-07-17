@@ -95,14 +95,40 @@ PAT が必要になる。ここに秘密情報は置かない。
 
 ## Google Drive 認証
 
-`update_drive.py` はサービスアカウントを使う。科目リポジトリに次の Secret を設定する。
+**サービスアカウントは使わない。** サービスアカウントは消費者 Gmail の Drive に
+自前のストレージ квоタを持たず、共有フォルダにアップロードすると
+`storageQuotaExceeded` で失敗する。代わりに **OAuth リフレッシュトークンで
+「所有ユーザー本人として」書き込む**。ファイルはそのアカウントの 15GB に載る。
 
-| Secret | 内容 |
-|---|---|
-| `GDRIVE_SERVICE_ACCOUNT_JSON` | サービスアカウントの JSON（パスではなく中身） |
-| `GDRIVE_PARENT_FOLDER_ID` | Drive の親フォルダ（`Academic Materials`）の ID |
+### セットアップ（初回のみ）
 
-親フォルダをサービスアカウントのメールアドレスに **編集者** として共有しておく。
+1. 資料配布用の Gmail を用意する（個人メールと分けると管理が楽）。
+2. [Google Cloud Console](https://console.cloud.google.com/) でその Gmail にログインし、
+   プロジェクトを作成 → **Google Drive API** を有効化。
+3. OAuth 同意画面を **External** で作成し、テストユーザーにその Gmail を追加。
+4. 認証情報 → **OAuth クライアント ID**（アプリの種類: **デスクトップ**）を作成し、
+   JSON をダウンロード。
+5. リフレッシュトークンを取得する（ローカルでブラウザが開く）:
+
+   ```bash
+   python3 -m pip install -r requirements.txt
+   python3 scripts/authorize_drive.py --client-secret ~/Downloads/client_secret_XXX.json
+   ```
+
+   表示された3つの値を控える。
+6. Drive にフォルダ `Academic Materials` を作り、その ID（URL 末尾）を控える。
+   閲覧者へはこのフォルダを **閲覧者（Viewer）** で共有する。
+7. 科目リポジトリに Secret を4つ登録する:
+
+   ```bash
+   gh secret set GDRIVE_OAUTH_CLIENT_ID     --repo <owner>/<repo>
+   gh secret set GDRIVE_OAUTH_CLIENT_SECRET --repo <owner>/<repo>
+   gh secret set GDRIVE_OAUTH_REFRESH_TOKEN --repo <owner>/<repo>
+   gh secret set GDRIVE_PARENT_FOLDER_ID    --repo <owner>/<repo>
+   ```
+
 Secret 未設定なら Drive 同期はスキップされ、成果物は Actions の Artifact から取れる。
 
-将来的には OIDC + Workload Identity Federation に移行し、長期鍵を持たない。
+> **注意**: リフレッシュトークンはパスワード同然。OAuth 同意画面が「テスト」状態の間、
+> トークンは 7 日で失効することがある。継続運用するなら同意画面を「本番」に公開する
+> （個人利用なので審査は不要）。将来的には OIDC + Workload Identity Federation も検討。

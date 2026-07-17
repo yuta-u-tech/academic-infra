@@ -17,7 +17,11 @@ on:
         type: string
         default: main
     secrets:
-      GDRIVE_SERVICE_ACCOUNT_JSON:
+      GDRIVE_OAUTH_CLIENT_ID:
+        required: false
+      GDRIVE_OAUTH_CLIENT_SECRET:
+        required: false
+      GDRIVE_OAUTH_REFRESH_TOKEN:
         required: false
       GDRIVE_PARENT_FOLDER_ID:
         required: false
@@ -29,7 +33,7 @@ jobs:
       image: ghcr.io/xu-cheng/texlive-full:latest
     env:
       # step の if: からは step 自身の env が見えないため、ジョブ単位で判定する。
-      HAS_DRIVE_CREDENTIALS: ${{ secrets.GDRIVE_SERVICE_ACCOUNT_JSON != '' }}
+      HAS_DRIVE_CREDENTIALS: ${{ secrets.GDRIVE_OAUTH_REFRESH_TOKEN != '' }}
 
     steps:
       - name: 科目リポジトリを取得
@@ -90,7 +94,9 @@ jobs:
       - name: Google Drive を更新
         if: ${{ inputs.publish && env.HAS_DRIVE_CREDENTIALS == 'true' }}
         env:
-          GDRIVE_SERVICE_ACCOUNT_JSON: ${{ secrets.GDRIVE_SERVICE_ACCOUNT_JSON }}
+          GDRIVE_OAUTH_CLIENT_ID: ${{ secrets.GDRIVE_OAUTH_CLIENT_ID }}
+          GDRIVE_OAUTH_CLIENT_SECRET: ${{ secrets.GDRIVE_OAUTH_CLIENT_SECRET }}
+          GDRIVE_OAUTH_REFRESH_TOKEN: ${{ secrets.GDRIVE_OAUTH_REFRESH_TOKEN }}
           GDRIVE_PARENT_FOLDER_ID: ${{ secrets.GDRIVE_PARENT_FOLDER_ID }}
         run: |
           FOLDER_NAME="$(python3 -c "import yaml; print(yaml.safe_load(open('academic.yml'))['drive_folder_name'])")"
@@ -101,4 +107,4 @@ jobs:
       - name: Drive 認証が未設定であることを通知
         if: ${{ inputs.publish && env.HAS_DRIVE_CREDENTIALS != 'true' }}
         run: |
-          echo "::notice::GDRIVE_SERVICE_ACCOUNT_JSON が未設定のため Drive 同期をスキップしました。成果物は Artifact から取得できます。"
+          echo "::notice::GDRIVE_OAUTH_REFRESH_TOKEN が未設定のため Drive 同期をスキップしました。成果物は Artifact から取得できます。"

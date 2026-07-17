@@ -1,3 +1,5 @@
 PyYAML==6.0.2
 google-api-python-client==2.149.0
 google-auth==2.35.0
+# authorize_drive.py (ローカルのワンタイム認証) のみで使用。CI では不要だが無害。
+google-auth-oauthlib==1.2.1

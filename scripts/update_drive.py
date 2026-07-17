@@ -8,21 +8,31 @@ Drive holds only the current state: `latest.pdf`, `latest.md`,
 link never changes and ChatGPT's synced connector re-indexes the same file IDs
 instead of accumulating duplicates. History lives in git, not here.
 
-Authentication uses a service account supplied through the
-GDRIVE_SERVICE_ACCOUNT_JSON environment variable (the raw JSON, not a path).
-The parent folder must be shared with the service account's email as Editor.
+Authentication acts *as the owning user* via an OAuth refresh token, not a
+service account. A service account has zero Drive storage of its own on a
+consumer Gmail account, so uploading into a folder it merely has Editor access
+to fails with `storageQuotaExceeded`. Acting as the user means the files are
+owned by, and counted against, that user's 15 GB quota. Get the refresh token
+once with `scripts/authorize_drive.py`.
+
+Required environment variables:
+
+    GDRIVE_OAUTH_CLIENT_ID       OAuth 2.0 クライアントID
+    GDRIVE_OAUTH_CLIENT_SECRET   OAuth 2.0 クライアントシークレット
+    GDRIVE_OAUTH_REFRESH_TOKEN   authorize_drive.py で取得したリフレッシュトークン
+    GDRIVE_PARENT_FOLDER_ID      Academic Materials フォルダの ID
 """
 
 from __future__ import annotations
 
 import argparse
-import json
 import os
 import sys
 from pathlib import Path
 
 try:
-    from google.oauth2.service_account import Credentials
+    from google.auth.transport.requests import Request
+    from google.oauth2.credentials import Credentials
     from googleapiclient.discovery import build
     from googleapiclient.errors import HttpError
     from googleapiclient.http import MediaFileUpload
@@ -34,7 +44,12 @@ except ImportError:  # pragma: no cover - surfaced at runtime with a clear messa
     )
     raise SystemExit(1)
 
+# Full drive scope: the parent "Academic Materials" folder is created by hand in
+# the browser, and drive.file can only touch app-created files, so it could not
+# resolve that folder by ID. This runs on a dedicated Gmail that holds nothing
+# but these materials, so full scope grants access to exactly this data anyway.
 _SCOPES = ("https://www.googleapis.com/auth/drive",)
+_TOKEN_URI = "https://oauth2.googleapis.com/token"
 _FOLDER_MIME = "application/vnd.google-apps.folder"
 _MIME_TYPES = {".pdf": "application/pdf", ".md": "text/markdown", ".json": "application/json"}
 
@@ -52,14 +67,33 @@ def _parse_arguments() -> argparse.Namespace:
 
 
 def _build_service():
-    raw = os.environ.get("GDRIVE_SERVICE_ACCOUNT_JSON", "").strip()
-    if not raw:
-        raise RuntimeError("GDRIVE_SERVICE_ACCOUNT_JSON が設定されていません。")
-    try:
-        info = json.loads(raw)
-    except json.JSONDecodeError as error:
-        raise RuntimeError(f"GDRIVE_SERVICE_ACCOUNT_JSON をJSONとして読めません: {error}") from error
-    credentials = Credentials.from_service_account_info(info, scopes=list(_SCOPES))
+    client_id = os.environ.get("GDRIVE_OAUTH_CLIENT_ID", "").strip()
+    client_secret = os.environ.get("GDRIVE_OAUTH_CLIENT_SECRET", "").strip()
+    refresh_token = os.environ.get("GDRIVE_OAUTH_REFRESH_TOKEN", "").strip()
+
+    missing = [
+        name
+        for name, value in (
+            ("GDRIVE_OAUTH_CLIENT_ID", client_id),
+            ("GDRIVE_OAUTH_CLIENT_SECRET", client_secret),
+            ("GDRIVE_OAUTH_REFRESH_TOKEN", refresh_token),
+        )
+        if not value
+    ]
+    if missing:
+        raise RuntimeError(f"OAuth 認証情報が不足しています: {', '.join(missing)}")
+
+    credentials = Credentials(
+        token=None,
+        refresh_token=refresh_token,
+        client_id=client_id,
+        client_secret=client_secret,
+        token_uri=_TOKEN_URI,
+        scopes=list(_SCOPES),
+    )
+    # Exchange the refresh token for an access token up front so a bad/expired
+    # token fails here with a clear message instead of mid-upload.
+    credentials.refresh(Request())
     return build("drive", "v3", credentials=credentials, cache_discovery=False)
 
 
