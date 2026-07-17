@@ -19,8 +19,8 @@ jobs:
   document:
     uses: yuta-u-tech/academic-infra/.github/workflows/build-document.yml@main
     with:
-      # main への push のときだけ Drive を更新する。
-      publish: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+      # main への push か手動実行のとき Drive を更新する。PR では更新しない。
+      publish: ${{ (github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'workflow_dispatch' }}
     secrets:
       GDRIVE_OAUTH_CLIENT_ID: ${{ secrets.GDRIVE_OAUTH_CLIENT_ID }}
       GDRIVE_OAUTH_CLIENT_SECRET: ${{ secrets.GDRIVE_OAUTH_CLIENT_SECRET }}
