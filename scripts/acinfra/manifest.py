@@ -74,10 +74,16 @@ def build_manifest(
     total_pages: int,
 ) -> dict[str, Any]:
     """Assemble the manifest document."""
+    issue_new_url = (
+        f"https://github.com/{repository}/issues/new?labels=review,needs-decision"
+        if repository != "unknown"
+        else None
+    )
     return {
         "manifest_version": MANIFEST_VERSION,
         "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "repository": repository,
+        "issue_new_url": issue_new_url,
         "commit": current_commit(config.main_tex.parent.parent),
         "course_id": config.course_id,
         "course_name": config.course_name,

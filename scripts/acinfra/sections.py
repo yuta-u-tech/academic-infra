@@ -31,18 +31,22 @@ class Section:
     review_id: str
 
 
-def _front_matter(section_review_id: str, title: str, chapter: ReviewHeader) -> str:
+def _front_matter(section_review_id: str, title: str, chapter: ReviewHeader, repository: str) -> str:
     keywords = ", ".join(chapter.keywords)
-    return (
-        "---\n"
-        f"review_id: {section_review_id}\n"
-        f'title: "{title}"\n'
-        f'chapter: "{chapter.title}"\n'
-        f"chapter_review_id: {chapter.review_id}\n"
-        f"source_file: {chapter.source_file}\n"
-        f"keywords: [{keywords}]\n"
-        "---\n\n"
-    )
+    lines = [
+        "---",
+        f"review_id: {section_review_id}",
+        f'title: "{title}"',
+        f'chapter: "{chapter.title}"',
+        f"chapter_review_id: {chapter.review_id}",
+        f"source_file: {chapter.source_file}",
+        f"keywords: [{keywords}]",
+        f"repository: {repository}",
+    ]
+    if repository != "unknown":
+        lines.append(f"issue_new_url: https://github.com/{repository}/issues/new?labels=review,needs-decision")
+    lines.append("---\n\n")
+    return "\n".join(lines)
 
 
 def _iter_blocks(markdown: str) -> Iterator[tuple[str, str]]:
@@ -54,11 +58,14 @@ def _iter_blocks(markdown: str) -> Iterator[tuple[str, str]]:
         yield match.group("title"), markdown[start:end].strip()
 
 
-def split_chapter(markdown: str, chapter: ReviewHeader) -> list[Section]:
+def split_chapter(markdown: str, chapter: ReviewHeader, repository: str = "unknown") -> list[Section]:
     """Split one chapter's Markdown into sections.
 
     A chapter with no `##` headings yields a single section holding the whole
-    chapter, so no content can fall out of the knowledge base.
+    chapter, so no content can fall out of the knowledge base. `repository` is
+    stamped into each section's front matter so a reader with only that one
+    file (e.g. GPT's Drive connector surfacing a single search hit) still has
+    a direct `issues/new` link back to the right repo, not just the manifest.
     """
     stem = chapter.source_file.stem  # e.g. "ch02"
     blocks = list(_iter_blocks(markdown))
@@ -72,7 +79,7 @@ def split_chapter(markdown: str, chapter: ReviewHeader) -> list[Section]:
             Section(
                 file_name=f"{stem}.md",
                 title=chapter.title,
-                body=_front_matter(section_id, chapter.title, chapter)
+                body=_front_matter(section_id, chapter.title, chapter, repository)
                 + f"# {chapter.title}\n\n{body}\n",
                 review_id=section_id,
             )
@@ -82,7 +89,7 @@ def split_chapter(markdown: str, chapter: ReviewHeader) -> list[Section]:
     for index, (title, body) in enumerate(blocks, start=1):
         section_id = f"{chapter.review_id}.s{index:02d}"
         file_name = f"{stem}-{index:02d}.md"
-        content = _front_matter(section_id, title, chapter) + f"# {title}\n\n{body}\n"
+        content = _front_matter(section_id, title, chapter, repository) + f"# {title}\n\n{body}\n"
         sections.append(
             Section(file_name=file_name, title=title, body=content, review_id=section_id)
         )

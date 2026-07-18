@@ -65,9 +65,13 @@ def _write_sections(sections: list[Section], output_dir: Path) -> None:
         (sections_dir / section.file_name).write_text(section.body, encoding="utf-8")
 
 
-def _write_latest_markdown(config: CourseConfig, chapter_markdown: list[str]) -> Path:
+def _write_latest_markdown(config: CourseConfig, chapter_markdown: list[str], repository: str) -> Path:
     destination = config.output_dir / "latest.md"
     header = f"# {config.course_name}\n\n"
+    if repository != "unknown":
+        header += (
+            f"> 添削結果をIssue化: https://github.com/{repository}/issues/new?labels=review,needs-decision\n\n"
+        )
     destination.write_text(header + "\n\n---\n\n".join(chapter_markdown) + "\n", encoding="utf-8")
     return destination
 
@@ -91,6 +95,7 @@ def main() -> int:
         return 1
 
     included = chapters_in_main(config.main_tex)
+    repository = arguments.repository or "unknown"
     pages: dict[str, int] = {}
     total_pages = 0
 
@@ -120,7 +125,7 @@ def main() -> int:
             print(f"Markdown 変換エラー ({header.source_file}): {error}", file=sys.stderr)
             return 1
 
-        sections = split_chapter(markdown, header)
+        sections = split_chapter(markdown, header, repository)
         all_sections.extend(sections)
         chapter_markdown.append(markdown)
 
@@ -134,10 +139,10 @@ def main() -> int:
             print(f"警告: {header.source_file} は main.tex に \\subfile されておらず PDF に載りません。")
 
     _write_sections(all_sections, config.output_dir)
-    _write_latest_markdown(config, chapter_markdown)
+    _write_latest_markdown(config, chapter_markdown, repository)
     manifest = build_manifest(
         config,
-        repository=arguments.repository or "unknown",
+        repository=repository,
         chapters=manifest_rows,
         total_pages=total_pages,
     )

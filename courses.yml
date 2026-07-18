@@ -32,3 +32,16 @@ courses:
       - logic
     drive_folder: 論理学
     status: planned
+
+  circuit:
+    course_name: 論理回路
+    repository: yuta-u-tech/Logic_Circuit
+    visibility: private
+    aliases:
+      - 論理回路
+      - デジタル回路
+      - digital logic
+      - logic circuit
+      - circuit
+    drive_folder: 論理回路
+    status: pilot
