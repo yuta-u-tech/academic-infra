@@ -45,3 +45,14 @@ courses:
       - circuit
     drive_folder: 論理回路
     status: pilot
+
+  llm:
+    course_name: LLM
+    repository: yuta-u-tech/LLM
+    visibility: private
+    aliases:
+      - LLM
+      - 大規模言語モデル
+      - エルエルエム
+    drive_folder: LLM
+    status: pilot
