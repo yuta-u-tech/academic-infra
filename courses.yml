@@ -67,3 +67,14 @@ courses:
       - 現代的課題
     drive_folder: 法の現代的課題
     status: pilot
+
+  modern-astronomy:
+    course_name: 現代天文学
+    repository: yuta-u-tech/Modern_Astronomy
+    visibility: private
+    aliases:
+      - 現代天文学
+      - 天文学
+      - astronomy
+    drive_folder: 現代天文学
+    status: pilot
