@@ -132,3 +132,32 @@ Secret 未設定なら Drive 同期はスキップされ、成果物は Actions 
 > **注意**: リフレッシュトークンはパスワード同然。OAuth 同意画面が「テスト」状態の間、
 > トークンは 7 日で失効することがある。継続運用するなら同意画面を「本番」に公開する
 > （個人利用なので審査は不要）。将来的には OIDC + Workload Identity Federation も検討。
+
+## 閲覧者コメント → GitHub Issue 昇華
+
+Drive の `latest.pdf` は閲覧者にコメントを許可しているため、指摘は Drive のコメント機能に
+溜まっていく。これを pm-desk（Claude）が読み、Issue化すべきものを判断して GitHub Issue に
+昇華する。要約・判断は決定論コードでは書かず、Claude が担う。
+
+```bash
+# 1. 未処理（既にIssue化済みでない）コメントを取得
+python3 scripts/fetch_drive_comments.py --course logic
+
+# 2. Claude がJSONを読んで内容を評価し、templates/review-issue.md 形式の
+#    findings.json を書く（comment_id / file_id は fetch の出力からそのまま転記）
+
+# 3. 選んだものだけ Issue化。Driveのコメントへ「Issue化しました: <URL>」と返信し、
+#    次回の fetch で重複提示されないよう .state/<course>/processed-comments.json に記録する
+python3 scripts/promote_drive_comments.py --course logic --findings /path/to/findings.json --pick 1,3
+```
+
+認証は `update_drive.py` と同じ `GDRIVE_OAUTH_*` を使う。ローカル実行時に環境変数が
+無ければ `~/.lecture-capture/config/drive-secrets.env` にフォールバックする
+（lecture-capture-system と同一の Academic Materials Drive アカウントを共有しているため）。
+
+## テスト
+
+```bash
+python3 -m pip install -r requirements-dev.txt
+python3 -m pytest tests/
+```
