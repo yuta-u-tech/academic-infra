@@ -56,3 +56,14 @@ courses:
       - エルエルエム
     drive_folder: LLM
     status: pilot
+
+  modern-legal-issues:
+    course_name: 法の現代的課題
+    repository: yuta-u-tech/Modern_Legal_Issues
+    visibility: private
+    aliases:
+      - 法の現代的課題
+      - 法学
+      - 現代的課題
+    drive_folder: 法の現代的課題
+    status: pilot
