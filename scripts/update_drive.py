@@ -27,6 +27,8 @@ from __future__ import annotations
 
 import argparse
 import os
+import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -187,6 +189,30 @@ def _upload(service, parent_id: str, path: Path) -> str:
     return created["id"]
 
 
+_GOODNOTES_MIRROR_SCRIPT = Path.home() / ".claude" / "skills" / "pm-desk" / "scripts" / "goodnotes-mirror.sh"
+
+
+def _mirror_to_goodnotes(pdf_path: Path, folder_name: str) -> None:
+    """latest.pdf を GoodNotes 自動インポート監視フォルダへコピーする(best-effort)。
+
+    Drive 上の latest.pdf は同一ファイルIDで上書きされるが、GoodNotesは
+    既存ドキュメントへの差分更新に対応していないため、更新のたびに
+    バージョン付きファイル名で新規ドキュメントとして取り込ませる設計。
+    """
+    if not _GOODNOTES_MIRROR_SCRIPT.exists():
+        return
+    stem = re.sub(r"[^\w-]+", "-", folder_name).strip("-") + "-materials"
+    try:
+        subprocess.run(
+            [str(_GOODNOTES_MIRROR_SCRIPT), str(pdf_path), stem],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except (subprocess.CalledProcessError, OSError) as error:
+        print(f"GoodNotesミラー警告: {error}", file=sys.stderr)
+
+
 def main() -> int:
     arguments = _parse_arguments()
     if not arguments.parent_id:
@@ -205,6 +231,8 @@ def main() -> int:
             if path.exists():
                 _upload(service, course_folder, path)
                 print(f"更新: {arguments.folder_name}/{name}")
+                if name == "latest.pdf":
+                    _mirror_to_goodnotes(path, arguments.folder_name)
 
         sections_dir = arguments.dist / "sections"
         if sections_dir.is_dir():
