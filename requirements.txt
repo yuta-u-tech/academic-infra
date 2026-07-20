@@ -3,3 +3,5 @@ google-api-python-client==2.149.0
 google-auth==2.35.0
 # authorize_drive.py (ローカルのワンタイム認証) のみで使用。CI では不要だが無害。
 google-auth-oauthlib==1.2.1
+# update_drive.py の GoodNotes ミラー(ページ単位の追記差分検出)で使用。無くても動くが全体ミラーにフォールバックする。
+pypdf==6.5.0

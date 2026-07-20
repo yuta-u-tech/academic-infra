@@ -189,22 +189,24 @@ def _upload(service, parent_id: str, path: Path) -> str:
     return created["id"]
 
 
-_GOODNOTES_MIRROR_SCRIPT = Path.home() / ".claude" / "skills" / "pm-desk" / "scripts" / "goodnotes-mirror.sh"
+_GOODNOTES_MIRROR_SCRIPT = Path.home() / ".claude" / "skills" / "pm-desk" / "scripts" / "goodnotes-mirror.py"
 
 
 def _mirror_to_goodnotes(pdf_path: Path, folder_name: str) -> None:
     """latest.pdf を GoodNotes 自動インポート監視フォルダへコピーする(best-effort)。
 
     Drive 上の latest.pdf は同一ファイルIDで上書きされるが、GoodNotesは
-    既存ドキュメントへの差分更新に対応していないため、更新のたびに
-    バージョン付きファイル名で新規ドキュメントとして取り込ませる設計。
+    既存ドキュメントへの差分更新に対応していない。共有スクリプト側
+    (goodnotes-mirror.py) がページ単位で前回との差分を見て、末尾への
+    追記だけなら追記分のみを、既存ページが変わっていれば全体を
+    新規ドキュメントとしてミラーする。
     """
     if not _GOODNOTES_MIRROR_SCRIPT.exists():
         return
     stem = re.sub(r"[^\w-]+", "-", folder_name).strip("-") + "-materials"
     try:
         subprocess.run(
-            [str(_GOODNOTES_MIRROR_SCRIPT), str(pdf_path), stem],
+            ["python3", str(_GOODNOTES_MIRROR_SCRIPT), str(pdf_path), stem],
             check=True,
             capture_output=True,
             text=True,
