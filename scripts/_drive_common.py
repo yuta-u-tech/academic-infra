@@ -132,68 +132,6 @@ def find_child(service, parent_id: str, name: str, mime_type: str | None) -> str
     return files[0]["id"] if files else None
 
 
-def ensure_folder(service, parent_id: str, name: str) -> str:
-    existing = find_child(service, parent_id, name, _FOLDER_MIME)
-    if existing:
-        return existing
-    created = (
-        service.files()
-        .create(
-            body={"name": name, "mimeType": _FOLDER_MIME, "parents": [parent_id]},
-            fields="id",
-            supportsAllDrives=True,
-        )
-        .execute()
-    )
-    return created["id"]
-
-
-def upload_named(service, parent_id: str, local_path: Path, drive_name: str, mime_type: str) -> str:
-    """`local_path` の中身を `drive_name` という名前で作成/上書きする(ファイルIDは維持)。"""
-    from googleapiclient.http import MediaFileUpload
-
-    media = MediaFileUpload(str(local_path), mimetype=mime_type, resumable=False)
-    existing = find_child(service, parent_id, drive_name, None)
-    if existing:
-        service.files().update(fileId=existing, media_body=media, supportsAllDrives=True).execute()
-        return existing
-    created = (
-        service.files()
-        .create(
-            body={"name": drive_name, "parents": [parent_id]},
-            media_body=media,
-            fields="id",
-            supportsAllDrives=True,
-        )
-        .execute()
-    )
-    return created["id"]
-
-
-def upload_text(service, parent_id: str, drive_name: str, content: str) -> str:
-    """短いテキスト(フラグ値等)を `drive_name` という名前で作成/上書きする。"""
-    import io
-
-    from googleapiclient.http import MediaIoBaseUpload
-
-    media = MediaIoBaseUpload(io.BytesIO(content.encode("utf-8")), mimetype="text/plain", resumable=False)
-    existing = find_child(service, parent_id, drive_name, None)
-    if existing:
-        service.files().update(fileId=existing, media_body=media, supportsAllDrives=True).execute()
-        return existing
-    created = (
-        service.files()
-        .create(
-            body={"name": drive_name, "parents": [parent_id]},
-            media_body=media,
-            fields="id",
-            supportsAllDrives=True,
-        )
-        .execute()
-    )
-    return created["id"]
-
-
 def find_course_pdf_file_id(service, parent_folder_id: str, course: CourseEntry) -> str:
     course_folder_id = find_child(service, parent_folder_id, course.drive_folder, _FOLDER_MIME)
     if course_folder_id is None:
