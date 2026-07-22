@@ -22,6 +22,18 @@ courses:
     drive_folder: データ構造とアルゴリズム
     status: pilot
 
+  statistics:
+    course_name: 統計学
+    repository: yuta-u-tech/Statistics
+    visibility: private
+    aliases:
+      - 統計学
+      - 統計
+      - statistics
+      - stats
+    drive_folder: 統計学
+    status: pilot
+
   logic:
     course_name: 論理学
     repository: yuta-u-tech/Logic
