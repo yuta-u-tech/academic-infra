@@ -16,6 +16,10 @@ on:
         description: 指定した章（例 ch01）だけを latest.pdf から切り出し、親フォルダ直下の Drafts フォルダにアップロードする（本番の科目フォルダには触れない）。空なら何もしない。
         type: string
         default: ""
+      delete-course-subfolder:
+        description: 科目フォルダ直下の指定サブフォルダ（例 Drafts）とその中身を削除して終了する。保守用。空なら何もしない。
+        type: string
+        default: ""
       infra-ref:
         description: academic-infra の参照 ref
         type: string
@@ -140,7 +144,23 @@ jobs:
             --folder-name "${FOLDER_NAME}" \
             --draft-chapter "${{ inputs['draft-chapter'] }}"
 
+      # 保守用: 誤って作ったサブフォルダの後片付け。dist/ が要るだけで実際は使わないが、
+      # main.tex を書き換えたくないだけなので既存のビルド済み dist をそのまま使う。
+      - name: 科目フォルダ配下のサブフォルダを削除
+        if: ${{ inputs['delete-course-subfolder'] != '' && env.HAS_DRIVE_CREDENTIALS == 'true' }}
+        env:
+          GDRIVE_OAUTH_CLIENT_ID: ${{ secrets.GDRIVE_OAUTH_CLIENT_ID }}
+          GDRIVE_OAUTH_CLIENT_SECRET: ${{ secrets.GDRIVE_OAUTH_CLIENT_SECRET }}
+          GDRIVE_OAUTH_REFRESH_TOKEN: ${{ secrets.GDRIVE_OAUTH_REFRESH_TOKEN }}
+          GDRIVE_PARENT_FOLDER_ID: ${{ secrets.GDRIVE_PARENT_FOLDER_ID }}
+        run: |
+          FOLDER_NAME="$(python3 -c "import yaml; print(yaml.safe_load(open('${{ inputs.repo-root }}/academic.yml'))['drive_folder_name'])")"
+          python3 .academic-infra/scripts/update_drive.py \
+            --dist "${{ inputs.repo-root }}/dist" \
+            --folder-name "${FOLDER_NAME}" \
+            --delete-course-subfolder "${{ inputs['delete-course-subfolder'] }}"
+
       - name: Drive 認証が未設定であることを通知
-        if: ${{ (inputs.publish || inputs['draft-chapter'] != '') && env.HAS_DRIVE_CREDENTIALS != 'true' }}
+        if: ${{ (inputs.publish || inputs['draft-chapter'] != '' || inputs['delete-course-subfolder'] != '') && env.HAS_DRIVE_CREDENTIALS != 'true' }}
         run: |
           echo "::notice::GDRIVE_OAUTH_REFRESH_TOKEN が未設定のため Drive 同期をスキップしました。成果物は Artifact から取得できます。"
