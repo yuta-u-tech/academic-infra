@@ -26,10 +26,12 @@ Required environment variables:
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import re
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 try:
@@ -66,12 +68,21 @@ def _parse_arguments() -> argparse.Namespace:
         help="親フォルダID (Academic Materials)。GDRIVE_PARENT_FOLDER_ID でも可",
     )
     parser.add_argument(
-        "--draft",
-        action="store_true",
+        "--draft-chapter",
+        metavar="CHAPTER_STEM",
         help=(
-            "科目フォルダ直下の 'Drafts' サブフォルダにのみアップロードする。"
-            "本番の latest.pdf/latest.md/sections は一切変更・削除しない"
-            "（レビュー待ちの成果物を安全に置く用途）。"
+            "指定した章（例: ch01）だけを latest.pdf から切り出し、"
+            "親フォルダ (Academic Materials) 直下の 'Drafts' フォルダに"
+            "'<科目名>_<章>.pdf' としてアップロードする。"
+            "本番の科目フォルダ (latest.pdf/sections 等) には一切触れない。"
+        ),
+    )
+    parser.add_argument(
+        "--delete-course-subfolder",
+        metavar="NAME",
+        help=(
+            "科目フォルダ直下のサブフォルダ（例: Drafts）とその中身を削除して終了する。"
+            "誤って作った下書きフォルダの後片付け用。"
         ),
     )
     return parser.parse_args()
@@ -175,11 +186,12 @@ def _prune(service, parent_id: str, keep: set[str]) -> list[str]:
     return removed
 
 
-def _upload(service, parent_id: str, path: Path) -> str:
-    """Create or overwrite `path` under `parent_id`, keeping the file ID stable."""
+def _upload(service, parent_id: str, path: Path, name: str | None = None) -> str:
+    """Create or overwrite `path` (as `name`) under `parent_id`, keeping the file ID stable."""
+    drive_name = name or path.name
     mime_type = _MIME_TYPES.get(path.suffix, "application/octet-stream")
     media = MediaFileUpload(str(path), mimetype=mime_type, resumable=False)
-    existing = _find_child(service, parent_id, path.name, None)
+    existing = _find_child(service, parent_id, drive_name, None)
     if existing:
         service.files().update(
             fileId=existing, media_body=media, supportsAllDrives=True
@@ -188,7 +200,7 @@ def _upload(service, parent_id: str, path: Path) -> str:
     created = (
         service.files()
         .create(
-            body={"name": path.name, "parents": [parent_id]},
+            body={"name": drive_name, "parents": [parent_id]},
             media_body=media,
             fields="id",
             supportsAllDrives=True,
@@ -196,6 +208,83 @@ def _upload(service, parent_id: str, path: Path) -> str:
         .execute()
     )
     return created["id"]
+
+
+def _trash_folder_and_contents(service, parent_id: str, name: str) -> bool:
+    """Trash the subfolder `name` under `parent_id`, and everything inside it.
+
+    Trashing the folder alone leaves Drive's own recursive trash behaviour to
+    do the rest for a normal folder, but being explicit about the children
+    first means this also works for any file `update_drive.py` created there.
+    Returns False if no such folder exists.
+    """
+    folder_id = _find_child(service, parent_id, name, _FOLDER_MIME)
+    if folder_id is None:
+        return False
+    children = (
+        service.files()
+        .list(
+            q=f"'{folder_id}' in parents and trashed = false",
+            fields="files(id)",
+            pageSize=1000,
+            supportsAllDrives=True,
+            includeItemsFromAllDrives=True,
+        )
+        .execute()
+        .get("files", [])
+    )
+    for child in children:
+        service.files().update(
+            fileId=child["id"], body={"trashed": True}, supportsAllDrives=True
+        ).execute()
+    service.files().update(
+        fileId=folder_id, body={"trashed": True}, supportsAllDrives=True
+    ).execute()
+    return True
+
+
+def _slice_chapter_pdf(dist: Path, chapter_stem: str, tmp_dir: Path) -> Path:
+    """Extract the page range for one chapter out of dist/latest.pdf.
+
+    Page numbers come from review-manifest.json (already computed by
+    build_artifacts.py from the JPTeX page-start labels), so this stays in
+    sync with however the chapter is actually laid out in the PDF.
+    """
+    try:
+        from pypdf import PdfReader, PdfWriter
+    except ImportError as error:  # pragma: no cover
+        raise RuntimeError("pypdf が見つかりません。pip install pypdf") from error
+
+    manifest_path = dist / "review-manifest.json"
+    pdf_path = dist / "latest.pdf"
+    if not manifest_path.exists() or not pdf_path.exists():
+        raise RuntimeError(f"{manifest_path} または {pdf_path} がありません。先にビルドしてください。")
+
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    chapter = next(
+        (
+            entry
+            for entry in manifest.get("chapters", [])
+            if Path(entry["source_file"]).stem == chapter_stem
+        ),
+        None,
+    )
+    if chapter is None:
+        available = ", ".join(Path(e["source_file"]).stem for e in manifest.get("chapters", []))
+        raise RuntimeError(f"章 '{chapter_stem}' が manifest にありません。存在する章: {available}")
+    page_start, page_end = chapter.get("page_start"), chapter.get("page_end")
+    if not page_start or not page_end:
+        raise RuntimeError(f"章 '{chapter_stem}' のページ範囲が manifest に記録されていません。")
+
+    reader = PdfReader(str(pdf_path))
+    writer = PdfWriter()
+    for page_number in range(page_start, page_end + 1):
+        writer.add_page(reader.pages[page_number - 1])
+
+    sliced_path = tmp_dir / f"{chapter_stem}.pdf"
+    with sliced_path.open("wb") as handle:
+        writer.write(handle)
+    return sliced_path
 
 
 _GOODNOTES_MIRROR_SCRIPT = Path.home() / ".claude" / "skills" / "pm-desk" / "scripts" / "goodnotes-mirror.py"
@@ -235,16 +324,28 @@ def main() -> int:
 
     try:
         service = _build_service()
-        course_folder = _ensure_folder(service, arguments.parent_id, arguments.folder_name)
 
-        if arguments.draft:
-            drafts_folder = _ensure_folder(service, course_folder, "Drafts")
-            for name in ("latest.pdf", "latest.md", "review-manifest.json"):
-                path = arguments.dist / name
-                if path.exists():
-                    _upload(service, drafts_folder, path)
-                    print(f"更新(draft): {arguments.folder_name}/Drafts/{name}")
+        if arguments.delete_course_subfolder:
+            course_folder = _ensure_folder(service, arguments.parent_id, arguments.folder_name)
+            removed = _trash_folder_and_contents(
+                service, course_folder, arguments.delete_course_subfolder
+            )
+            if removed:
+                print(f"削除: {arguments.folder_name}/{arguments.delete_course_subfolder}（中身含む）")
+            else:
+                print(f"該当なし: {arguments.folder_name}/{arguments.delete_course_subfolder}")
             return 0
+
+        if arguments.draft_chapter:
+            with tempfile.TemporaryDirectory() as tmp:
+                sliced = _slice_chapter_pdf(arguments.dist, arguments.draft_chapter, Path(tmp))
+                drafts_folder = _ensure_folder(service, arguments.parent_id, "Drafts")
+                drive_name = f"{arguments.folder_name}_{arguments.draft_chapter}.pdf"
+                _upload(service, drafts_folder, sliced, name=drive_name)
+                print(f"更新(draft): Drafts/{drive_name}")
+            return 0
+
+        course_folder = _ensure_folder(service, arguments.parent_id, arguments.folder_name)
 
         for name in ("latest.pdf", "latest.md", "review-manifest.json"):
             path = arguments.dist / name
