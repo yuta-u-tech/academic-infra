@@ -12,6 +12,10 @@ on:
         description: main への merge 時のみ true。PR では Drive を触らない。
         type: boolean
         default: false
+      draft:
+        description: true にすると科目フォルダ内の Drafts サブフォルダにのみアップロードする（本番 latest.pdf は変更しない）。publish と併用しない。
+        type: boolean
+        default: false
       infra-ref:
         description: academic-infra の参照 ref
         type: string
@@ -120,7 +124,23 @@ jobs:
             --dist "${{ inputs.repo-root }}/dist" \
             --folder-name "${FOLDER_NAME}"
 
+      # レビュー用の下書き。科目フォルダ内の Drafts サブフォルダにのみ置き、
+      # 本番の latest.pdf / sections には触れない。
+      - name: Google Drive の Drafts へアップロード
+        if: ${{ !inputs.publish && inputs.draft && env.HAS_DRIVE_CREDENTIALS == 'true' }}
+        env:
+          GDRIVE_OAUTH_CLIENT_ID: ${{ secrets.GDRIVE_OAUTH_CLIENT_ID }}
+          GDRIVE_OAUTH_CLIENT_SECRET: ${{ secrets.GDRIVE_OAUTH_CLIENT_SECRET }}
+          GDRIVE_OAUTH_REFRESH_TOKEN: ${{ secrets.GDRIVE_OAUTH_REFRESH_TOKEN }}
+          GDRIVE_PARENT_FOLDER_ID: ${{ secrets.GDRIVE_PARENT_FOLDER_ID }}
+        run: |
+          FOLDER_NAME="$(python3 -c "import yaml; print(yaml.safe_load(open('${{ inputs.repo-root }}/academic.yml'))['drive_folder_name'])")"
+          python3 .academic-infra/scripts/update_drive.py \
+            --dist "${{ inputs.repo-root }}/dist" \
+            --folder-name "${FOLDER_NAME}" \
+            --draft
+
       - name: Drive 認証が未設定であることを通知
-        if: ${{ inputs.publish && env.HAS_DRIVE_CREDENTIALS != 'true' }}
+        if: ${{ (inputs.publish || inputs.draft) && env.HAS_DRIVE_CREDENTIALS != 'true' }}
         run: |
           echo "::notice::GDRIVE_OAUTH_REFRESH_TOKEN が未設定のため Drive 同期をスキップしました。成果物は Artifact から取得できます。"

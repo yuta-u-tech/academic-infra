@@ -65,6 +65,15 @@ def _parse_arguments() -> argparse.Namespace:
         default=os.environ.get("GDRIVE_PARENT_FOLDER_ID", ""),
         help="親フォルダID (Academic Materials)。GDRIVE_PARENT_FOLDER_ID でも可",
     )
+    parser.add_argument(
+        "--draft",
+        action="store_true",
+        help=(
+            "科目フォルダ直下の 'Drafts' サブフォルダにのみアップロードする。"
+            "本番の latest.pdf/latest.md/sections は一切変更・削除しない"
+            "（レビュー待ちの成果物を安全に置く用途）。"
+        ),
+    )
     return parser.parse_args()
 
 
@@ -227,6 +236,15 @@ def main() -> int:
     try:
         service = _build_service()
         course_folder = _ensure_folder(service, arguments.parent_id, arguments.folder_name)
+
+        if arguments.draft:
+            drafts_folder = _ensure_folder(service, course_folder, "Drafts")
+            for name in ("latest.pdf", "latest.md", "review-manifest.json"):
+                path = arguments.dist / name
+                if path.exists():
+                    _upload(service, drafts_folder, path)
+                    print(f"更新(draft): {arguments.folder_name}/Drafts/{name}")
+            return 0
 
         for name in ("latest.pdf", "latest.md", "review-manifest.json"):
             path = arguments.dist / name
