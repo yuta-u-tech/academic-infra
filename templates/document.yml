@@ -1,26 +1,50 @@
 # 科目リポジトリの .github/workflows/document.yml に置く。
 # 中身はこれだけでよい。実処理は academic-infra 側にある。
+#
+# 1リポジトリに academic.yml が1つ（リポジトリ直下）でも、複数（本ごとにネスト）でも
+# どちらでも動く。academic.yml のある場所を自動検出して、それぞれを並列ビルドする。
 name: document
 
 on:
   pull_request:
     paths:
-      - "src/**"
-      - "academic.yml"
+      - "**/src/**"
+      - "**/academic.yml"
       - ".github/workflows/document.yml"
   push:
     branches: [main]
     paths:
-      - "src/**"
-      - "academic.yml"
+      - "**/src/**"
+      - "**/academic.yml"
   workflow_dispatch:
 
 jobs:
+  discover:
+    runs-on: ubuntu-latest
+    outputs:
+      roots: ${{ steps.find.outputs.roots }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: find
+        run: |
+          # academic.yml を持つディレクトリをすべて列挙し、JSON配列にする。
+          # リポジトリ直下の academic.yml は "." として扱う。
+          ROOTS="$(find . -name academic.yml -not -path "./.academic-infra/*" \
+            | sed 's#^\./##; s#/academic.yml$##; s#^academic.yml$#.#' \
+            | jq -R -s -c 'split("\n") | map(select(length > 0))')"
+          echo "roots=${ROOTS}" >> "$GITHUB_OUTPUT"
+
   document:
+    needs: discover
+    strategy:
+      fail-fast: false
+      matrix:
+        repo-root: ${{ fromJson(needs.discover.outputs.roots) }}
     uses: yuta-u-tech/academic-infra/.github/workflows/build-document.yml@main
     with:
       # main への push か手動実行のとき Drive を更新する。PR では更新しない。
       publish: ${{ (github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'workflow_dispatch' }}
+      repo-root: ${{ matrix.repo-root }}
     secrets:
       GDRIVE_OAUTH_CLIENT_ID: ${{ secrets.GDRIVE_OAUTH_CLIENT_ID }}
       GDRIVE_OAUTH_CLIENT_SECRET: ${{ secrets.GDRIVE_OAUTH_CLIENT_SECRET }}

@@ -16,6 +16,10 @@ on:
         description: academic-infra の参照 ref
         type: string
         default: main
+      repo-root:
+        description: academic.yml があるディレクトリ（リポジトリ直下からの相対パス）。1リポジトリに複数教材をネストする場合に使う。
+        type: string
+        default: "."
     secrets:
       GDRIVE_OAUTH_CLIENT_ID:
         required: false
@@ -73,19 +77,31 @@ jobs:
       - name: 成果物をビルド
         run: |
           python3 .academic-infra/scripts/build_artifacts.py \
-            --repo-root . \
+            --repo-root "${{ inputs.repo-root }}" \
             --repository "${GITHUB_REPOSITORY}"
+
+      - name: Artifact 名を決定
+        id: artifact-name
+        run: |
+          # repo-root "." はレガシー（ネストなし）科目との互換用にそのまま "document" にする。
+          # ネストしている場合はフォルダ名をサニタイズしてartifact名の衝突を避ける。
+          if [ "${{ inputs.repo-root }}" = "." ]; then
+            echo "name=document-${{ github.sha }}" >> "$GITHUB_OUTPUT"
+          else
+            SLUG="$(echo "${{ inputs.repo-root }}" | tr -c 'a-zA-Z0-9_.-' '-')"
+            echo "name=document-${SLUG}-${{ github.sha }}" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Artifact に保存
         uses: actions/upload-artifact@v4
         with:
-          name: document-${{ github.sha }}
+          name: ${{ steps.artifact-name.outputs.name }}
           path: |
-            dist/latest.pdf
-            dist/latest.md
-            dist/review-manifest.json
-            dist/sections/
-            dist/build.log
+            ${{ inputs.repo-root }}/dist/latest.pdf
+            ${{ inputs.repo-root }}/dist/latest.md
+            ${{ inputs.repo-root }}/dist/review-manifest.json
+            ${{ inputs.repo-root }}/dist/sections/
+            ${{ inputs.repo-root }}/dist/build.log
           retention-days: 30
           if-no-files-found: error
 
@@ -99,9 +115,9 @@ jobs:
           GDRIVE_OAUTH_REFRESH_TOKEN: ${{ secrets.GDRIVE_OAUTH_REFRESH_TOKEN }}
           GDRIVE_PARENT_FOLDER_ID: ${{ secrets.GDRIVE_PARENT_FOLDER_ID }}
         run: |
-          FOLDER_NAME="$(python3 -c "import yaml; print(yaml.safe_load(open('academic.yml'))['drive_folder_name'])")"
+          FOLDER_NAME="$(python3 -c "import yaml; print(yaml.safe_load(open('${{ inputs.repo-root }}/academic.yml'))['drive_folder_name'])")"
           python3 .academic-infra/scripts/update_drive.py \
-            --dist ./dist \
+            --dist "${{ inputs.repo-root }}/dist" \
             --folder-name "${FOLDER_NAME}"
 
       - name: Drive 認証が未設定であることを通知
