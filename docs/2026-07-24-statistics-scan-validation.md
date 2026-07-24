@@ -88,9 +88,9 @@ python3 scripts/measure_codex_usage.py \
 - baseline: 20ページの画像をバッチ（5枚/呼び出し）でそのまま `lecture_high` へ。
 - new_flow: エスカレーション対象リクエストのみを同じバッチ方式で送信。
 - 最後にinput+output合計の削減率を出す。
-- ※現状`--images-dir`は指定ディレクトリ内の全画像を対象にするため、baseline側も
-  30〜49ページ目に絞る対応（`--start-page`/`--limit`の追加、または対象ページだけの
-  一時ディレクトリ）が今夜の実装タスクとして残っている。
+- `--images-dir`のbaseline側は`--start-page`/`--limit`で30〜49ページ目に絞れる
+  （`0efb277`, `bb42859`で.jpeg対応と合わせて実装済み。テスト8件パス確認済み）。
+  例: `--start-page 30 --limit 20`。
 
 **コスト注意**: 20ページ ÷ 5 = 4回のcodex exec呼び出し(baseline)+ new_flowのバッチ分。
 1回あたり固定オーバーヘッドだけでも約1.3万トークンかかる。まず数ページで試してから
