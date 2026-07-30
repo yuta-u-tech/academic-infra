@@ -27,6 +27,7 @@ PROMPT_VERSION = "2026-07-30.1"
 _KIND_PROMPTS = {
     "vocab": "vocab.md",
     "reading": "reading.md",
+    "grammar": "grammar.md",
 }
 
 
@@ -79,16 +80,24 @@ def load_result(path: Path) -> GenerationResult:
 
 
 def upsert_material(connection: sqlite3.Connection, target: LearningTarget) -> None:
-    """学習対象の資料メタデータを記録する。本文は持たない（正本は git 側）。"""
+    """学習対象の資料メタデータを記録する。本文は持たない（正本は git 側）。
+
+    科目資料（`LearningTarget`）と外部素材（`ExternalMaterial`）の両方を受ける。
+    区別は `source` 列に残り、誤答の還元先を科目リポジトリにするかノートにするかを
+    決めるのはこの値。
+    """
     connection.execute(
         """
-        INSERT INTO material (review_id, course_id, title, source_file, section_file, source_commit, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO material (review_id, course_id, title, source_file, section_file,
+                              source_commit, source, origin, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT (review_id) DO UPDATE SET
             title = excluded.title,
             source_file = excluded.source_file,
             section_file = excluded.section_file,
             source_commit = excluded.source_commit,
+            source = excluded.source,
+            origin = excluded.origin,
             updated_at = excluded.updated_at
         """,
         (
@@ -98,6 +107,8 @@ def upsert_material(connection: sqlite3.Connection, target: LearningTarget) -> N
             target.source_file,
             target.section_file,
             target.source_commit,
+            getattr(target, "source", "academic"),
+            getattr(target, "origin", None),
             now_iso(),
         ),
     )

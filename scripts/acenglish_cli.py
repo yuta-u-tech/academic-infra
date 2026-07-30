@@ -26,10 +26,15 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from acenglish import generate, promote  # noqa: E402
+from acenglish import fetch, generate, notes, promote  # noqa: E402
 from acenglish.api import DEFAULT_HOST, DEFAULT_PORT, NonLoopbackBindError  # noqa: E402
 from acenglish.db import backup, connect, database_path  # noqa: E402
 from acenglish.items import write_json_schemas  # noqa: E402
+from acenglish.sources import studyforge  # noqa: E402
+from acenglish.sources.studyforge import DeckNotFoundError  # noqa: E402
+from acenglish.sources.ted import SubtitleNotFoundError, YtDlpNotInstalledError  # noqa: E402
+from acenglish.sources.voa import ArticleFetchError  # noqa: E402
+from acenglish.notes import NotesRepositoryError  # noqa: E402
 from acenglish.target import (  # noqa: E402
     ManifestNotFoundError,
     TargetNotFoundError,
@@ -66,10 +71,17 @@ def _cmd_targets(args: argparse.Namespace) -> int:
     return 0
 
 
+def _resolve_any(args: argparse.Namespace, review_id: str, course: str | None):
+    """科目資料と外部素材のどちらでも学習対象を返す。"""
+    with connect(args.db) as connection:
+        external = fetch.load_material(connection, review_id)
+    if external is not None:
+        return external
+    return get_target(review_id, course and resolve_course_id(course), args.repo_root)
+
+
 def _cmd_request(args: argparse.Namespace) -> int:
-    target = get_target(
-        args.review_id, args.course and resolve_course_id(args.course), args.repo_root
-    )
+    target = _resolve_any(args, args.review_id, args.course)
     kinds = [k.strip() for k in args.kind.split(",") if k.strip()]
     with connect(args.db) as connection:
         generate.upsert_material(connection, target)
@@ -83,7 +95,7 @@ def _cmd_request(args: argparse.Namespace) -> int:
 
 def _cmd_ingest(args: argparse.Namespace) -> int:
     result = generate.load_result(args.file)
-    target = get_target(result.review_id, result.course_id, args.repo_root)
+    target = _resolve_any(args, result.review_id, result.course_id)
     with connect(args.db) as connection:
         generate.upsert_material(connection, target)
         item_ids = generate.ingest(connection, result)
@@ -140,6 +152,51 @@ def _cmd_status(args: argparse.Namespace) -> int:
     return 0
 
 
+
+def _cmd_fetch_toeic(args: argparse.Namespace) -> int:
+    total = 0
+    decks = args.deck.split(",") if args.deck else list(studyforge.DECKS)
+    with connect(args.db) as connection:
+        for deck in decks:
+            imported = fetch.import_toeic_deck(connection, deck.strip(), args.limit)
+            total += imported
+            print(f"{deck.strip()}: 新規 {imported} 語")
+    print(f"合計 {total} 語を取り込みました。")
+    return 0
+
+
+def _cmd_voa(args: argparse.Namespace) -> int:
+    if args.url:
+        with connect(args.db) as connection:
+            material = fetch.import_voa_article(connection, args.url, args.title or "")
+        print(f"取り込み: {material.review_id}  {material.title}")
+        print(f"次: acenglish_cli.py request --review-id {material.review_id} "
+              f"--kind reading,grammar,vocab --out /tmp/req.json")
+        return 0
+
+    articles = fetch.list_voa_articles(args.feed, args.limit)
+    print(json.dumps({"articles": articles}, ensure_ascii=False, indent=2))
+    return 0
+
+
+def _cmd_ted(args: argparse.Namespace) -> int:
+    with connect(args.db) as connection:
+        material = fetch.import_ted_talk(connection, args.url, args.max_sentences)
+    print(f"取り込み: {material.review_id}  {material.title}")
+    print(f"次: acenglish_cli.py request --review-id {material.review_id} "
+          f"--kind vocab,reading --out /tmp/req.json")
+    return 0
+
+
+def _cmd_note_draft(args: argparse.Namespace) -> int:
+    with connect(args.db) as connection:
+        written = notes.write_drafts(connection, args.notes_home, args.mark_promoted)
+    print(notes.summarize(written))
+    if written:
+        print(f"確認して {written[0].parent.parent} の notes/ へ反映してください。")
+    return 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--db", type=Path, default=None, help="SQLiteのパス（既定: ~/.academic-english/english.db）")
@@ -182,6 +239,28 @@ def main() -> int:
     schema = subparsers.add_parser("schema", help="JSON Schema を書き出す")
     schema.set_defaults(func=_cmd_schema)
 
+    fetch_toeic = subparsers.add_parser("fetch-toeic", help="TOEIC語彙(study-forge)を取り込む")
+    fetch_toeic.add_argument("--deck", help=f"カンマ区切り（既定: 全部）対応: {', '.join(studyforge.DECKS)}")
+    fetch_toeic.add_argument("--limit", type=int, help="各デッキの先頭N語だけ")
+    fetch_toeic.set_defaults(func=_cmd_fetch_toeic)
+
+    voa_parser = subparsers.add_parser("voa", help="VOA Learning English（URL省略で記事一覧）")
+    voa_parser.add_argument("--url", help="記事URL。省略するとRSSから一覧を出す")
+    voa_parser.add_argument("--title")
+    voa_parser.add_argument("--feed", help="RSSのURL（省略時は一覧ページの先頭）")
+    voa_parser.add_argument("--limit", type=int, default=10)
+    voa_parser.set_defaults(func=_cmd_voa)
+
+    ted_parser = subparsers.add_parser("ted", help="TED/YouTubeの字幕を取り込む")
+    ted_parser.add_argument("--url", required=True)
+    ted_parser.add_argument("--max-sentences", type=int, default=60)
+    ted_parser.set_defaults(func=_cmd_ted)
+
+    note = subparsers.add_parser("note-draft", help="英語ノートへの追記候補を drafts/ に書く")
+    note.add_argument("--notes-home", type=Path, help="既定: ~/english-notes")
+    note.add_argument("--mark-promoted", action="store_true")
+    note.set_defaults(func=_cmd_note_draft)
+
     status = subparsers.add_parser("status", help="DBの件数を見る")
     status.set_defaults(func=_cmd_status)
 
@@ -189,7 +268,8 @@ def main() -> int:
     try:
         return args.func(args)
     except (CourseNotFoundError, ManifestNotFoundError, TargetNotFoundError,
-            generate.UnknownKindError) as error:
+            generate.UnknownKindError, DeckNotFoundError, ArticleFetchError,
+            SubtitleNotFoundError, YtDlpNotInstalledError, NotesRepositoryError) as error:
         print(str(error), file=sys.stderr)
         return 1
     except ValidationError as error:

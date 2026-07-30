@@ -20,6 +20,7 @@
         "item": {
           "discriminator": {
             "mapping": {
+              "grammar": "#/$defs/GrammarItem",
               "reading": "#/$defs/ReadingItem",
               "vocab": "#/$defs/VocabItem"
             },
@@ -31,6 +32,9 @@
             },
             {
               "$ref": "#/$defs/ReadingItem"
+            },
+            {
+              "$ref": "#/$defs/GrammarItem"
             }
           ],
           "title": "Item"
@@ -42,6 +46,78 @@
         "item"
       ],
       "title": "GeneratedItem",
+      "type": "object"
+    },
+    "GrammarItem": {
+      "additionalProperties": false,
+      "description": "空所補充の文法問題（TOEIC Part 5 の形）。\n\n読解と分けているのは、誤答原因の分岐が違うため。読解の誤りは「文が読めていない」\nかもしれないが、1文の空所補充を外すのは文法知識そのものの問題に絞り込める。",
+      "properties": {
+        "kind": {
+          "const": "grammar",
+          "default": "grammar",
+          "title": "Kind",
+          "type": "string"
+        },
+        "domain": {
+          "const": "grammar",
+          "default": "grammar",
+          "title": "Domain",
+          "type": "string"
+        },
+        "sub_skill": {
+          "default": "knowledge",
+          "enum": [
+            "knowledge",
+            "recognition",
+            "production",
+            "processing_speed"
+          ],
+          "title": "Sub Skill",
+          "type": "string"
+        },
+        "sentence": {
+          "description": "空所は ____ で示す",
+          "maxLength": 600,
+          "minLength": 1,
+          "title": "Sentence",
+          "type": "string"
+        },
+        "choices": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 5,
+          "minItems": 3,
+          "title": "Choices",
+          "type": "array"
+        },
+        "answer_index": {
+          "minimum": 0,
+          "title": "Answer Index",
+          "type": "integer"
+        },
+        "explanation": {
+          "maxLength": 2000,
+          "minLength": 1,
+          "title": "Explanation",
+          "type": "string"
+        },
+        "point": {
+          "description": "問われている文法項目",
+          "maxLength": 120,
+          "minLength": 1,
+          "title": "Point",
+          "type": "string"
+        }
+      },
+      "required": [
+        "sentence",
+        "choices",
+        "answer_index",
+        "explanation",
+        "point"
+      ],
+      "title": "GrammarItem",
       "type": "object"
     },
     "ReadingItem": {

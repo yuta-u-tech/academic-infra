@@ -178,11 +178,42 @@ python3 scripts/acenglish_cli.py serve                               # 学習UI 
 python3 scripts/acenglish_cli.py findings --course dsa --out /tmp/findings.json
 ```
 
+### 一般英語・TOEIC（科目資料以外の素材）
+
+科目資料からは専門英語・論文読解しか作れない。一般英語と TOEIC には別の素材が要る。
+
+```bash
+python3 scripts/acenglish_cli.py fetch-toeic                 # 金フレ語彙 2,282語 (study-forge)
+python3 scripts/acenglish_cli.py voa --limit 10              # VOA の記事一覧（PD）
+python3 scripts/acenglish_cli.py voa --url <記事URL>          # 記事を学習対象に登録
+python3 scripts/acenglish_cli.py ted --url <TED/YouTube URL> # 字幕のみ取得（音声は落とさない）
+python3 scripts/acenglish_cli.py note-draft                  # 誤答 → ~/english-notes の drafts/
+```
+
+| 取得元 | 中身 | 生成の要否 |
+|---|---|---|
+| `study-forge` | TOEIC 語彙。`{term, definition, example}` が既にある | **不要**（そのまま語彙カード） |
+| VOA Learning English | ESL 向けの平易な英文。米国政府著作物＝PD | 読解・文法・語彙を生成 |
+| TED / YouTube | 字幕（`yt-dlp`、`--skip-download`） | 読解・語彙を生成 |
+
+**市販の TOEIC 問題集からは問題文を取らない。** 権利のはっきりした英文を素材にして、
+問題は自分の誤答傾向に合わせて生成する（`english/prompts/grammar.md` が Part 5 の作り方）。
+
+外部素材には「直すべき章」が無いので、誤答が反復したときの行き先が科目資料と違う。
+
+| 素材 | 反復誤答の行き先 |
+|---|---|
+| 科目資料 | `findings.json` → `promote_drive_comments.py` → GitHub Issue → PR |
+| TOEIC / VOA / TED | [`~/english-notes`](https://github.com/yuta-u-tech/english-notes) の `drafts/` |
+
+どちらも `drafts/` / Issue までで止まり、**`notes/` や章ファイルを直接書き換えない**。
+
 ### 置き場所の分担
 
 | 何を | どこに | なぜ |
 |---|---|---|
 | 学習履歴・誤答・習熟度 | `~/.academic-english/english.db`（0700） | **このリポジトリは public**。`.gitignore` 頼みにしない |
+| 英語ノート | [english-notes](https://github.com/yuta-u-tech/english-notes)（private） | 学習履歴と TOEIC 語彙由来の記述を含むため public にしない |
 | 語彙の長期正本 | [goigoi-data](https://github.com/yuta-u-tech/goigoi-data)（private） | `word.schema.json` v1 が既に `source: academic` を想定済み |
 | 正式な英語教材 | 科目リポジトリの `english/`（PR経由） | 「GitHub が唯一の正本、履歴は git」を英語教材にも適用する |
 | Drive | 触らない | Drive は配布層。学習アプリは読み書きしない |

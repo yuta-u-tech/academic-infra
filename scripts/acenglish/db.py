@@ -18,7 +18,7 @@ from pathlib import Path
 DEFAULT_HOME_ENV = "ACADEMIC_ENGLISH_HOME"
 _DEFAULT_HOME = Path.home() / ".academic-english"
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 _MIGRATIONS: dict[int, tuple[str, ...]] = {
     1: (
@@ -137,6 +137,14 @@ _MIGRATIONS: dict[int, tuple[str, ...]] = {
             promoted_at TEXT
         )
         """,
+    ),
+    # v2: 科目資料以外（TOEIC語彙・VOA記事・TED字幕）も学習対象にできるようにする。
+    # 外部素材には「直すべき科目資料」が無いので、還元先を候補ごとに持たせる。
+    2: (
+        "ALTER TABLE material ADD COLUMN source TEXT NOT NULL DEFAULT 'academic'",
+        "ALTER TABLE material ADD COLUMN origin TEXT",
+        "ALTER TABLE revision_candidate ADD COLUMN target_kind TEXT NOT NULL DEFAULT 'course_repo'",
+        "CREATE INDEX idx_material_source ON material (source)",
     ),
 }
 

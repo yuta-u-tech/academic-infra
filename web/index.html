@@ -86,18 +86,30 @@ function next() {
   shownAt = performance.now();
 }
 
+function choiceList(choices) {
+  return `<ul class="choices">${choices.map((c, i) =>
+    `<li><button data-choice="${i}" aria-pressed="false">${escapeHtml(c)}</button></li>`
+  ).join("")}</ul>`;
+}
+
 function render(item) {
   const p = item.payload;
-  const body = item.kind === "reading"
-    ? `<div id="passage">${escapeHtml(p.passage)}</div>
-       <p class="question">${escapeHtml(p.question)}</p>
-       <ul class="choices">${p.choices.map((c, i) =>
-         `<li><button data-choice="${i}" aria-pressed="false">${escapeHtml(c)}</button></li>`).join("")}</ul>`
-    : `<p class="question">${escapeHtml(p.meaning)}</p>
-       <p class="meta">${escapeHtml(p.part_of_speech || "")} ${
-         (p.collocations || []).map(escapeHtml).join(" / ")}</p>
-       <input type="text" id="answer" autocomplete="off" autocapitalize="off" spellcheck="false"
-              placeholder="英語で入力">`;
+  let body;
+  if (item.kind === "reading") {
+    body = `<div id="passage">${escapeHtml(p.passage)}</div>
+            <p class="question">${escapeHtml(p.question)}</p>
+            ${choiceList(p.choices)}`;
+  } else if (item.kind === "grammar") {
+    // 空所は原文のまま出す。前後の語が手がかりなので、下線に置き換えて潰さない。
+    body = `<p class="question">${escapeHtml(p.sentence)}</p>
+            ${choiceList(p.choices)}`;
+  } else {
+    body = `<p class="question">${escapeHtml(p.meaning)}</p>
+            <p class="meta">${escapeHtml(p.part_of_speech || "")} ${
+              (p.collocations || []).map(escapeHtml).join(" / ")}</p>
+            <input type="text" id="answer" autocomplete="off" autocapitalize="off"
+                   spellcheck="false" placeholder="英語で入力">`;
+  }
 
   $("main").innerHTML = `
     <p class="meta"><span class="tag">${item.kind}</span>
@@ -119,7 +131,7 @@ function render(item) {
     };
   });
   $("hint").onclick = () => { hintUsed = true; $("hint").textContent = "ヒント使用済み"; };
-  $("submit").onclick = () => submit(item.kind === "reading" ? selected : $("answer").value);
+  $("submit").onclick = () => submit(item.kind === "vocab" ? $("answer").value : selected);
   $("answer")?.addEventListener("keydown", (e) => { if (e.key === "Enter") $("submit").click(); });
 }
 

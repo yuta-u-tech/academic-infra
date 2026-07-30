@@ -1,6 +1,6 @@
 # 英語学習機能の統合設計（実装前分析）
 
-> ステータス: **MVP 実装済み（2026-07-30）**。閉ループ（§9）は通っている。
+> ステータス: **MVP + 一般英語/TOEIC 実装済み（2026-07-30）**。閉ループ（§9）は実データで通した。
 > 方針は3点とも承認済み: §2 の案C（内蔵＋既存英語資産の再利用）／FastAPI + 素の HTML/JS ／
 > 長期正本は GitHub（§7 の乖離を承認）。
 > 未着手の範囲は §9「やらないこと」と §10 を参照。
@@ -370,11 +370,51 @@ MVP を9タスクに分ける。上から順に依存している。
 - 非ループバックへのバインドを拒否すること
 - 出力した `findings.json` を既存 `promote_drive_comments.py` がそのまま Issue 本文にできること
 
-### 未着手（MVP 外・§9 の「やらないこと」と対応）
+### 追加実装: 一般英語 / TOEIC（2026-07-30）
 
-- リスニング / スピーキング / 発音、英作文添削
+科目資料からは専門英語・論文読解しか作れない、という §9 の穴を埋めた。
+
+| # | タスク | 成果物 |
+|---|---|---|
+| 11 | 外部素材の抽象 | `acenglish/sources/base.py`（`ExternalMaterial`） |
+| 12 | TOEIC 語彙 | `sources/studyforge.py` — `yuta-u-tech/study-forge` から 2,282 語。生成を挟まない |
+| 13 | VOA Learning English | `sources/voa.py` — RSS + 記事本文・語注の抽出（米国政府著作物＝PD） |
+| 14 | TED / YouTube 字幕 | `sources/ted.py` — `yt-dlp --skip-download`（listening-materials の方針を踏襲） |
+| 15 | 文法問題（Part 5） | `items.GrammarItem` + `english/prompts/grammar.md` |
+| 16 | 英語ノートへの還元 | `acenglish/notes.py` → `~/english-notes` の `drafts/` |
+| 17 | DB v2 | `material.source` / `material.origin` / `revision_candidate.target_kind` |
+
+**素材の権利について。** 市販の TOEIC 問題集から問題文を取ってこない。権利のはっきりした
+英文（VOA=PD、TED字幕=学習目的の引用範囲）を素材にし、問題は誤答傾向に合わせて生成する。
+TOEIC 語彙は市販の単語集に由来するため、**public な academic-infra には書かず**、
+ローカル SQLite と private な english-notes までで止める。
+
+**還元先が2系統になった。** 外部素材には直すべき章が無いので:
+
+| 素材 | `target_kind` | 行き先 |
+|---|---|---|
+| 科目資料 | `course_repo` | findings.json → `promote_drive_comments.py` → Issue → PR |
+| TOEIC / VOA / TED | `english_note` | `~/english-notes` の `drafts/` |
+
+テストで固定した点: 外部素材の誤答が科目リポジトリの findings に混ざらないこと、
+`notes/` の既存ファイルを書き換えないこと、下書きが空欄のまま `notes/` に紛れ込まないこと。
+
+### 実運用の記録（2026-07-30）
+
+- 金フレ 2,282 語を取り込み（再実行は 0 件＝冪等）
+- VOA の記事 1 本（America's Presidents: George Washington, 6,497字）から読解3・文法3・語彙3を生成
+- TED 1 本（Inside the mind of a master procrastinator）の字幕取り込み
+- 学習セッションで確認できた挙動:
+  - 同じ正解でも 1.8秒 → mastery 0.5、20秒 → 0.2 + `speed_gap`
+  - 同一語の誤答3回で `knowledge_gap` → `material_gap` に昇格し、`english-notes/drafts/` に下書き
+  - 同じ誤答が科目側の `findings` には1件も出ない
+
+### 未着手
+
+- リスニング（音声再生・ディクテーション）/ スピーキング / 発音、英作文添削
 - goigoi-data への語彙書き出し（スキーマは合わせてあるが経路は未実装）
 - listening-materials の cloze をこの UI へ取り込む
+- VOA の音声を使ったシャドーイング（記事に音声があるが未使用）
 - SQLite バックアップの定期実行（`acenglish_cli.py backup` はあるが自動化していない）
 
 ---

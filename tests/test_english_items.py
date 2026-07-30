@@ -3,7 +3,13 @@
 import pytest
 from pydantic import ValidationError
 
-from acenglish.items import GenerationResult, ReadingItem, VocabItem, write_json_schemas
+from acenglish.items import (
+    GenerationResult,
+    GrammarItem,
+    ReadingItem,
+    VocabItem,
+    write_json_schemas,
+)
 
 
 def result_payload(**item_overrides) -> dict:
@@ -66,6 +72,51 @@ def test_vocab_answers_ignore_case_and_padding():
     item = VocabItem(word="Sentinel Node", meaning="番兵ノード")
     assert item.check("  sentinel node ") is True
     assert item.check("sentinel") is False
+
+
+def grammar_item(**overrides) -> dict:
+    item = {
+        "kind": "grammar",
+        "sentence": "The report was completed ____ than we expected.",
+        "choices": ["quick", "quicker", "more quickly", "quickest"],
+        "answer_index": 2,
+        "explanation": "動詞 was completed を修飾するので副詞の比較級。",
+        "point": "副詞と形容詞の区別（比較級）",
+    }
+    item.update(overrides)
+    return item
+
+
+def test_a_grammar_item_needs_a_blank():
+    """空所の無い文は Part 5 の問題として成立しない。"""
+    with pytest.raises(ValidationError, match="空所"):
+        GrammarItem.model_validate(grammar_item(sentence="No blank here."))
+
+
+def test_a_grammar_item_records_which_point_it_tests():
+    """誤答が同じ point に集中したとき、文法ノートのどこを直すかがこれで決まる。"""
+    item = GrammarItem.model_validate(grammar_item())
+    assert item.point.startswith("副詞と形容詞")
+    assert item.domain == "grammar"
+
+
+def test_grammar_answers_are_checked_by_index():
+    item = GrammarItem.model_validate(grammar_item())
+    assert item.check("2") is True
+    assert item.check("0") is False
+
+
+def test_a_two_choice_grammar_question_is_rejected():
+    """4択が基本。2択では消去法で解けてしまい、文法知識を測れない。"""
+    with pytest.raises(ValidationError):
+        GrammarItem.model_validate(grammar_item(choices=["a", "b"], answer_index=0))
+
+
+def test_a_grammar_item_round_trips_through_the_result_envelope():
+    payload = result_payload()
+    payload["items"] = [{"difficulty": 3, "reason": "比較級の副詞", "item": grammar_item()}]
+    result = GenerationResult.model_validate(payload)
+    assert result.items[0].item.kind == "grammar"
 
 
 def test_json_schema_is_written_for_humans_and_agents(tmp_path):

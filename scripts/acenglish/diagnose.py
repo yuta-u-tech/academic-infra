@@ -113,11 +113,12 @@ def open_revision_candidate(
     problem: str,
     fix_spec: list[str],
     evidence: dict,
+    target_kind: str = "course_repo",
 ) -> int:
     """資料への追記候補を1件立てる（同一 review_id で open が既にあれば作り直さない）。
 
-    ここはまだ Draft ですらない。ユーザーが確認して初めて findings.json になり、
-    既存の `promote_drive_comments.py` が Issue 化する。
+    ここはまだ Draft ですらない。ユーザーが確認して初めて、科目資料なら findings.json →
+    `promote_drive_comments.py` で Issue に、外部素材なら english-notes の drafts/ になる。
     """
     existing = connection.execute(
         "SELECT id FROM revision_candidate WHERE review_id = ? AND status = 'open'",
@@ -130,8 +131,8 @@ def open_revision_candidate(
         """
         INSERT INTO revision_candidate (
             review_id, course_id, source_file, title, problem, fix_spec, evidence,
-            status, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, 'open', ?)
+            status, target_kind, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, 'open', ?, ?)
         """,
         (
             review_id,
@@ -141,6 +142,7 @@ def open_revision_candidate(
             problem,
             json.dumps(fix_spec, ensure_ascii=False),
             json.dumps(evidence, ensure_ascii=False),
+            target_kind,
             now_iso(),
         ),
     )

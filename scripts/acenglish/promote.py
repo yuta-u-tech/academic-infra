@@ -20,14 +20,22 @@ from .db import now_iso
 
 
 def open_candidates(connection: sqlite3.Connection, course_id: str | None = None) -> list[dict]:
+    """Issue 化すべき候補だけを返す。
+
+    外部素材（TOEIC/VOA/TED）由来の候補は `target_kind = 'english_note'` で、直すべき
+    科目資料が無い。ここに混ぜると科目リポジトリへ無関係な Issue が立つので除く
+    （そちらは `notes.write_drafts()` が扱う）。
+    """
     if course_id:
         rows = connection.execute(
-            "SELECT * FROM revision_candidate WHERE status = 'open' AND course_id = ? ORDER BY id",
+            "SELECT * FROM revision_candidate WHERE status = 'open'"
+            " AND target_kind = 'course_repo' AND course_id = ? ORDER BY id",
             (course_id,),
         ).fetchall()
     else:
         rows = connection.execute(
-            "SELECT * FROM revision_candidate WHERE status = 'open' ORDER BY id"
+            "SELECT * FROM revision_candidate WHERE status = 'open'"
+            " AND target_kind = 'course_repo' ORDER BY id"
         ).fetchall()
     return [dict(row) for row in rows]
 

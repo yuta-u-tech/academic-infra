@@ -17,10 +17,18 @@ from typing import Any
 
 from .db import now_iso
 from .diagnose import ErrorCause, classify, escalate, next_action, open_revision_candidate
-from .items import ReadingItem, VocabItem
+from .items import GrammarItem, ReadingItem, VocabItem
 from .model import AttemptSignals, schedule_review, update_skill_state
 
-_ITEM_TYPES = {"vocab": VocabItem, "reading": ReadingItem}
+_ITEM_TYPES = {"vocab": VocabItem, "reading": ReadingItem, "grammar": GrammarItem}
+# 出題時に隠すフィールド。答えと解説が UI に流れると、正誤の記録が意味をなくなる。
+_HIDDEN_FIELDS = {
+    "vocab": ("word",),
+    "reading": ("answer_index", "explanation"),
+    "grammar": ("answer_index", "explanation"),
+}
+# 外部素材（TOEIC/VOA/TED）には直すべき科目資料が無いので、還元先はノートになる。
+_NOTE_SOURCES = {"toeic", "voa", "ted"}
 
 
 @dataclass(frozen=True)
@@ -145,39 +153,64 @@ def answer(
 def _open_candidate(
     connection: sqlite3.Connection,
     row: dict,
-    item: VocabItem | ReadingItem,
+    item: VocabItem | ReadingItem | GrammarItem,
     skill_state: dict,
 ) -> int:
-    """資料の説明不足として追記候補を立てる。
+    """繰り返し間違えた箇所について、追記候補を1件立てる。
+
+    行き先は素材によって変わる。科目資料なら「章の説明が足りない」→ 科目リポジトリの
+    Issue へ、TOEIC/VOA/TED なら直すべき章が無いので「自分用ノートに書き足す」→
+    english-notes の drafts/ へ。どちらも**この時点ではまだ何も書き換えない**。
 
     問題文・修正仕様は「誤答の事実」から機械的に組み立てられる範囲に留める。
-    どう書き直すかの本文は Claude が Issue 化の直前に肉付けする前提
-    （既存の findings.json と同じ分担）。
+    どう書くかの本文は Claude が Issue化／ノート化の直前に肉付けする前提。
     """
     material = connection.execute(
         "SELECT * FROM material WHERE review_id = ?", (row["review_id"],)
     ).fetchone()
     title = material["title"] if material else row["review_id"]
     source_file = material["source_file"] if material else "(未確定)"
+    source = material["source"] if material else "academic"
+    is_note = source in _NOTE_SOURCES
 
-    problem = (
-        f"「{title}」について、{item.domain}/{item.sub_skill} の演習で "
-        f"{skill_state['error_streak']}回連続して誤答している。"
-        f"平均的な回答時間の中央値は {skill_state['latency_ms_p50']}ms、"
-        f"ヒント使用率は {skill_state['hint_rate']:.0%}。"
-        "本人が覚えていないだけでなく、資料側の説明・例が不足している可能性がある。"
-    )
-    fix_spec = [
-        f"{title} の該当箇所に、誤答が集中している論点の説明を追記する",
-        "具体例を1つ以上追加する（既存の記号体系は変えない）",
-        "英語で説明する際の対応表現を併記する",
-    ]
+    streak = skill_state["error_streak"]
+    latency = skill_state["latency_ms_p50"]
+    if is_note:
+        problem = (
+            f"「{title}」（{source}）を {item.domain}/{item.sub_skill} の演習で "
+            f"{streak}回連続して間違えている。回答時間の中央値は {latency}ms、"
+            f"ヒント使用率は {skill_state['hint_rate']:.0%}。"
+            "自分のノートにこの項目の整理が無いか、あっても区別が書けていない。"
+        )
+        fix_spec = [
+            f"{source_file} に「{title}」の項目を追加する（既にあれば書き足す）",
+            "間違えた理由（何と取り違えたか）を自分の言葉で書く",
+            "自分で作った例文を1つ添える（出典の例文をそのまま写さない）",
+        ]
+        candidate_title = f"{title}: {streak}回続けて間違えている"
+    else:
+        problem = (
+            f"「{title}」について、{item.domain}/{item.sub_skill} の演習で "
+            f"{streak}回連続して誤答している。回答時間の中央値は {latency}ms、"
+            f"ヒント使用率は {skill_state['hint_rate']:.0%}。"
+            "本人が覚えていないだけでなく、資料側の説明・例が不足している可能性がある。"
+        )
+        fix_spec = [
+            f"{title} の該当箇所に、誤答が集中している論点の説明を追記する",
+            "具体例を1つ以上追加する（既存の記号体系は変えない）",
+            "英語で説明する際の対応表現を併記する",
+        ]
+        candidate_title = f"{title} の説明が不足している（英語演習での誤答{streak}回）"
+
     evidence = {
         "review_id": row["review_id"],
+        "source": source,
+        "origin": material["origin"] if material else None,
         "domain": item.domain,
         "sub_skill": item.sub_skill,
-        "error_streak": skill_state["error_streak"],
+        "error_streak": streak,
         "mastery": skill_state["mastery"],
+        "latency_ms_p50": latency,
         "item_prompt": item.prompt(),
         "source_commit": row["source_commit"],
     }
@@ -186,10 +219,11 @@ def _open_candidate(
         review_id=row["review_id"],
         course_id=row["course_id"],
         source_file=source_file,
-        title=f"{title} の説明が不足している（英語演習での誤答{skill_state['error_streak']}回）",
+        title=candidate_title,
         problem=problem,
         fix_spec=fix_spec,
         evidence=evidence,
+        target_kind="english_note" if is_note else "course_repo",
     )
 
 
@@ -208,11 +242,8 @@ def item_for_ui(connection: sqlite3.Connection, item_id: int) -> dict[str, Any]:
     """出題用。答え（answer_index / word）は含めない。"""
     row, item = load_item(connection, item_id)
     payload = json.loads(row["payload"])
-    if row["kind"] == "reading":
-        payload.pop("answer_index", None)
-        payload.pop("explanation", None)
-    else:
-        payload.pop("word", None)
+    for field in _HIDDEN_FIELDS.get(row["kind"], ()):
+        payload.pop(field, None)
     return {
         "item_id": item_id,
         "kind": row["kind"],

@@ -74,7 +74,43 @@ class ReadingItem(_Strict):
             return False
 
 
-Item = Annotated[Union[VocabItem, ReadingItem], Field(discriminator="kind")]
+class GrammarItem(_Strict):
+    """空所補充の文法問題（TOEIC Part 5 の形）。
+
+    読解と分けているのは、誤答原因の分岐が違うため。読解の誤りは「文が読めていない」
+    かもしれないが、1文の空所補充を外すのは文法知識そのものの問題に絞り込める。
+    """
+
+    kind: Literal["grammar"] = "grammar"
+    domain: Literal["grammar"] = "grammar"
+    sub_skill: Literal["knowledge", "recognition", "production", "processing_speed"] = "knowledge"
+    sentence: str = Field(min_length=1, max_length=600, description="空所は ____ で示す")
+    choices: list[str] = Field(min_length=3, max_length=5)
+    answer_index: int = Field(ge=0)
+    explanation: str = Field(min_length=1, max_length=2000)
+    point: str = Field(min_length=1, max_length=120, description="問われている文法項目")
+
+    @model_validator(mode="after")
+    def _blank_and_answer_are_consistent(self) -> "GrammarItem":
+        if "____" not in self.sentence:
+            raise ValueError("sentence に空所 '____' がありません。")
+        if self.answer_index >= len(self.choices):
+            raise ValueError(
+                f"answer_index={self.answer_index} は choices({len(self.choices)}件)の範囲外です。"
+            )
+        return self
+
+    def prompt(self) -> str:
+        return self.sentence
+
+    def check(self, response: str) -> bool:
+        try:
+            return int(response) == self.answer_index
+        except (TypeError, ValueError):
+            return False
+
+
+Item = Annotated[Union[VocabItem, ReadingItem, GrammarItem], Field(discriminator="kind")]
 
 
 class GeneratedItem(_Strict):

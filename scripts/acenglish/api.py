@@ -91,13 +91,28 @@ def create_app(db_path: Path | None = None) -> FastAPI:
 
     @app.get("/api/courses")
     def courses() -> dict:
+        """科目 + 取り込み済みの外部素材。
+
+        外部素材（TOEIC/VOA/TED）は `courses.yml` に載らないので、実際に取り込まれた
+        ものだけを DB から拾って足す。出題できるものだけが選択肢に出る。
+        """
         data = yaml.safe_load(COURSES_YML_PATH.read_text(encoding="utf-8")) or {}
-        return {
-            "courses": [
-                {"course_id": cid, "course_name": entry.get("course_name", cid)}
-                for cid, entry in (data.get("courses") or {}).items()
-            ]
-        }
+        listed = [
+            {"course_id": cid, "course_name": entry.get("course_name", cid)}
+            for cid, entry in (data.get("courses") or {}).items()
+        ]
+        known = {c["course_id"] for c in listed}
+
+        with db() as connection:
+            rows = connection.execute(
+                "SELECT DISTINCT course_id, source FROM material WHERE source != 'academic'"
+            ).fetchall()
+        for row in rows:
+            if row["course_id"] in known:
+                continue
+            known.add(row["course_id"])
+            listed.insert(0, {"course_id": row["course_id"], "course_name": "英語（一般・TOEIC）"})
+        return {"courses": listed}
 
     @app.post("/api/sessions")
     def create_session(request: SessionRequest) -> dict:
