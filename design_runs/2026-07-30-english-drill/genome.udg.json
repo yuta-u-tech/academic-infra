@@ -1,0 +1,160 @@
+{
+  "genome_version": "1.0",
+  "task_type": "web_ui",
+  "intent": {
+    "primary_goal": "operate",
+    "single_message": "いま解く1問だけに集中させ、直後に何を誤ったか分かる",
+    "attention_budget_sec": 8,
+    "emotional_temperature": -0.3
+  },
+  "audience": {
+    "description": "本人のみ。毎日10〜20分、キーボードの前で連続して回す。夜間の利用が多い",
+    "viewing_context": "desktop"
+  },
+  "medium": {
+    "family": "web",
+    "canvas": {
+      "width": 1440,
+      "height": 900,
+      "unit": "px"
+    },
+    "safe_area": {
+      "top": 0,
+      "bottom": 0,
+      "left": 24,
+      "right": 24
+    },
+    "responsive_targets": [
+      "390",
+      "768",
+      "1440"
+    ]
+  },
+  "brand": {
+    "immutable_assets": [],
+    "voice": "静かで正確。励まさない。事実だけを返す",
+    "existing_tokens_ref": null
+  },
+  "layout": {
+    "grid": {
+      "columns": 12,
+      "gutter": 24,
+      "margin": 24
+    },
+    "composition_pattern": "centered",
+    "whitespace_budget_ratio": 0.52,
+    "density_target": 0.28
+  },
+  "hierarchy": {
+    "levels": [
+      {
+        "id": "stem",
+        "rank": 1,
+        "channel": [
+          "size",
+          "weight",
+          "position"
+        ]
+      },
+      {
+        "id": "choices",
+        "rank": 2,
+        "channel": [
+          "size",
+          "area",
+          "shape"
+        ]
+      },
+      {
+        "id": "meta_progress",
+        "rank": 3,
+        "channel": [
+          "size",
+          "color"
+        ]
+      },
+      {
+        "id": "keymap",
+        "rank": 3,
+        "channel": [
+          "size",
+          "color"
+        ]
+      }
+    ],
+    "gaze_path": [
+      "stem",
+      "choices",
+      "keymap",
+      "meta_progress"
+    ],
+    "min_size_ratio_between_ranks": 1.6
+  },
+  "typography": {
+    "families": {
+      "display": "ui-sans-serif, -apple-system, 'Hiragino Sans', sans-serif",
+      "body": "ui-monospace, 'SF Mono', Menlo, monospace"
+    },
+    "scale_ratio": 1.25,
+    "base_size": 16,
+    "max_line_length_ja": 34,
+    "line_height": {
+      "body": 1.7,
+      "display": 1.45
+    }
+  },
+  "spacing": {
+    "base_unit": 8,
+    "scale": [
+      4,
+      8,
+      12,
+      16,
+      24,
+      32,
+      48,
+      64,
+      96
+    ],
+    "proximity_ratio_min": 2.0
+  },
+  "color": {
+    "primary": "#E6EDF3",
+    "accent": "#4C8DFF",
+    "neutrals": [
+      "#0B0D10",
+      "#14181D",
+      "#232A32",
+      "#8B949E",
+      "#E6EDF3"
+    ],
+    "accent_area_ratio_max": 0.06,
+    "min_contrast": {
+      "body": 4.5,
+      "large_text": 3.0,
+      "ui_component": 3.0
+    }
+  },
+  "truthfulness_constraints": {
+    "no_fabricated_claims": true,
+    "immutable_facts": [
+      "出題APIが返す payload の文言（passage/question/choices/sentence/meaning）は一字も変えない",
+      "正誤・習熟度・次回間隔はサーバーの返り値をそのまま表示する",
+      "答えと解説は回答前に画面へ出さない"
+    ],
+    "immutable_images": []
+  },
+  "quality_rules": {
+    "max_hierarchy_levels": 3,
+    "max_font_families": 2,
+    "max_hues": 2
+  },
+  "series_consistency": {
+    "series_id": "acenglish-drill-2026-07",
+    "locked_params": [
+      "layout.composition_pattern",
+      "intent.primary_goal",
+      "truthfulness_constraints.immutable_facts"
+    ]
+  }
+}

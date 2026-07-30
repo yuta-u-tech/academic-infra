@@ -18,7 +18,7 @@ from pathlib import Path
 DEFAULT_HOME_ENV = "ACADEMIC_ENGLISH_HOME"
 _DEFAULT_HOME = Path.home() / ".academic-english"
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 _MIGRATIONS: dict[int, tuple[str, ...]] = {
     1: (
@@ -146,6 +146,10 @@ _MIGRATIONS: dict[int, tuple[str, ...]] = {
         "ALTER TABLE revision_candidate ADD COLUMN target_kind TEXT NOT NULL DEFAULT 'course_repo'",
         "CREATE INDEX idx_material_source ON material (source)",
     ),
+    # v3: 回答直後に一度スケジュールし、答えを見たあとの自己申告で引き直す。
+    # 引き直しは「もう一度進める」ではなく「同じ地点から計算し直す」でなければ
+    # 間隔が二重に伸びるので、回答前の SM-2 状態を控えておく。
+    3: ("ALTER TABLE attempt ADD COLUMN queue_state_before TEXT",),
 }
 
 

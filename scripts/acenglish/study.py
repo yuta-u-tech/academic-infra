@@ -23,7 +23,10 @@ from .model import AttemptSignals, schedule_review, update_skill_state
 _ITEM_TYPES = {"vocab": VocabItem, "reading": ReadingItem, "grammar": GrammarItem}
 # 出題時に隠すフィールド。答えと解説が UI に流れると、正誤の記録が意味をなくなる。
 _HIDDEN_FIELDS = {
-    "vocab": ("word",),
+    # example と collocations は見出し語をそのまま含む（"preside over a meeting"）。
+    # 語義だけ見て思い出す問題なので、これを出したら答えを見せているのと変わらない。
+    # 答え合わせのときに返す。
+    "vocab": ("word", "example", "collocations"),
     "reading": ("answer_index", "explanation"),
     "grammar": ("answer_index", "explanation"),
 }
@@ -127,6 +130,12 @@ def answer(
     connection.commit()
 
     skill_state = update_skill_state(connection, signals)
+    # 答えを見たあとの自己申告で引き直せるよう、進める前の地点を控えておく。
+    connection.execute(
+        "UPDATE attempt SET queue_state_before = ? WHERE id = ?",
+        (json.dumps(_queue_state(connection, item_id)), attempt_id),
+    )
+    connection.commit()
     review = schedule_review(connection, item_id, row["review_id"], signals)
 
     candidate_id = None
@@ -148,6 +157,57 @@ def answer(
         review=review,
         revision_candidate_id=candidate_id,
     )
+
+
+# 答えを見たあとに本人が付ける手応え。Anki の4段階と同じ粒度。
+GRADE_CONFIDENCE = {0: 0.0, 1: 0.34, 2: 0.67, 3: 1.0}
+
+
+def grade(connection: sqlite3.Connection, attempt_id: int, value: int) -> dict:
+    """回答後の自己申告。**復習間隔だけ**を動かす。
+
+    mastery は動かさない。正誤・所要時間・ミス回数・ヒントという観測できる事実から
+    既に算出してあり、あとから自己申告で上書きすると測っているものが変わる。
+    自己申告が効くのは「次にいつ出すか」で、そこは本人の感覚の方が正確
+    （「正解したが勘だった」は間隔を伸ばすべきではない）。
+    """
+    if value not in GRADE_CONFIDENCE:
+        raise ValueError(f"grade は {sorted(GRADE_CONFIDENCE)} のいずれかです: {value}")
+
+    row = connection.execute("SELECT * FROM attempt WHERE id = ?", (attempt_id,)).fetchone()
+    if row is None:
+        raise LookupError(f"attempt {attempt_id} がありません。")
+
+    confidence = GRADE_CONFIDENCE[value]
+    connection.execute(
+        "UPDATE attempt SET self_confidence = ? WHERE id = ?", (confidence, attempt_id)
+    )
+    # 回答直後の地点まで巻き戻してから引き直す。巻き戻さずに再計算すると、
+    # 1回の回答で SM-2 が2段進んでしまう（1日後 → 6日後）。
+    before = json.loads(row["queue_state_before"]) if row["queue_state_before"] else None
+    if before is None:
+        connection.execute("DELETE FROM review_queue WHERE item_id = ?", (row["item_id"],))
+    else:
+        connection.execute(
+            "UPDATE review_queue SET interval = ?, ease_factor = ?, repetitions = ?"
+            " WHERE item_id = ?",
+            (before["interval"], before["ease_factor"], before["repetitions"], row["item_id"]),
+        )
+    connection.commit()
+
+    signals = AttemptSignals(
+        domain=row["domain"],
+        sub_skill=row["sub_skill"],
+        target_ref=row["review_id"],
+        # 「もう一度」は、正解していても間隔をリセットする（勘で当てた場合に効く）。
+        correct=bool(row["correct"]) and value > 0,
+        elapsed_ms=row["elapsed_ms"],
+        hint_used=bool(row["hint_used"]),
+        retry_count=row["retry_count"],
+        self_confidence=confidence,
+        days_since_last=row["days_since_last"],
+    )
+    return schedule_review(connection, row["item_id"], row["review_id"], signals)
 
 
 def _open_candidate(
@@ -227,6 +287,14 @@ def _open_candidate(
     )
 
 
+def _queue_state(connection: sqlite3.Connection, item_id: int) -> dict | None:
+    row = connection.execute(
+        "SELECT interval, ease_factor, repetitions FROM review_queue WHERE item_id = ?",
+        (item_id,),
+    ).fetchone()
+    return dict(row) if row else None
+
+
 def _days_since_last(connection: sqlite3.Connection, item_id: int) -> float | None:
     row = connection.execute(
         "SELECT created_at FROM attempt WHERE item_id = ? ORDER BY id DESC LIMIT 1", (item_id,)
@@ -238,10 +306,30 @@ def _days_since_last(connection: sqlite3.Connection, item_id: int) -> float | No
     return round((now - previous).total_seconds() / 86_400, 4)
 
 
+def answer_pattern(word: str) -> str:
+    """綴りを伏せたまま、長さと語の区切りだけを見せる形。
+
+    1文字ずつ正誤を返す方式は採らない。総当たりで必ず正解できてしまい、
+    「思い出せたか」を測るという目的そのものが壊れるため。
+    """
+    return "".join(character if character in " -'’" else "·" for character in word)
+
+
+def hint_for(word: str) -> str:
+    """各語の頭文字だけ開ける。"""
+    parts = []
+    for chunk in word.split(" "):
+        parts.append(chunk[:1] + answer_pattern(chunk[1:]) if chunk else chunk)
+    return " ".join(parts)
+
+
 def item_for_ui(connection: sqlite3.Connection, item_id: int) -> dict[str, Any]:
-    """出題用。答え（answer_index / word）は含めない。"""
+    """出題用。答え（answer_index / word / explanation）は含めない。"""
     row, item = load_item(connection, item_id)
     payload = json.loads(row["payload"])
+    if row["kind"] == "vocab":
+        # 綴りは伏せるが、何語で何文字かは打つ前に要る情報なので渡す。
+        payload["answer_pattern"] = answer_pattern(item.word)
     for field in _HIDDEN_FIELDS.get(row["kind"], ()):
         payload.pop(field, None)
     return {

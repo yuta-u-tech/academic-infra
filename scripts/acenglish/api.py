@@ -63,6 +63,11 @@ class AnswerRequest(BaseModel):
     cause_override: str | None = None
 
 
+class GradeRequest(BaseModel):
+    attempt_id: int
+    grade: int = Field(ge=0, le=3, description="0=もう一度 1=難しい 2=普通 3=簡単")
+
+
 class SessionRequest(BaseModel):
     course_id: str
     note: str | None = None
@@ -173,7 +178,38 @@ def create_app(db_path: Path | None = None) -> FastAPI:
             "explanation": getattr(item, "explanation", None),
             "answer": getattr(item, "word", None)
             or (item.choices[item.answer_index] if hasattr(item, "choices") else None),
+            # 出題中は伏せていた用例・コロケーションは、ここで定着のために見せる。
+            "example": getattr(item, "example", None),
+            "collocations": getattr(item, "collocations", None) or None,
         }
+
+    @app.get("/api/hint")
+    def hint(item_id: int) -> dict:
+        """語彙の頭文字ヒント。
+
+        クライアントで持たせず毎回サーバーに取りに来させるのは、`hint_used` を
+        自己申告に頼らないため。ヒントを見たかどうかは習熟度の計算に効く。
+        """
+        with db() as connection:
+            try:
+                _, item = study.load_item(connection, item_id)
+            except LookupError as error:
+                raise HTTPException(status_code=404, detail=str(error)) from error
+        if not hasattr(item, "word"):
+            raise HTTPException(status_code=422, detail="この種別にヒントはありません。")
+        return {"hint": study.hint_for(item.word)}
+
+    @app.post("/api/grade")
+    def set_grade(request: GradeRequest) -> dict:
+        """答えを見たあとの手応え。復習間隔を引き直す（mastery は動かさない）。"""
+        with db() as connection:
+            try:
+                review = study.grade(connection, request.attempt_id, request.grade)
+            except LookupError as error:
+                raise HTTPException(status_code=404, detail=str(error)) from error
+            except ValueError as error:
+                raise HTTPException(status_code=422, detail=str(error)) from error
+        return {"interval_days": review["interval"], "next_review": review["next_review"]}
 
     @app.get("/api/candidates")
     def candidates(course: str | None = None) -> dict:

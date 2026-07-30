@@ -1,0 +1,232 @@
+{
+  "canvas": {
+    "width": 1440,
+    "height": 900,
+    "bg_color": "#0B0D10"
+  },
+  "safe_area": {
+    "top": 0,
+    "bottom": 0,
+    "left": 24,
+    "right": 24
+  },
+  "renderer": "html_static",
+  "elements": [
+    {
+      "id": "progress_rule",
+      "bbox": [
+        0,
+        0,
+        480,
+        1
+      ],
+      "role": "shape",
+      "rank": 3,
+      "font_size": null,
+      "color": "#4C8DFF",
+      "bg_color": "#0B0D10",
+      "text": null,
+      "overflow": false
+    },
+    {
+      "id": "session_meta",
+      "bbox": [
+        364,
+        32,
+        712,
+        19
+      ],
+      "role": "text",
+      "rank": 3,
+      "font_size": 12,
+      "color": "#8B949E",
+      "bg_color": "#0B0D10",
+      "text": "12 / 20   正答 83%   0:04  ●●●●○  文法",
+      "overflow": false
+    },
+    {
+      "id": "point_meta",
+      "bbox": [
+        364,
+        75,
+        712,
+        19
+      ],
+      "role": "text",
+      "rank": 3,
+      "font_size": 12,
+      "color": "#8B949E",
+      "bg_color": "#0B0D10",
+      "text": "前置詞 vs 接続詞（譲歩）",
+      "overflow": false
+    },
+    {
+      "id": "stem",
+      "bbox": [
+        364,
+        118,
+        712,
+        138
+      ],
+      "role": "text",
+      "rank": 1,
+      "font_size": 32,
+      "color": "#E6EDF3",
+      "bg_color": "#0B0D10",
+      "text": "____ his reluctance to take public office, Washington accepted the presidency as a duty.",
+      "overflow": false
+    },
+    {
+      "id": "choice_0",
+      "bbox": [
+        364,
+        288,
+        712,
+        54
+      ],
+      "role": "button",
+      "rank": 2,
+      "font_size": 20,
+      "color": "#E6EDF3",
+      "bg_color": "#0B0D10",
+      "text": "Despite",
+      "tappable": true,
+      "overflow": false
+    },
+    {
+      "id": "choice_key_0",
+      "bbox": [
+        380,
+        303,
+        22,
+        22
+      ],
+      "role": "text",
+      "rank": 3,
+      "font_size": 12,
+      "color": "#8B949E",
+      "bg_color": "#0B0D10",
+      "text": "1",
+      "overflow": false
+    },
+    {
+      "id": "choice_1",
+      "bbox": [
+        364,
+        350,
+        712,
+        54
+      ],
+      "role": "button",
+      "rank": 2,
+      "font_size": 20,
+      "color": "#E6EDF3",
+      "bg_color": "#0B0D10",
+      "text": "Although",
+      "tappable": true,
+      "overflow": false
+    },
+    {
+      "id": "choice_key_1",
+      "bbox": [
+        380,
+        365,
+        22,
+        22
+      ],
+      "role": "text",
+      "rank": 3,
+      "font_size": 12,
+      "color": "#8B949E",
+      "bg_color": "#0B0D10",
+      "text": "2",
+      "overflow": false
+    },
+    {
+      "id": "choice_2",
+      "bbox": [
+        364,
+        412,
+        712,
+        54
+      ],
+      "role": "button",
+      "rank": 2,
+      "font_size": 20,
+      "color": "#E6EDF3",
+      "bg_color": "#0B0D10",
+      "text": "Even though",
+      "tappable": true,
+      "overflow": false
+    },
+    {
+      "id": "choice_key_2",
+      "bbox": [
+        380,
+        427,
+        22,
+        22
+      ],
+      "role": "text",
+      "rank": 3,
+      "font_size": 12,
+      "color": "#8B949E",
+      "bg_color": "#0B0D10",
+      "text": "3",
+      "overflow": false
+    },
+    {
+      "id": "choice_3",
+      "bbox": [
+        364,
+        474,
+        712,
+        54
+      ],
+      "role": "button",
+      "rank": 2,
+      "font_size": 20,
+      "color": "#E6EDF3",
+      "bg_color": "#0B0D10",
+      "text": "However",
+      "tappable": true,
+      "overflow": false
+    },
+    {
+      "id": "choice_key_3",
+      "bbox": [
+        380,
+        489,
+        22,
+        22
+      ],
+      "role": "text",
+      "rank": 3,
+      "font_size": 12,
+      "color": "#8B949E",
+      "bg_color": "#0B0D10",
+      "text": "4",
+      "overflow": false
+    },
+    {
+      "id": "keymap",
+      "bbox": [
+        364,
+        852,
+        712,
+        19
+      ],
+      "role": "text",
+      "rank": 3,
+      "font_size": 12,
+      "color": "#8B949E",
+      "bg_color": "#0B0D10",
+      "text": "1–4 選択 　↵ 決定",
+      "overflow": false
+    }
+  ],
+  "meta": {
+    "screen": "grammar_question",
+    "breakpoint": "lg"
+  }
+}

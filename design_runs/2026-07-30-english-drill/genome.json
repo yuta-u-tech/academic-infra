@@ -1,0 +1,108 @@
+{
+  "genome_version": "1.0",
+  "task_type": "web_ui",
+  "intent": {
+    "primary_goal": "operate",
+    "single_message": "いま解く1問だけに集中させ、直後に何を誤ったか分かる",
+    "attention_budget_sec": 8,
+    "emotional_temperature": -0.3
+  },
+  "audience": {
+    "description": "本人のみ。毎日10〜20分、キーボードの前で連続して回す。夜間の利用が多い",
+    "viewing_context": "desktop"
+  },
+  "medium": {
+    "family": "web",
+    "canvas": { "width": 1440, "height": 900, "unit": "px" },
+    "safe_area": { "top": 0, "bottom": 0, "left": 24, "right": 24 },
+    "responsive_targets": ["390", "768", "1440"]
+  },
+  "brand": {
+    "immutable_assets": [],
+    "voice": "静かで正確。励まさない。事実だけを返す",
+    "existing_tokens_ref": null
+  },
+  "layout": {
+    "grid": { "columns": 12, "gutter": 24, "margin": 24 },
+    "composition_pattern": "centered",
+    "whitespace_budget_ratio": 0.52,
+    "density_target": 0.28
+  },
+  "hierarchy": {
+    "levels": [
+      { "id": "stem", "rank": 1, "channel": ["size", "weight", "position"] },
+      { "id": "choices", "rank": 2, "channel": ["size", "area", "shape"] },
+      { "id": "meta_progress", "rank": 3, "channel": ["size", "color"] },
+      { "id": "keymap", "rank": 3, "channel": ["size", "color"] }
+    ],
+    "gaze_path": ["stem", "choices", "keymap", "meta_progress"],
+    "min_size_ratio_between_ranks": 1.6
+  },
+  "typography": {
+    "families": {
+      "display": "ui-sans-serif, -apple-system, 'Hiragino Sans', sans-serif",
+      "body": "ui-monospace, 'SF Mono', Menlo, monospace"
+    },
+    "scale_ratio": 1.25,
+    "base_size": 16,
+    "max_line_length_ja": 34,
+    "line_height": { "body": 1.7, "display": 1.45 }
+  },
+  "spacing": {
+    "base_unit": 8,
+    "scale": [4, 8, 12, 16, 24, 32, 48, 64, 96],
+    "proximity_ratio_min": 2.0
+  },
+  "color": {
+    "primary": "#E6EDF3",
+    "accent": "#4C8DFF",
+    "neutrals": ["#0B0D10", "#14181D", "#232A32", "#8B949E", "#E6EDF3"],
+    "accent_area_ratio_max": 0.06,
+    "min_contrast": { "body": 4.5, "large_text": 3.0, "ui_component": 3.0 }
+  },
+  "truthfulness_constraints": {
+    "no_fabricated_claims": true,
+    "immutable_facts": [
+      "出題APIが返す payload の文言（passage/question/choices/sentence/meaning）は一字も変えない",
+      "正誤・習熟度・次回間隔はサーバーの返り値をそのまま表示する",
+      "答えと解説は回答前に画面へ出さない"
+    ],
+    "immutable_images": []
+  },
+  "quality_rules": {
+    "max_hierarchy_levels": 3,
+    "max_font_families": 2,
+    "max_hues": 2
+  },
+  "series_consistency": {
+    "series_id": "acenglish-drill-2026-07",
+    "locked_params": [
+      "layout.composition_pattern",
+      "intent.primary_goal",
+      "truthfulness_constraints.immutable_facts"
+    ]
+  },
+  "sub_genome": {
+    "extends": "udg",
+    "breakpoints": { "sm": 390, "md": 768, "lg": 1440 },
+    "above_fold": {
+      "must_contain": ["stem", "choices", "keymap"],
+      "fold_height": 800
+    },
+    "cta": {
+      "label": "決定",
+      "style": "filled",
+      "min_contrast_vs_bg": 4.5,
+      "max_competing_ctas_above_fold": 1
+    },
+    "nav": { "present": true, "height": 44 },
+    "stack_output": "html_css",
+    "semantic_html_required": true,
+    "hierarchy_preserved_across_breakpoints": true
+  },
+  "design_notes": {
+    "why_two_hues_only": "primary は実質ニュートラル（文字色）。色相は accent の青1つに絞り、正誤の緑/赤は状態表示としてのみ、答え合わせ画面に限って使う。出題中は色で何も示唆しない（色が答えの手がかりになるのを防ぐ）",
+    "why_mono_for_body": "英文・選択肢・数値を等幅にすると、____ の空所幅と選択肢の語形（-ly / -ing）の差が視覚的に揃って比較しやすい。日本語の語義と設問文は display 側のサンセリフ",
+    "why_no_confidence_slider": "出題画面からスライダーを外し、答え合わせ後の『もう一度／難しい／普通／簡単』に自信度を畳み込む。出題中の操作対象を1つに保つため"
+  }
+}
