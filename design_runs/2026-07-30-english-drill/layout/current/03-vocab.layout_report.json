@@ -1,0 +1,325 @@
+{
+  "canvas": {
+    "width": 1440,
+    "height": 757,
+    "bg_color": "#0b0d10"
+  },
+  "safe_area": {
+    "top": 0,
+    "bottom": 0,
+    "left": 24,
+    "right": 24
+  },
+  "renderer": "html_static",
+  "elements": [
+    {
+      "id": "span-0",
+      "bbox": [
+        364,
+        34,
+        39,
+        19
+      ],
+      "role": "text",
+      "font_size": 12,
+      "font_weight": "400",
+      "color": "#8b949e",
+      "bg_color": "#0b0d10",
+      "text": "/ 2",
+      "tappable": false,
+      "overflow": false,
+      "rank": 2
+    },
+    {
+      "id": "b-1",
+      "bbox": [
+        364,
+        36,
+        8,
+        14
+      ],
+      "role": "text",
+      "font_size": 12,
+      "font_weight": "500",
+      "color": "#e6edf3",
+      "bg_color": "#0b0d10",
+      "text": "1",
+      "tappable": false,
+      "overflow": false,
+      "rank": 2
+    },
+    {
+      "id": "span-2-clock",
+      "bbox": [
+        932,
+        34,
+        31,
+        19
+      ],
+      "role": "text",
+      "font_size": 12,
+      "font_weight": "400",
+      "color": "#8b949e",
+      "bg_color": "#0b0d10",
+      "text": "0:00",
+      "tappable": false,
+      "overflow": false,
+      "rank": 2
+    },
+    {
+      "id": "span-3",
+      "bbox": [
+        979,
+        34,
+        39,
+        19
+      ],
+      "role": "text",
+      "font_size": 12,
+      "font_weight": "400",
+      "color": "#8b949e",
+      "bg_color": "#0b0d10",
+      "text": "●●●○○",
+      "tappable": false,
+      "overflow": false,
+      "rank": 2
+    },
+    {
+      "id": "span-4",
+      "bbox": [
+        1033,
+        32,
+        43,
+        23
+      ],
+      "role": "text",
+      "font_size": 12,
+      "font_weight": "400",
+      "color": "#8b949e",
+      "bg_color": "#0b0d10",
+      "text": "語彙",
+      "tappable": false,
+      "overflow": false,
+      "rank": 2
+    },
+    {
+      "id": "p-5",
+      "bbox": [
+        364,
+        79,
+        712,
+        19
+      ],
+      "role": "text",
+      "font_size": 12,
+      "font_weight": "400",
+      "color": "#8b949e",
+      "bg_color": "#0b0d10",
+      "text": "recall",
+      "tappable": false,
+      "overflow": false,
+      "rank": 2
+    },
+    {
+      "id": "h1-6",
+      "bbox": [
+        364,
+        122,
+        712,
+        46
+      ],
+      "role": "text",
+      "font_size": 32,
+      "font_weight": "600",
+      "color": "#e6edf3",
+      "bg_color": "#0b0d10",
+      "text": "（会議・式などを）主宰する、取り仕切る",
+      "tappable": false,
+      "overflow": false,
+      "rank": 1
+    },
+    {
+      "id": "p-7",
+      "bbox": [
+        364,
+        173,
+        712,
+        19
+      ],
+      "role": "text",
+      "font_size": 12,
+      "font_weight": "400",
+      "color": "#8b949e",
+      "bg_color": "#0b0d10",
+      "text": "verb",
+      "tappable": false,
+      "overflow": false,
+      "rank": 2
+    },
+    {
+      "id": "p-8-typeLine",
+      "bbox": [
+        364,
+        216,
+        462,
+        67
+      ],
+      "role": "shape",
+      "font_size": null,
+      "font_weight": null,
+      "color": null,
+      "bg_color": "#0b0d10",
+      "text": null,
+      "tappable": false,
+      "overflow": false,
+      "rank": 3
+    },
+    {
+      "id": "span-9",
+      "bbox": [
+        364,
+        224,
+        139,
+        38
+      ],
+      "role": "text",
+      "font_size": 32,
+      "font_weight": "400",
+      "color": "#e6edf3",
+      "bg_color": "#0b0d10",
+      "text": "preside",
+      "tappable": false,
+      "overflow": false,
+      "rank": 1
+    },
+    {
+      "id": "span-10",
+      "bbox": [
+        504,
+        227,
+        2,
+        30
+      ],
+      "role": "shape",
+      "font_size": null,
+      "font_weight": null,
+      "color": null,
+      "bg_color": "#4c8dff",
+      "text": null,
+      "tappable": false,
+      "overflow": false,
+      "rank": 3
+    },
+    {
+      "id": "span-11",
+      "bbox": [
+        507,
+        224,
+        152,
+        38
+      ],
+      "role": "text",
+      "font_size": 32,
+      "font_weight": "400",
+      "color": "#46505c",
+      "bg_color": "#0b0d10",
+      "text": "····",
+      "tappable": false,
+      "overflow": false,
+      "rank": 1
+    },
+    {
+      "id": "p-12",
+      "bbox": [
+        364,
+        307,
+        712,
+        19
+      ],
+      "role": "text",
+      "font_size": 12,
+      "font_weight": "400",
+      "color": "#8b949e",
+      "bg_color": "#0b0d10",
+      "text": "英語で入力",
+      "tappable": false,
+      "overflow": false,
+      "rank": 2
+    },
+    {
+      "id": "div-13",
+      "bbox": [
+        340,
+        722,
+        760,
+        19
+      ],
+      "role": "text",
+      "font_size": 12,
+      "font_weight": "400",
+      "color": "#8b949e",
+      "bg_color": "#0b0d10",
+      "text": "決定 ヒント わからない",
+      "tappable": false,
+      "overflow": false,
+      "rank": 2
+    },
+    {
+      "id": "kbd-14",
+      "bbox": [
+        364,
+        723,
+        20,
+        16
+      ],
+      "role": "text",
+      "font_size": 12,
+      "font_weight": "400",
+      "color": "#e6edf3",
+      "bg_color": "#0b0d10",
+      "text": "↵",
+      "tappable": false,
+      "overflow": false,
+      "rank": 2
+    },
+    {
+      "id": "kbd-15",
+      "bbox": [
+        440,
+        723,
+        35,
+        16
+      ],
+      "role": "text",
+      "font_size": 12,
+      "font_weight": "400",
+      "color": "#e6edf3",
+      "bg_color": "#0b0d10",
+      "text": "Tab",
+      "tappable": false,
+      "overflow": false,
+      "rank": 2
+    },
+    {
+      "id": "kbd-16",
+      "bbox": [
+        543,
+        723,
+        35,
+        16
+      ],
+      "role": "text",
+      "font_size": 12,
+      "font_weight": "400",
+      "color": "#e6edf3",
+      "bg_color": "#0b0d10",
+      "text": "Esc",
+      "tappable": false,
+      "overflow": false,
+      "rank": 2
+    }
+  ],
+  "meta": {
+    "screen": "unknown"
+  }
+}

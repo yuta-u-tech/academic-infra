@@ -1,0 +1,92 @@
+{
+  "api": {
+    "GET /api/courses": {
+      "courses": [
+        {
+          "course_id": "english",
+          "course_name": "英語（一般・TOEIC）"
+        }
+      ]
+    },
+    "POST /api/sessions": {
+      "req": {
+        "course_id": "english"
+      },
+      "res": {
+        "session_id": 7
+      }
+    },
+    "GET /api/queue?course=&limit=&kinds=&exclude=": {
+      "items": [
+        {
+          "item_id": 1,
+          "kind": "vocab|reading|grammar",
+          "review_id": "…",
+          "course_id": "english",
+          "difficulty": 3,
+          "domain": "vocabulary|reading|grammar",
+          "sub_skill": "recall|comprehension|syntax_parsing|knowledge|…",
+          "payload": {
+            "vocab": {
+              "meaning": "日本語の語義",
+              "part_of_speech": "verb",
+              "answer_pattern": "······· ····"
+            },
+            "reading": {
+              "passage": "英文80-200語",
+              "question": "…",
+              "choices": [
+                "…"
+              ]
+            },
+            "grammar": {
+              "point": "文法項目",
+              "sentence": "… ____ …",
+              "choices": [
+                "…"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "GET /api/hint?item_id=": {
+      "hint": "p······ o···"
+    },
+    "POST /api/answer": {
+      "req": {
+        "session_id": 7,
+        "item_id": 1,
+        "response": "文字列(選択肢はindex)",
+        "elapsed_ms": 5200,
+        "hint_used": false,
+        "retry_count": 0
+      },
+      "res": {
+        "attempt_id": 11,
+        "correct": false,
+        "error_cause": "knowledge_gap",
+        "next_action": "review_drill",
+        "mastery": 0.18,
+        "interval_days": 1,
+        "revision_candidate_id": null,
+        "explanation": "…",
+        "answer": "Despite",
+        "example": "…",
+        "collocations": [
+          "…"
+        ]
+      }
+    },
+    "POST /api/grade": {
+      "req": {
+        "attempt_id": 11,
+        "grade": "0=もう一度 1=難しい 2=普通 3=簡単"
+      },
+      "res": {
+        "interval_days": 1
+      }
+    },
+    "POST /api/sessions/{id}/end": {}
+  }
+}

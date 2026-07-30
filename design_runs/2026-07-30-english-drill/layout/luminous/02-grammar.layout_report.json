@@ -1,0 +1,469 @@
+{
+  "canvas": {
+    "width": 1440,
+    "height": 757,
+    "bg_color": "#07080b"
+  },
+  "safe_area": {
+    "top": 0,
+    "bottom": 0,
+    "left": 24,
+    "right": 24
+  },
+  "renderer": "html_static",
+  "elements": [
+    {
+      "id": "div-0-rail",
+      "bbox": [
+        0,
+        0,
+        1440,
+        2
+      ],
+      "role": "shape",
+      "font_size": null,
+      "font_weight": null,
+      "color": null,
+      "bg_color": "#131417",
+      "text": null,
+      "tappable": false,
+      "overflow": false,
+      "rank": 3
+    },
+    {
+      "id": "span-1",
+      "bbox": [
+        348,
+        50,
+        39,
+        19
+      ],
+      "role": "text",
+      "font_size": 12,
+      "font_weight": "400",
+      "color": "#8b949e",
+      "bg_color": "#07080b",
+      "text": "/ 2",
+      "tappable": false,
+      "overflow": false,
+      "rank": 3
+    },
+    {
+      "id": "b-2",
+      "bbox": [
+        348,
+        52,
+        8,
+        14
+      ],
+      "role": "text",
+      "font_size": 12,
+      "font_weight": "500",
+      "color": "#e6edf3",
+      "bg_color": "#07080b",
+      "text": "1",
+      "tappable": false,
+      "overflow": false,
+      "rank": 3
+    },
+    {
+      "id": "span-3-clock",
+      "bbox": [
+        945,
+        50,
+        31,
+        19
+      ],
+      "role": "text",
+      "font_size": 12,
+      "font_weight": "400",
+      "color": "#8b949e",
+      "bg_color": "#07080b",
+      "text": "0:00",
+      "tappable": false,
+      "overflow": false,
+      "rank": 3
+    },
+    {
+      "id": "span-4",
+      "bbox": [
+        992,
+        50,
+        43,
+        19
+      ],
+      "role": "text",
+      "font_size": 12,
+      "font_weight": "400",
+      "color": "#8b949e",
+      "bg_color": "#07080b",
+      "text": "●●●●○",
+      "tappable": false,
+      "overflow": false,
+      "rank": 3
+    },
+    {
+      "id": "span-5",
+      "bbox": [
+        1051,
+        48,
+        41,
+        23
+      ],
+      "role": "text",
+      "font_size": 12,
+      "font_weight": "400",
+      "color": "#8b949e",
+      "bg_color": "#07080b",
+      "text": "文法",
+      "tappable": false,
+      "overflow": false,
+      "rank": 3
+    },
+    {
+      "id": "p-6",
+      "bbox": [
+        376,
+        115,
+        688,
+        20
+      ],
+      "role": "text",
+      "font_size": 12,
+      "font_weight": "400",
+      "color": "#8b949e",
+      "bg_color": "#07080b",
+      "text": "前置詞 vs 接続詞（譲歩）",
+      "tappable": false,
+      "overflow": false,
+      "rank": 3
+    },
+    {
+      "id": "h1-7",
+      "bbox": [
+        376,
+        148,
+        688,
+        144
+      ],
+      "role": "text",
+      "font_size": 32,
+      "font_weight": "500",
+      "color": "#e6edf3",
+      "bg_color": "#07080b",
+      "text": "his reluctance to take public office, Washington accepted the presidency as a duty.",
+      "tappable": false,
+      "overflow": false,
+      "rank": 1
+    },
+    {
+      "id": "span-8",
+      "bbox": [
+        376,
+        151,
+        87,
+        48
+      ],
+      "role": "text",
+      "font_size": 32,
+      "font_weight": "500",
+      "color": null,
+      "bg_color": "#07080b",
+      "text": "____",
+      "tappable": false,
+      "overflow": false,
+      "rank": 1
+    },
+    {
+      "id": "button-9",
+      "bbox": [
+        376,
+        316,
+        688,
+        54
+      ],
+      "role": "button",
+      "font_size": 20,
+      "font_weight": "400",
+      "color": "#e6edf3",
+      "bg_color": "#07080b",
+      "text": null,
+      "tappable": true,
+      "overflow": false,
+      "rank": 2
+    },
+    {
+      "id": "span-10",
+      "bbox": [
+        392,
+        330,
+        24,
+        24
+      ],
+      "role": "text",
+      "font_size": 12,
+      "font_weight": "400",
+      "color": "#8b949e",
+      "bg_color": "#101114",
+      "text": "1",
+      "tappable": false,
+      "overflow": false,
+      "rank": 3
+    },
+    {
+      "id": "span-11",
+      "bbox": [
+        432,
+        328,
+        84,
+        30
+      ],
+      "role": "text",
+      "font_size": 20,
+      "font_weight": "400",
+      "color": "#e6edf3",
+      "bg_color": "#07080b",
+      "text": "Despite",
+      "tappable": false,
+      "overflow": false,
+      "rank": 2
+    },
+    {
+      "id": "button-12",
+      "bbox": [
+        376,
+        378,
+        688,
+        54
+      ],
+      "role": "button",
+      "font_size": 20,
+      "font_weight": "400",
+      "color": "#e6edf3",
+      "bg_color": "#07080b",
+      "text": null,
+      "tappable": true,
+      "overflow": false,
+      "rank": 2
+    },
+    {
+      "id": "span-13",
+      "bbox": [
+        392,
+        392,
+        24,
+        24
+      ],
+      "role": "text",
+      "font_size": 12,
+      "font_weight": "400",
+      "color": "#8b949e",
+      "bg_color": "#101114",
+      "text": "2",
+      "tappable": false,
+      "overflow": false,
+      "rank": 3
+    },
+    {
+      "id": "span-14",
+      "bbox": [
+        432,
+        390,
+        96,
+        30
+      ],
+      "role": "text",
+      "font_size": 20,
+      "font_weight": "400",
+      "color": "#e6edf3",
+      "bg_color": "#07080b",
+      "text": "Although",
+      "tappable": false,
+      "overflow": false,
+      "rank": 2
+    },
+    {
+      "id": "button-15",
+      "bbox": [
+        376,
+        440,
+        688,
+        54
+      ],
+      "role": "button",
+      "font_size": 20,
+      "font_weight": "400",
+      "color": "#e6edf3",
+      "bg_color": "#07080b",
+      "text": null,
+      "tappable": true,
+      "overflow": false,
+      "rank": 2
+    },
+    {
+      "id": "span-16",
+      "bbox": [
+        392,
+        454,
+        24,
+        24
+      ],
+      "role": "text",
+      "font_size": 12,
+      "font_weight": "400",
+      "color": "#8b949e",
+      "bg_color": "#101114",
+      "text": "3",
+      "tappable": false,
+      "overflow": false,
+      "rank": 3
+    },
+    {
+      "id": "span-17",
+      "bbox": [
+        432,
+        452,
+        132,
+        30
+      ],
+      "role": "text",
+      "font_size": 20,
+      "font_weight": "400",
+      "color": "#e6edf3",
+      "bg_color": "#07080b",
+      "text": "Even though",
+      "tappable": false,
+      "overflow": false,
+      "rank": 2
+    },
+    {
+      "id": "button-18",
+      "bbox": [
+        376,
+        502,
+        688,
+        54
+      ],
+      "role": "button",
+      "font_size": 20,
+      "font_weight": "400",
+      "color": "#e6edf3",
+      "bg_color": "#07080b",
+      "text": null,
+      "tappable": true,
+      "overflow": false,
+      "rank": 2
+    },
+    {
+      "id": "span-19",
+      "bbox": [
+        392,
+        516,
+        24,
+        24
+      ],
+      "role": "text",
+      "font_size": 12,
+      "font_weight": "400",
+      "color": "#8b949e",
+      "bg_color": "#101114",
+      "text": "4",
+      "tappable": false,
+      "overflow": false,
+      "rank": 3
+    },
+    {
+      "id": "span-20",
+      "bbox": [
+        432,
+        514,
+        84,
+        30
+      ],
+      "role": "text",
+      "font_size": 20,
+      "font_weight": "400",
+      "color": "#e6edf3",
+      "bg_color": "#07080b",
+      "text": "However",
+      "tappable": false,
+      "overflow": false,
+      "rank": 2
+    },
+    {
+      "id": "div-21",
+      "bbox": [
+        320,
+        714,
+        800,
+        19
+      ],
+      "role": "text",
+      "font_size": 12,
+      "font_weight": "400",
+      "color": "#8b949e",
+      "bg_color": "#07080b",
+      "text": "– 選択 決定",
+      "tappable": false,
+      "overflow": false,
+      "rank": 3
+    },
+    {
+      "id": "kbd-22",
+      "bbox": [
+        324,
+        715,
+        20,
+        16
+      ],
+      "role": "text",
+      "font_size": 12,
+      "font_weight": "400",
+      "color": "#e6edf3",
+      "bg_color": "#07080b",
+      "text": "1",
+      "tappable": false,
+      "overflow": false,
+      "rank": 3
+    },
+    {
+      "id": "kbd-23",
+      "bbox": [
+        354,
+        715,
+        20,
+        16
+      ],
+      "role": "text",
+      "font_size": 12,
+      "font_weight": "400",
+      "color": "#e6edf3",
+      "bg_color": "#07080b",
+      "text": "4",
+      "tappable": false,
+      "overflow": false,
+      "rank": 3
+    },
+    {
+      "id": "kbd-24",
+      "bbox": [
+        430,
+        715,
+        20,
+        16
+      ],
+      "role": "text",
+      "font_size": 12,
+      "font_weight": "400",
+      "color": "#e6edf3",
+      "bg_color": "#07080b",
+      "text": "↵",
+      "tappable": false,
+      "overflow": false,
+      "rank": 3
+    }
+  ],
+  "meta": {
+    "screen": "unknown"
+  }
+}

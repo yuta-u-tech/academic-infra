@@ -1,0 +1,18 @@
+{
+  "current": {
+    "avg": 0.7426666666666667,
+    "hard_fail": []
+  },
+  "editorial": {
+    "avg": 0.7336666666666667,
+    "hard_fail": []
+  },
+  "luminous": {
+    "avg": 0.7983333333333333,
+    "hard_fail": []
+  },
+  "momentum": {
+    "avg": 0.7486666666666667,
+    "hard_fail": []
+  }
+}

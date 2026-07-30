@@ -1,0 +1,325 @@
+{
+  "canvas": {
+    "width": 1440,
+    "height": 757,
+    "bg_color": "#f7f4ee"
+  },
+  "safe_area": {
+    "top": 0,
+    "bottom": 0,
+    "left": 24,
+    "right": 24
+  },
+  "renderer": "html_static",
+  "elements": [
+    {
+      "id": "p-0",
+      "bbox": [
+        224,
+        113,
+        440,
+        22
+      ],
+      "role": "text",
+      "font_size": 13,
+      "font_weight": "400",
+      "color": "#6a635a",
+      "bg_color": "#f7f4ee",
+      "text": "/ 2",
+      "tappable": false,
+      "overflow": false,
+      "rank": 2
+    },
+    {
+      "id": "b-1",
+      "bbox": [
+        224,
+        116,
+        17,
+        15
+      ],
+      "role": "text",
+      "font_size": 13,
+      "font_weight": "400",
+      "color": "#17150f",
+      "bg_color": "#f7f4ee",
+      "text": "01",
+      "tappable": false,
+      "overflow": false,
+      "rank": 2
+    },
+    {
+      "id": "hr-2",
+      "bbox": [
+        224,
+        143,
+        440,
+        1
+      ],
+      "role": "shape",
+      "font_size": null,
+      "font_weight": null,
+      "color": null,
+      "bg_color": "#f7f4ee",
+      "text": null,
+      "tappable": false,
+      "overflow": false,
+      "rank": 3
+    },
+    {
+      "id": "p-3",
+      "bbox": [
+        224,
+        156,
+        440,
+        22
+      ],
+      "role": "text",
+      "font_size": 13,
+      "font_weight": "400",
+      "color": "#6a635a",
+      "bg_color": "#f7f4ee",
+      "text": "語彙　●●●○○",
+      "tappable": false,
+      "overflow": false,
+      "rank": 2
+    },
+    {
+      "id": "p-4",
+      "bbox": [
+        224,
+        186,
+        440,
+        22
+      ],
+      "role": "text",
+      "font_size": 13,
+      "font_weight": "400",
+      "color": "#17150f",
+      "bg_color": "#f7f4ee",
+      "text": "verb",
+      "tappable": false,
+      "overflow": false,
+      "rank": 2
+    },
+    {
+      "id": "span-5-clock",
+      "bbox": [
+        224,
+        219,
+        34,
+        15
+      ],
+      "role": "text",
+      "font_size": 13,
+      "font_weight": "400",
+      "color": "#6a635a",
+      "bg_color": "#f7f4ee",
+      "text": "0:00",
+      "tappable": false,
+      "overflow": false,
+      "rank": 2
+    },
+    {
+      "id": "h1-6",
+      "bbox": [
+        736,
+        96,
+        480,
+        100
+      ],
+      "role": "text",
+      "font_size": 38,
+      "font_weight": "400",
+      "color": "#17150f",
+      "bg_color": "#f7f4ee",
+      "text": "（会議・式などを）主宰する、取り仕切る",
+      "tappable": false,
+      "overflow": false,
+      "rank": 1
+    },
+    {
+      "id": "p-7-typeLine",
+      "bbox": [
+        736,
+        244,
+        480,
+        80
+      ],
+      "role": "shape",
+      "font_size": null,
+      "font_weight": null,
+      "color": null,
+      "bg_color": "#f7f4ee",
+      "text": null,
+      "tappable": false,
+      "overflow": false,
+      "rank": 3
+    },
+    {
+      "id": "span-8",
+      "bbox": [
+        736,
+        255,
+        163,
+        44
+      ],
+      "role": "text",
+      "font_size": 38,
+      "font_weight": "400",
+      "color": "#17150f",
+      "bg_color": "#f7f4ee",
+      "text": "preside",
+      "tappable": false,
+      "overflow": false,
+      "rank": 1
+    },
+    {
+      "id": "span-9",
+      "bbox": [
+        900,
+        258,
+        2,
+        36
+      ],
+      "role": "shape",
+      "font_size": null,
+      "font_weight": null,
+      "color": null,
+      "bg_color": "#2b4661",
+      "text": null,
+      "tappable": false,
+      "overflow": false,
+      "rank": 3
+    },
+    {
+      "id": "span-10",
+      "bbox": [
+        903,
+        255,
+        187,
+        44
+      ],
+      "role": "text",
+      "font_size": 38,
+      "font_weight": "400",
+      "color": "#8a8175",
+      "bg_color": "#f7f4ee",
+      "text": "····",
+      "tappable": false,
+      "overflow": false,
+      "rank": 1
+    },
+    {
+      "id": "p-11",
+      "bbox": [
+        736,
+        340,
+        480,
+        23
+      ],
+      "role": "text",
+      "font_size": 13,
+      "font_weight": "400",
+      "color": "#6a635a",
+      "bg_color": "#f7f4ee",
+      "text": "英語で入力",
+      "tappable": false,
+      "overflow": false,
+      "rank": 2
+    },
+    {
+      "id": "footer-12-keybar",
+      "bbox": [
+        0,
+        697,
+        1440,
+        60
+      ],
+      "role": "shape",
+      "font_size": null,
+      "font_weight": null,
+      "color": null,
+      "bg_color": "#f7f4ee",
+      "text": null,
+      "tappable": false,
+      "overflow": false,
+      "rank": 3
+    },
+    {
+      "id": "div-13",
+      "bbox": [
+        200,
+        716,
+        1040,
+        23
+      ],
+      "role": "text",
+      "font_size": 13,
+      "font_weight": "400",
+      "color": "#6a635a",
+      "bg_color": "#f7f4ee",
+      "text": "決定 ヒント わからない",
+      "tappable": false,
+      "overflow": false,
+      "rank": 2
+    },
+    {
+      "id": "kbd-14",
+      "bbox": [
+        224,
+        717,
+        21,
+        19
+      ],
+      "role": "text",
+      "font_size": 13,
+      "font_weight": "400",
+      "color": "#17150f",
+      "bg_color": "#efebe2",
+      "text": "↵",
+      "tappable": false,
+      "overflow": false,
+      "rank": 2
+    },
+    {
+      "id": "kbd-15",
+      "bbox": [
+        307,
+        717,
+        38,
+        19
+      ],
+      "role": "text",
+      "font_size": 13,
+      "font_weight": "400",
+      "color": "#17150f",
+      "bg_color": "#efebe2",
+      "text": "Tab",
+      "tappable": false,
+      "overflow": false,
+      "rank": 2
+    },
+    {
+      "id": "kbd-16",
+      "bbox": [
+        421,
+        717,
+        38,
+        19
+      ],
+      "role": "text",
+      "font_size": 13,
+      "font_weight": "400",
+      "color": "#17150f",
+      "bg_color": "#efebe2",
+      "text": "Esc",
+      "tappable": false,
+      "overflow": false,
+      "rank": 2
+    }
+  ],
+  "meta": {
+    "screen": "unknown"
+  }
+}

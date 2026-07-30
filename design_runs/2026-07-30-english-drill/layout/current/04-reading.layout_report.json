@@ -1,0 +1,451 @@
+{
+  "canvas": {
+    "width": 1440,
+    "height": 757,
+    "bg_color": "#0b0d10"
+  },
+  "safe_area": {
+    "top": 0,
+    "bottom": 0,
+    "left": 24,
+    "right": 24
+  },
+  "renderer": "html_static",
+  "elements": [
+    {
+      "id": "span-0",
+      "bbox": [
+        364,
+        34,
+        39,
+        19
+      ],
+      "role": "text",
+      "font_size": 12,
+      "font_weight": "400",
+      "color": "#8b949e",
+      "bg_color": "#0b0d10",
+      "text": "/ 2",
+      "tappable": false,
+      "overflow": false,
+      "rank": 3
+    },
+    {
+      "id": "b-1",
+      "bbox": [
+        364,
+        36,
+        8,
+        14
+      ],
+      "role": "text",
+      "font_size": 12,
+      "font_weight": "500",
+      "color": "#e6edf3",
+      "bg_color": "#0b0d10",
+      "text": "1",
+      "tappable": false,
+      "overflow": false,
+      "rank": 3
+    },
+    {
+      "id": "span-2-clock",
+      "bbox": [
+        932,
+        34,
+        31,
+        19
+      ],
+      "role": "text",
+      "font_size": 12,
+      "font_weight": "400",
+      "color": "#8b949e",
+      "bg_color": "#0b0d10",
+      "text": "0:00",
+      "tappable": false,
+      "overflow": false,
+      "rank": 3
+    },
+    {
+      "id": "span-3",
+      "bbox": [
+        979,
+        34,
+        39,
+        19
+      ],
+      "role": "text",
+      "font_size": 12,
+      "font_weight": "400",
+      "color": "#8b949e",
+      "bg_color": "#0b0d10",
+      "text": "●●●○○",
+      "tappable": false,
+      "overflow": false,
+      "rank": 3
+    },
+    {
+      "id": "span-4",
+      "bbox": [
+        1033,
+        32,
+        43,
+        23
+      ],
+      "role": "text",
+      "font_size": 12,
+      "font_weight": "400",
+      "color": "#8b949e",
+      "bg_color": "#0b0d10",
+      "text": "読解",
+      "tappable": false,
+      "overflow": false,
+      "rank": 3
+    },
+    {
+      "id": "p-5",
+      "bbox": [
+        364,
+        79,
+        712,
+        19
+      ],
+      "role": "text",
+      "font_size": 12,
+      "font_weight": "400",
+      "color": "#8b949e",
+      "bg_color": "#0b0d10",
+      "text": "comprehension",
+      "tappable": false,
+      "overflow": false,
+      "rank": 3
+    },
+    {
+      "id": "p-6",
+      "bbox": [
+        364,
+        122,
+        712,
+        306
+      ],
+      "role": "text",
+      "font_size": 20,
+      "font_weight": "400",
+      "color": "#e6edf3",
+      "bg_color": "#0b0d10",
+      "text": "George Washington was the first president of the United States, but the presidency was not what he wanted. He owned thousands of hectares of land in Virginia, he had led the American colonists to freedom from British rule as a general, and he had presided over the convention that created the Constitution. For Washington, that was enough; he said he wanted to retire from public service and return home. The country's new electors, however, had other ideas.",
+      "tappable": false,
+      "overflow": false,
+      "rank": 2
+    },
+    {
+      "id": "h1-7",
+      "bbox": [
+        364,
+        452,
+        712,
+        46
+      ],
+      "role": "text",
+      "font_size": 32,
+      "font_weight": "600",
+      "color": "#e6edf3",
+      "bg_color": "#0b0d10",
+      "text": "Why did Washington become president?",
+      "tappable": false,
+      "overflow": false,
+      "rank": 1
+    },
+    {
+      "id": "button-8",
+      "bbox": [
+        364,
+        523,
+        712,
+        86
+      ],
+      "role": "button",
+      "font_size": 20,
+      "font_weight": "400",
+      "color": "#e6edf3",
+      "bg_color": "#0b0d10",
+      "text": null,
+      "tappable": true,
+      "overflow": false,
+      "rank": 2
+    },
+    {
+      "id": "span-9",
+      "bbox": [
+        381,
+        539,
+        22,
+        22
+      ],
+      "role": "text",
+      "font_size": 12,
+      "font_weight": "400",
+      "color": "#8b949e",
+      "bg_color": "#0b0d10",
+      "text": "1",
+      "tappable": false,
+      "overflow": false,
+      "rank": 3
+    },
+    {
+      "id": "span-10",
+      "bbox": [
+        419,
+        536,
+        640,
+        60
+      ],
+      "role": "text",
+      "font_size": 20,
+      "font_weight": "400",
+      "color": "#e6edf3",
+      "bg_color": "#0b0d10",
+      "text": "He accepted it as a duty, although he had wanted to retire.",
+      "tappable": false,
+      "overflow": false,
+      "rank": 2
+    },
+    {
+      "id": "button-11",
+      "bbox": [
+        364,
+        617,
+        712,
+        86
+      ],
+      "role": "button",
+      "font_size": 20,
+      "font_weight": "400",
+      "color": "#e6edf3",
+      "bg_color": "#0b0d10",
+      "text": null,
+      "tappable": true,
+      "overflow": false,
+      "rank": 2
+    },
+    {
+      "id": "span-12",
+      "bbox": [
+        381,
+        633,
+        22,
+        22
+      ],
+      "role": "text",
+      "font_size": 12,
+      "font_weight": "400",
+      "color": "#8b949e",
+      "bg_color": "#0b0d10",
+      "text": "2",
+      "tappable": false,
+      "overflow": false,
+      "rank": 3
+    },
+    {
+      "id": "span-13",
+      "bbox": [
+        419,
+        630,
+        640,
+        60
+      ],
+      "role": "text",
+      "font_size": 20,
+      "font_weight": "400",
+      "color": "#e6edf3",
+      "bg_color": "#0b0d10",
+      "text": "He had campaigned for the office since the end of the war.",
+      "tappable": false,
+      "overflow": false,
+      "rank": 2
+    },
+    {
+      "id": "button-14",
+      "bbox": [
+        364,
+        711,
+        712,
+        86
+      ],
+      "role": "button",
+      "font_size": 20,
+      "font_weight": "400",
+      "color": "#e6edf3",
+      "bg_color": "#0b0d10",
+      "text": null,
+      "tappable": true,
+      "overflow": true,
+      "rank": 2
+    },
+    {
+      "id": "span-15",
+      "bbox": [
+        381,
+        727,
+        22,
+        22
+      ],
+      "role": "text",
+      "font_size": 12,
+      "font_weight": "400",
+      "color": "#8b949e",
+      "bg_color": "#0b0d10",
+      "text": "3",
+      "tappable": false,
+      "overflow": false,
+      "rank": 3
+    },
+    {
+      "id": "span-16",
+      "bbox": [
+        419,
+        724,
+        640,
+        60
+      ],
+      "role": "text",
+      "font_size": 20,
+      "font_weight": "400",
+      "color": "#e6edf3",
+      "bg_color": "#0b0d10",
+      "text": "The Constitution required the convention's chairman to serve.",
+      "tappable": false,
+      "overflow": true,
+      "rank": 2
+    },
+    {
+      "id": "button-17",
+      "bbox": [
+        364,
+        805,
+        712,
+        86
+      ],
+      "role": "button",
+      "font_size": 20,
+      "font_weight": "400",
+      "color": "#e6edf3",
+      "bg_color": "#0b0d10",
+      "text": null,
+      "tappable": true,
+      "overflow": true,
+      "rank": 2
+    },
+    {
+      "id": "span-18",
+      "bbox": [
+        381,
+        821,
+        22,
+        22
+      ],
+      "role": "text",
+      "font_size": 12,
+      "font_weight": "400",
+      "color": "#8b949e",
+      "bg_color": "#0b0d10",
+      "text": "4",
+      "tappable": false,
+      "overflow": true,
+      "rank": 3
+    },
+    {
+      "id": "span-19",
+      "bbox": [
+        419,
+        818,
+        640,
+        60
+      ],
+      "role": "text",
+      "font_size": 20,
+      "font_weight": "400",
+      "color": "#e6edf3",
+      "bg_color": "#0b0d10",
+      "text": "He needed the position to protect his land in Virginia.",
+      "tappable": false,
+      "overflow": true,
+      "rank": 2
+    },
+    {
+      "id": "div-20",
+      "bbox": [
+        340,
+        722,
+        760,
+        19
+      ],
+      "role": "text",
+      "font_size": 12,
+      "font_weight": "400",
+      "color": "#8b949e",
+      "bg_color": "#0b0d10",
+      "text": "– 選択 決定",
+      "tappable": false,
+      "overflow": false,
+      "rank": 3
+    },
+    {
+      "id": "kbd-21",
+      "bbox": [
+        364,
+        723,
+        20,
+        16
+      ],
+      "role": "text",
+      "font_size": 12,
+      "font_weight": "400",
+      "color": "#e6edf3",
+      "bg_color": "#0b0d10",
+      "text": "1",
+      "tappable": false,
+      "overflow": false,
+      "rank": 3
+    },
+    {
+      "id": "kbd-22",
+      "bbox": [
+        394,
+        723,
+        20,
+        16
+      ],
+      "role": "text",
+      "font_size": 12,
+      "font_weight": "400",
+      "color": "#e6edf3",
+      "bg_color": "#0b0d10",
+      "text": "4",
+      "tappable": false,
+      "overflow": false,
+      "rank": 3
+    },
+    {
+      "id": "kbd-23",
+      "bbox": [
+        470,
+        723,
+        20,
+        16
+      ],
+      "role": "text",
+      "font_size": 12,
+      "font_weight": "400",
+      "color": "#e6edf3",
+      "bg_color": "#0b0d10",
+      "text": "↵",
+      "tappable": false,
+      "overflow": false,
+      "rank": 3
+    }
+  ],
+  "meta": {
+    "screen": "unknown"
+  }
+}
