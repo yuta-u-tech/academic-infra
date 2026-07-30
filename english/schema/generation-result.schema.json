@@ -1,0 +1,262 @@
+{
+  "$defs": {
+    "GeneratedItem": {
+      "additionalProperties": false,
+      "description": "1件の生成物と、その出所・理由。",
+      "properties": {
+        "difficulty": {
+          "maximum": 5,
+          "minimum": 1,
+          "title": "Difficulty",
+          "type": "integer"
+        },
+        "reason": {
+          "description": "なぜこの問題を生成したか",
+          "maxLength": 500,
+          "minLength": 1,
+          "title": "Reason",
+          "type": "string"
+        },
+        "item": {
+          "discriminator": {
+            "mapping": {
+              "reading": "#/$defs/ReadingItem",
+              "vocab": "#/$defs/VocabItem"
+            },
+            "propertyName": "kind"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/VocabItem"
+            },
+            {
+              "$ref": "#/$defs/ReadingItem"
+            }
+          ],
+          "title": "Item"
+        }
+      },
+      "required": [
+        "difficulty",
+        "reason",
+        "item"
+      ],
+      "title": "GeneratedItem",
+      "type": "object"
+    },
+    "ReadingItem": {
+      "additionalProperties": false,
+      "description": "英文読解の選択式問題。",
+      "properties": {
+        "kind": {
+          "const": "reading",
+          "default": "reading",
+          "title": "Kind",
+          "type": "string"
+        },
+        "domain": {
+          "const": "reading",
+          "default": "reading",
+          "title": "Domain",
+          "type": "string"
+        },
+        "sub_skill": {
+          "default": "comprehension",
+          "enum": [
+            "comprehension",
+            "syntax_parsing",
+            "vocabulary",
+            "reading_speed"
+          ],
+          "title": "Sub Skill",
+          "type": "string"
+        },
+        "passage": {
+          "maxLength": 4000,
+          "minLength": 1,
+          "title": "Passage",
+          "type": "string"
+        },
+        "question": {
+          "maxLength": 500,
+          "minLength": 1,
+          "title": "Question",
+          "type": "string"
+        },
+        "choices": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 6,
+          "minItems": 2,
+          "title": "Choices",
+          "type": "array"
+        },
+        "answer_index": {
+          "minimum": 0,
+          "title": "Answer Index",
+          "type": "integer"
+        },
+        "explanation": {
+          "maxLength": 2000,
+          "minLength": 1,
+          "title": "Explanation",
+          "type": "string"
+        }
+      },
+      "required": [
+        "passage",
+        "question",
+        "choices",
+        "answer_index",
+        "explanation"
+      ],
+      "title": "ReadingItem",
+      "type": "object"
+    },
+    "VocabItem": {
+      "additionalProperties": false,
+      "description": "専門語彙カード。goigoi の word.schema.json v1 へ写せる形に揃えてある。",
+      "properties": {
+        "kind": {
+          "const": "vocab",
+          "default": "vocab",
+          "title": "Kind",
+          "type": "string"
+        },
+        "domain": {
+          "const": "vocabulary",
+          "default": "vocabulary",
+          "title": "Domain",
+          "type": "string"
+        },
+        "sub_skill": {
+          "default": "recall",
+          "enum": [
+            "recognition",
+            "recall",
+            "usage",
+            "collocation",
+            "countability"
+          ],
+          "title": "Sub Skill",
+          "type": "string"
+        },
+        "word": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Word",
+          "type": "string"
+        },
+        "meaning": {
+          "maxLength": 1000,
+          "minLength": 1,
+          "title": "Meaning",
+          "type": "string"
+        },
+        "example": {
+          "anyOf": [
+            {
+              "maxLength": 1000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Example"
+        },
+        "part_of_speech": {
+          "anyOf": [
+            {
+              "maxLength": 40,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Part Of Speech"
+        },
+        "collocations": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 10,
+          "title": "Collocations",
+          "type": "array"
+        }
+      },
+      "required": [
+        "word",
+        "meaning"
+      ],
+      "title": "VocabItem",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Claude が1回の生成で書き出すファイルの全体。\n\n`source_commit` は資料側の manifest の commit をそのまま転記する。資料が更新されて\ncommit が変われば、この生成物は「古い版から作られたもの」と判定できる。",
+  "properties": {
+    "schema_version": {
+      "const": 1,
+      "default": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "review_id": {
+      "minLength": 1,
+      "title": "Review Id",
+      "type": "string"
+    },
+    "course_id": {
+      "minLength": 1,
+      "title": "Course Id",
+      "type": "string"
+    },
+    "source_commit": {
+      "minLength": 1,
+      "title": "Source Commit",
+      "type": "string"
+    },
+    "generated_by": {
+      "description": "例: claude-opus-5",
+      "minLength": 1,
+      "title": "Generated By",
+      "type": "string"
+    },
+    "prompt_version": {
+      "description": "english/prompts/*.md の版",
+      "minLength": 1,
+      "title": "Prompt Version",
+      "type": "string"
+    },
+    "is_ephemeral": {
+      "default": true,
+      "description": "検証前の一時生成物か",
+      "title": "Is Ephemeral",
+      "type": "boolean"
+    },
+    "items": {
+      "items": {
+        "$ref": "#/$defs/GeneratedItem"
+      },
+      "maxItems": 50,
+      "minItems": 1,
+      "title": "Items",
+      "type": "array"
+    }
+  },
+  "required": [
+    "review_id",
+    "course_id",
+    "source_commit",
+    "generated_by",
+    "prompt_version",
+    "items"
+  ],
+  "title": "GenerationResult",
+  "type": "object"
+}

@@ -155,9 +155,50 @@ python3 scripts/promote_drive_comments.py --course logic --findings /path/to/fin
 無ければ `~/.lecture-capture/config/drive-secrets.env` にフォールバックする
 （lecture-capture-system と同一の Academic Materials Drive アカウントを共有しているため）。
 
+## 英語学習機能（scripts/acenglish）
+
+資料を「配って終わり」にせず、**その資料で英語を学び、詰まったところを資料の改善へ戻す**ための層。
+設計の全体像は [`docs/2026-07-30-english-learning-integration.md`](docs/2026-07-30-english-learning-integration.md)。
+
+```
+sections/chNN-MM.md → 語彙・読解問題を生成 → ローカルUIで学習 → 回答・誤答を記録
+   → 誤答原因を分類 → 学習者モデル更新 → 復習キュー
+   → 同じ箇所で繰り返し間違えたら「資料の説明不足」として追記候補を立てる
+   → findings.json → promote_drive_comments.py → Issue（既存の経路に合流）
+```
+
+```bash
+python3 -m pip install -r requirements-english.txt
+
+python3 scripts/acenglish_cli.py targets --course データ構造          # 学習対象を見る
+python3 scripts/acenglish_cli.py request --review-id dsa.ch02.list.s01 --out /tmp/req.json
+#   → Claude が english/prompts/*.md に従って生成物を書く
+python3 scripts/acenglish_cli.py ingest --file /tmp/result.json      # 検証して取り込む
+python3 scripts/acenglish_cli.py serve                               # 学習UI (127.0.0.1:8791)
+python3 scripts/acenglish_cli.py findings --course dsa --out /tmp/findings.json
+```
+
+### 置き場所の分担
+
+| 何を | どこに | なぜ |
+|---|---|---|
+| 学習履歴・誤答・習熟度 | `~/.academic-english/english.db`（0700） | **このリポジトリは public**。`.gitignore` 頼みにしない |
+| 語彙の長期正本 | [goigoi-data](https://github.com/yuta-u-tech/goigoi-data)（private） | `word.schema.json` v1 が既に `source: academic` を想定済み |
+| 正式な英語教材 | 科目リポジトリの `english/`（PR経由） | 「GitHub が唯一の正本、履歴は git」を英語教材にも適用する |
+| Drive | 触らない | Drive は配布層。学習アプリは読み書きしない |
+
+**生成の判断は Claude が担う。** どの語を選ぶか・どんな設問にするかは決定論コードで書けないため、
+`request` で依頼を出し、`ingest` で検証して取り込む形にしてある（Drive コメント →
+`findings.json` → Issue と同じ分担）。
+
+**資料は無断で上書きしない。** 誤答から生まれるのは追記候補だけで、Issue 化するかは
+`promote_drive_comments.py --pick` でユーザーが選ぶ。
+
 ## テスト
 
 ```bash
 python3 -m pip install -r requirements-dev.txt
 python3 -m pytest tests/
 ```
+
+英語学習機能のテストは `requirements-english.txt` の依存も要る（`fastapi` / `pydantic`）。

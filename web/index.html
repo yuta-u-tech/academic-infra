@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Academic-Infra English</title>
+<style>
+  :root { color-scheme: light dark; --line: color-mix(in srgb, currentColor 15%, transparent); }
+  body { font: 16px/1.7 -apple-system, "Hiragino Sans", sans-serif; max-width: 44rem;
+         margin: 0 auto; padding: 2rem 1.25rem 4rem; }
+  header { display: flex; gap: .75rem; align-items: baseline; flex-wrap: wrap;
+           border-bottom: 1px solid var(--line); padding-bottom: .75rem; }
+  h1 { font-size: 1.1rem; margin: 0; letter-spacing: .02em; }
+  .meta { font-size: .8rem; opacity: .6; }
+  select, button { font: inherit; padding: .4rem .7rem; border-radius: .4rem;
+                   border: 1px solid var(--line); background: transparent; color: inherit; }
+  button { cursor: pointer; }
+  button.primary { background: currentColor; }
+  button.primary span { color: Canvas; }
+  #passage { white-space: pre-wrap; padding: 1rem; border-left: 3px solid var(--line);
+             margin: 1.25rem 0; }
+  .question { font-weight: 600; margin: 1rem 0 .5rem; }
+  ul.choices { list-style: none; padding: 0; margin: 0; }
+  ul.choices li { margin: .35rem 0; }
+  ul.choices button { display: block; width: 100%; text-align: left; }
+  ul.choices button[aria-pressed="true"] { outline: 2px solid currentColor; }
+  input[type=text] { font: inherit; width: 100%; padding: .5rem; border-radius: .4rem;
+                     border: 1px solid var(--line); background: transparent; color: inherit; }
+  .controls { display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; margin: 1.25rem 0; }
+  .verdict { padding: .9rem 1rem; border-radius: .5rem; border: 1px solid var(--line); margin: 1rem 0; }
+  .verdict h2 { font-size: .95rem; margin: 0 0 .4rem; }
+  .tag { display: inline-block; font-size: .75rem; padding: .1rem .5rem; border-radius: 1rem;
+         border: 1px solid var(--line); margin-right: .4rem; }
+  .empty { opacity: .6; padding: 3rem 0; text-align: center; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Academic-Infra English</h1>
+  <select id="course"></select>
+  <button id="start">セッション開始</button>
+  <span class="meta" id="status">127.0.0.1 専用</span>
+</header>
+
+<main id="main"><p class="empty">科目を選んで「セッション開始」を押してください。</p></main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+let sessionId = null, queue = [], current = null, shownAt = 0, hintUsed = false, retryCount = 0;
+
+async function api(path, options) {
+  const response = await fetch(path, {
+    headers: { "Content-Type": "application/json" }, ...options,
+  });
+  if (!response.ok) throw new Error(`${path}: ${response.status} ${await response.text()}`);
+  return response.json();
+}
+
+async function loadCourses() {
+  const { courses } = await api("/api/courses");
+  $("course").innerHTML = courses
+    .map((c) => `<option value="${c.course_id}">${c.course_name}</option>`).join("");
+}
+
+async function startSession() {
+  const courseId = $("course").value;
+  const { session_id } = await api("/api/sessions", {
+    method: "POST", body: JSON.stringify({ course_id: courseId }),
+  });
+  sessionId = session_id;
+  const { items } = await api(`/api/queue?course=${encodeURIComponent(courseId)}&limit=20`);
+  queue = items;
+  $("status").textContent = `セッション #${sessionId} / 残り ${queue.length} 問`;
+  next();
+}
+
+function next() {
+  current = queue.shift() || null;
+  hintUsed = false; retryCount = 0;
+  if (!current) {
+    $("main").innerHTML = `<p class="empty">出題できる問題がありません。<br>
+      <code>acenglish_cli.py request</code> で生成依頼を作り、Claude に問題を作ってもらってください。</p>`;
+    return;
+  }
+  render(current);
+  shownAt = performance.now();
+}
+
+function render(item) {
+  const p = item.payload;
+  const body = item.kind === "reading"
+    ? `<div id="passage">${escapeHtml(p.passage)}</div>
+       <p class="question">${escapeHtml(p.question)}</p>
+       <ul class="choices">${p.choices.map((c, i) =>
+         `<li><button data-choice="${i}" aria-pressed="false">${escapeHtml(c)}</button></li>`).join("")}</ul>`
+    : `<p class="question">${escapeHtml(p.meaning)}</p>
+       <p class="meta">${escapeHtml(p.part_of_speech || "")} ${
+         (p.collocations || []).map(escapeHtml).join(" / ")}</p>
+       <input type="text" id="answer" autocomplete="off" autocapitalize="off" spellcheck="false"
+              placeholder="英語で入力">`;
+
+  $("main").innerHTML = `
+    <p class="meta"><span class="tag">${item.kind}</span>
+      <span class="tag">${item.domain}/${item.sub_skill}</span>
+      <span class="tag">難易度 ${item.difficulty}</span> ${escapeHtml(item.review_id)}</p>
+    ${body}
+    <div class="controls">
+      <label>自信 <input type="range" id="confidence" min="0" max="1" step="0.25" value="0.5"></label>
+      <button id="hint">ヒントを見る</button>
+      <button id="submit" class="primary"><span>回答</span></button>
+    </div>`;
+
+  let selected = null;
+  document.querySelectorAll("[data-choice]").forEach((button) => {
+    button.onclick = () => {
+      selected = button.dataset.choice;
+      document.querySelectorAll("[data-choice]").forEach((b) =>
+        b.setAttribute("aria-pressed", String(b === button)));
+    };
+  });
+  $("hint").onclick = () => { hintUsed = true; $("hint").textContent = "ヒント使用済み"; };
+  $("submit").onclick = () => submit(item.kind === "reading" ? selected : $("answer").value);
+  $("answer")?.addEventListener("keydown", (e) => { if (e.key === "Enter") $("submit").click(); });
+}
+
+async function submit(response) {
+  if (response === null || response === undefined || response === "") return;
+  const result = await api("/api/answer", {
+    method: "POST",
+    body: JSON.stringify({
+      session_id: sessionId,
+      item_id: current.item_id,
+      response: String(response),
+      elapsed_ms: Math.round(performance.now() - shownAt),
+      self_confidence: Number($("confidence").value),
+      hint_used: hintUsed,
+      retry_count: retryCount,
+    }),
+  });
+  showVerdict(result);
+}
+
+function showVerdict(result) {
+  const causeLine = result.error_cause
+    ? `<p class="meta">誤答原因: <span class="tag">${result.error_cause}</span>
+       次の一手: <span class="tag">${result.next_action}</span></p>` : "";
+  const candidateLine = result.revision_candidate_id
+    ? `<p class="meta">同じ箇所での誤答が続いたため、資料への<b>追記候補</b>を立てました
+       (#${result.revision_candidate_id})。<code>acenglish_cli.py findings</code> で
+       findings.json に書き出せます。</p>` : "";
+
+  $("main").insertAdjacentHTML("beforeend", `
+    <div class="verdict">
+      <h2>${result.correct ? "正解" : "不正解"}</h2>
+      ${result.answer ? `<p>答え: <b>${escapeHtml(result.answer)}</b></p>` : ""}
+      ${result.explanation ? `<p>${escapeHtml(result.explanation)}</p>` : ""}
+      ${causeLine}${candidateLine}
+      <p class="meta">習熟度 ${result.mastery} / 次回 ${result.interval_days}日後</p>
+      <button id="continue" class="primary"><span>次へ</span></button>
+    </div>`);
+  $("submit").disabled = true;
+  $("continue").onclick = () => {
+    $("status").textContent = `セッション #${sessionId} / 残り ${queue.length} 問`;
+    next();
+  };
+}
+
+function escapeHtml(value) {
+  return String(value ?? "").replace(/[&<>"']/g,
+    (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+$("start").onclick = () => startSession().catch((e) => { $("status").textContent = e.message; });
+loadCourses().catch((e) => { $("status").textContent = e.message; });
+</script>
+</body>
+</html>

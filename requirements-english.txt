@@ -1,0 +1,8 @@
+# 英語学習機能（scripts/acenglish）の依存。
+#
+# requirements.txt とは分けてある。あちらは科目リポジトリの CI（TeX ビルド → Drive 同期）が
+# 毎回インストールするもので、学習UIは CI では一切動かないため、CI を重くしない。
+fastapi==0.115.6
+uvicorn==0.34.0
+pydantic==2.10.4
+-r requirements.txt
