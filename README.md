@@ -167,15 +167,35 @@ sections/chNN-MM.md → 語彙・読解問題を生成 → ローカルUIで学�
    → findings.json → promote_drive_comments.py → Issue（既存の経路に合流）
 ```
 
-```bash
-python3 -m pip install -r requirements-english.txt
+### 使う
 
-python3 scripts/acenglish_cli.py targets --course データ構造          # 学習対象を見る
-python3 scripts/acenglish_cli.py request --review-id dsa.ch02.list.s01 --out /tmp/req.json
+```bash
+python3 -m pip install -r requirements-english.txt   # 初回だけ
+scripts/english                                       # 学習UIを開く（127.0.0.1:8791）
+scripts/english stop                                  # 止める
+```
+
+`scripts/english` は起動済みならブラウザを開くだけ。それ以外の引数は
+`acenglish_cli.py` にそのまま渡る（`scripts/english status` など）。
+
+初回の素材投入:
+
+```bash
+scripts/english fetch-toeic          # TOEIC語彙 2,282語。以後は不要（冪等）
+scripts/english voa --limit 10       # 記事一覧 → --url で取り込み
+```
+
+出題は **期限が来た復習 → 未出題** の順で、種別（語彙・読解・文法）を1問ずつ混ぜる。
+語彙が数千件あっても読解・文法が最初の数問で出てくる。UI 上部の選択で絞れる。
+
+### 教材を増やす
+
+```bash
+scripts/english targets --course データ構造          # 学習対象を見る
+scripts/english request --review-id dsa.ch02.list.s01 --out /tmp/req.json
 #   → Claude が english/prompts/*.md に従って生成物を書く
-python3 scripts/acenglish_cli.py ingest --file /tmp/result.json      # 検証して取り込む
-python3 scripts/acenglish_cli.py serve                               # 学習UI (127.0.0.1:8791)
-python3 scripts/acenglish_cli.py findings --course dsa --out /tmp/findings.json
+scripts/english ingest --file /tmp/result.json      # 検証して取り込む
+scripts/english findings --course dsa --out /tmp/findings.json
 ```
 
 ### 一般英語・TOEIC（科目資料以外の素材）

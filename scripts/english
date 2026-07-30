@@ -1,0 +1,50 @@
+#!/bin/bash
+# 英語学習の起動ラッパー。毎日使うものなので、覚えるコマンドは1つにしておく。
+#
+#   ~/academic-infra/scripts/english            学習UIを開く（既に動いていれば開くだけ）
+#   ~/academic-infra/scripts/english stop       止める
+#   ~/academic-infra/scripts/english status      DBの件数
+#   ~/academic-infra/scripts/english <verb> ...  その他は acenglish_cli.py へそのまま渡す
+set -euo pipefail
+
+CLI="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/acenglish_cli.py"
+PORT="${ACENGLISH_PORT:-8791}"
+URL="http://127.0.0.1:${PORT}"
+LOG="${HOME}/.academic-english/serve.log"
+
+running() { curl -sf --max-time 2 "${URL}/api/health" >/dev/null 2>&1; }
+
+case "${1:-open}" in
+  open)
+    if running; then
+      echo "起動済み: ${URL}"
+    else
+      mkdir -p "$(dirname "${LOG}")"
+      nohup python3 "${CLI}" serve --port "${PORT}" >>"${LOG}" 2>&1 &
+      for _ in $(seq 1 30); do
+        running && break
+        sleep 0.3
+      done
+      if running; then
+        echo "起動: ${URL}"
+      else
+        echo "起動に失敗しました。ログ: ${LOG}" >&2
+        tail -20 "${LOG}" >&2
+        exit 1
+      fi
+    fi
+    command -v open >/dev/null && open "${URL}"
+    ;;
+  stop)
+    # ポートを見て落とす（他の python を巻き込まないため）
+    pid="$(lsof -ti "TCP:${PORT}" -sTCP:LISTEN 2>/dev/null || true)"
+    if [ -n "${pid}" ]; then
+      kill "${pid}" && echo "停止しました (pid ${pid})"
+    else
+      echo "動いていません。"
+    fi
+    ;;
+  *)
+    exec python3 "${CLI}" "$@"
+    ;;
+esac

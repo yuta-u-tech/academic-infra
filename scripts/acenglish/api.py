@@ -126,10 +126,21 @@ def create_app(db_path: Path | None = None) -> FastAPI:
         return {"session_id": session_id, "ended": True}
 
     @app.get("/api/queue")
-    def queue(course: str | None = None, limit: int = 20) -> dict:
+    def queue(
+        course: str | None = None,
+        limit: int = 20,
+        kinds: str | None = None,
+        exclude: str | None = None,
+    ) -> dict:
+        """出題キュー。`exclude` は同一セッションで解き終えた item_id（再出題しない）。"""
+        wanted = [k.strip() for k in kinds.split(",") if k.strip()] if kinds else None
+        answered = {int(i) for i in exclude.split(",") if i.strip().isdigit()} if exclude else set()
+
         with db() as connection:
-            rows = due_items(connection, course, limit)
-            return {"items": [study.item_for_ui(connection, row["id"]) for row in rows]}
+            # 解き終えた分を差し引いても補充できるよう、多めに引いてから間引く。
+            rows = due_items(connection, course, limit + len(answered), wanted)
+            fresh = [row for row in rows if row["id"] not in answered][:limit]
+            return {"items": [study.item_for_ui(connection, row["id"]) for row in fresh]}
 
     @app.post("/api/answer")
     def answer(request: AnswerRequest) -> dict:

@@ -38,6 +38,13 @@
 <header>
   <h1>Academic-Infra English</h1>
   <select id="course"></select>
+  <select id="kinds">
+    <option value="">全部（語彙・読解・文法）</option>
+    <option value="vocab">語彙だけ</option>
+    <option value="reading">読解だけ</option>
+    <option value="grammar">文法だけ</option>
+    <option value="reading,grammar">読解＋文法</option>
+  </select>
   <button id="start">セッション開始</button>
   <span class="meta" id="status">127.0.0.1 専用</span>
 </header>
@@ -47,6 +54,9 @@
 <script>
 const $ = (id) => document.getElementById(id);
 let sessionId = null, queue = [], current = null, shownAt = 0, hintUsed = false, retryCount = 0;
+// 一度出した問題は同じセッションで出し直さない。サーバー側は「期限が来たもの」を返すため、
+// 直前に答えたばかりの問題も条件次第で再び候補に入る。
+let answered = [], correctCount = 0;
 
 async function api(path, options) {
   const response = await fetch(path, {
@@ -62,24 +72,45 @@ async function loadCourses() {
     .map((c) => `<option value="${c.course_id}">${c.course_name}</option>`).join("");
 }
 
+async function fetchQueue() {
+  const params = new URLSearchParams({ course: $("course").value, limit: "20" });
+  if ($("kinds").value) params.set("kinds", $("kinds").value);
+  if (answered.length) params.set("exclude", answered.join(","));
+  const { items } = await api(`/api/queue?${params}`);
+  return items;
+}
+
 async function startSession() {
-  const courseId = $("course").value;
   const { session_id } = await api("/api/sessions", {
-    method: "POST", body: JSON.stringify({ course_id: courseId }),
+    method: "POST", body: JSON.stringify({ course_id: $("course").value }),
   });
   sessionId = session_id;
-  const { items } = await api(`/api/queue?course=${encodeURIComponent(courseId)}&limit=20`);
-  queue = items;
-  $("status").textContent = `セッション #${sessionId} / 残り ${queue.length} 問`;
+  answered = []; correctCount = 0;
+  queue = await fetchQueue();
+  updateStatus();
   next();
 }
 
-function next() {
-  current = queue.shift() || null;
+function updateStatus() {
+  const done = answered.length;
+  const rate = done ? ` / 正答 ${Math.round((correctCount / done) * 100)}%` : "";
+  $("status").textContent = `#${sessionId} 解答 ${done}問${rate} / 手元 ${queue.length}問`;
+}
+
+async function next() {
   hintUsed = false; retryCount = 0;
+  // 20問ごとに手元が尽きるので、その場で補充する。1セッションで区切られないように。
+  if (!queue.length) {
+    $("main").innerHTML = `<p class="empty">次の問題を読み込んでいます…</p>`;
+    queue = await fetchQueue();
+  }
+  current = queue.shift() || null;
   if (!current) {
-    $("main").innerHTML = `<p class="empty">出題できる問題がありません。<br>
-      <code>acenglish_cli.py request</code> で生成依頼を作り、Claude に問題を作ってもらってください。</p>`;
+    $("main").innerHTML = `<p class="empty">今日出せる問題は終わりです。おつかれさま。<br>
+      <span class="meta">解答 ${answered.length}問 / 正答 ${
+        answered.length ? Math.round((correctCount / answered.length) * 100) : 0}%<br>
+      新しい素材を足すなら <code>acenglish_cli.py voa --limit 10</code> か
+      <code>fetch-toeic</code>。</span></p>`;
     return;
   }
   render(current);
@@ -149,6 +180,8 @@ async function submit(response) {
       retry_count: retryCount,
     }),
   });
+  answered.push(current.item_id);
+  if (result.correct) correctCount += 1;
   showVerdict(result);
 }
 
@@ -171,9 +204,11 @@ function showVerdict(result) {
       <button id="continue" class="primary"><span>次へ</span></button>
     </div>`);
   $("submit").disabled = true;
-  $("continue").onclick = () => {
-    $("status").textContent = `セッション #${sessionId} / 残り ${queue.length} 問`;
-    next();
+  $("continue").onclick = () => { updateStatus(); next(); };
+  $("continue").focus();
+  // 答え合わせのあとは Enter だけで次へ進めるようにする（毎日回すものなので）。
+  document.onkeydown = (event) => {
+    if (event.key === "Enter") { document.onkeydown = null; $("continue").click(); }
   };
 }
 

@@ -239,26 +239,72 @@ def schedule_review(
     return dict(connection.execute("SELECT * FROM review_queue WHERE item_id = ?", (item_id,)).fetchone())
 
 
-def due_items(connection: sqlite3.Connection, course_id: str | None = None, limit: int = 20) -> list[dict]:
-    """出題順。未出題を先に、その後は期限が早い順。
+def due_items(
+    connection: sqlite3.Connection,
+    course_id: str | None = None,
+    limit: int = 20,
+    kinds: list[str] | None = None,
+    mix: bool = True,
+) -> list[dict]:
+    """今日出す問題を選ぶ。
 
-    未出題を先に置くのは、生成したのに一度も解かれない問題が滞留するのを防ぐため。
+    順序は **期限が来た復習が先、未出題は後**。逆にすると、2,000語規模のデッキでは
+    未出題が尽きるまで復習が一度も回ってこず、間隔反復が成立しない
+    （出題されない復習は、忘れたことにすら気づけない）。
+
+    `mix=True` のときは種別を round-robin で混ぜる。ID 順のままだと語彙2,282件の後ろに
+    読解・文法が並び、実際には永久に到達しない。
     """
     query = """
         SELECT gi.*, rq.next_review, rq.interval, rq.repetitions
         FROM generated_item AS gi
         LEFT JOIN review_queue AS rq ON rq.item_id = gi.id
         WHERE gi.retired_at IS NULL
-        {course_filter}
           AND (rq.next_review IS NULL OR rq.next_review <= ?)
-        ORDER BY (rq.next_review IS NOT NULL), rq.next_review, gi.id
+        {course_filter}
+        {kind_filter}
+        ORDER BY (rq.next_review IS NULL), rq.next_review, gi.id
         LIMIT ?
     """
-    now = now_iso()
+    def run(kind_filter: str, extra: list, row_limit: int) -> list[dict]:
+        parameters: list = [now_iso()]
+        course_filter = ""
+        if course_id:
+            course_filter = "AND gi.course_id = ?"
+            parameters.append(course_id)
+        parameters.extend(extra)
+        parameters.append(row_limit)
+        sql = query.format(course_filter=course_filter, kind_filter=kind_filter)
+        return [dict(row) for row in connection.execute(sql, parameters).fetchall()]
+
+    if not mix:
+        placeholders = f"AND gi.kind IN ({','.join('?' for _ in kinds)})" if kinds else ""
+        return run(placeholders, list(kinds or []), limit)
+
+    # 種別ごとに別々に引く。1本のクエリから間引く方式では、語彙が数千件あると
+    # 上位が全部語彙で埋まり、読解・文法が母数にすら入らない。
+    available = kinds or _available_kinds(connection, course_id)
+    per_kind = {kind: run("AND gi.kind = ?", [kind], limit) for kind in available}
+    return _interleave(per_kind, limit)
+
+
+def _available_kinds(connection: sqlite3.Connection, course_id: str | None) -> list[str]:
+    sql = "SELECT DISTINCT kind FROM generated_item WHERE retired_at IS NULL"
+    parameters: tuple = ()
     if course_id:
-        sql = query.format(course_filter="AND gi.course_id = ?")
-        params: tuple = (course_id, now, limit)
-    else:
-        sql = query.format(course_filter="")
-        params = (now, limit)
-    return [dict(row) for row in connection.execute(sql, params).fetchall()]
+        sql += " AND course_id = ?"
+        parameters = (course_id,)
+    return [row["kind"] for row in connection.execute(sql + " ORDER BY kind", parameters)]
+
+
+def _interleave(per_kind: dict[str, list[dict]], limit: int) -> list[dict]:
+    """種別を1件ずつ順番に取り出す。尽きた種別は飛ばして残りで埋める。"""
+    selected: list[dict] = []
+    while len(selected) < limit and any(per_kind.values()):
+        for queue in per_kind.values():
+            if not queue:
+                continue
+            selected.append(queue.pop(0))
+            if len(selected) == limit:
+                break
+    return selected

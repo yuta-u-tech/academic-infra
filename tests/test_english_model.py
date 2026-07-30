@@ -132,13 +132,68 @@ def test_schedule_review_advances_the_queue(tmp_path):
         assert second["interval"] == 6
 
 
-def test_due_items_puts_unseen_items_first(tmp_path):
+def test_scheduled_items_drop_out_of_the_queue_until_they_are_due(tmp_path):
     with connect(tmp_path / "e.db") as connection:
         _seed_item(connection, 1)
         _seed_item_extra(connection, 2)
         schedule_review(connection, 1, "dsa.ch02.list.s01", signals())
-        due = due_items(connection, "dsa")
-        assert [row["id"] for row in due] == [2]
+        assert [row["id"] for row in due_items(connection, "dsa")] == [2]
+
+
+def test_overdue_reviews_come_before_unseen_items(tmp_path):
+    """未出題を先にすると、2,000語規模のデッキでは復習が一度も回ってこない。
+
+    出題されない復習は「忘れたことにすら気づけない」ので、間隔反復が成立しない。
+    """
+    with connect(tmp_path / "e.db") as connection:
+        _seed_item(connection, 1)
+        _seed_item_extra(connection, 2)
+        connection.execute(
+            "INSERT INTO review_queue (item_id, review_id, interval, ease_factor, repetitions,"
+            " next_review) VALUES (1, 'dsa.ch02.list.s01', 3, 2.5, 2, '2020-01-01T00:00:00+00:00')"
+        )
+        connection.commit()
+        assert [row["id"] for row in due_items(connection, "dsa")] == [1, 2]
+
+
+def _seed_reading(connection, item_id: int) -> None:
+    connection.execute(
+        "INSERT INTO generated_item (id, kind, review_id, course_id, payload, difficulty, reason,"
+        " generated_by, prompt_version, source_commit, created_at)"
+        " VALUES (?, 'reading', 'dsa.ch02.list.s01', 'dsa', '{}', 2, 'test', 'claude',"
+        " '2026-07-30.1', 'abc123', '2026-07-30T00:00:00+00:00')",
+        (item_id,),
+    )
+    connection.commit()
+
+
+def test_kinds_are_interleaved_so_later_ones_are_reachable(tmp_path):
+    """ID順のままだと語彙2,282件の後ろに読解が並び、実際には永久に到達しない。"""
+    with connect(tmp_path / "e.db") as connection:
+        _seed_item(connection, 1)
+        for item_id in range(2, 30):
+            _seed_item_extra(connection, item_id)
+        _seed_reading(connection, 100)
+
+        kinds = [row["kind"] for row in due_items(connection, "dsa", limit=10)]
+        assert "reading" in kinds[:3], "語彙が何件あっても、別の種別が最初の数問で出てくる"
+
+
+def test_a_single_kind_can_be_requested(tmp_path):
+    with connect(tmp_path / "e.db") as connection:
+        _seed_item(connection, 1)
+        _seed_reading(connection, 100)
+        rows = due_items(connection, "dsa", kinds=["reading"])
+        assert [row["id"] for row in rows] == [100]
+
+
+def test_mixing_can_be_turned_off(tmp_path):
+    with connect(tmp_path / "e.db") as connection:
+        _seed_item(connection, 1)
+        _seed_item_extra(connection, 2)
+        _seed_reading(connection, 100)
+        rows = due_items(connection, "dsa", mix=False)
+        assert [row["id"] for row in rows] == [1, 2, 100]
 
 
 def _seed_item_extra(connection, item_id: int) -> None:
