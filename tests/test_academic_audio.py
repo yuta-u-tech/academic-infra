@@ -8,10 +8,12 @@ from pathlib import Path
 
 import pytest
 
-from academic_audio.engines import PiperEngine, TTSEngineError
+from academic_audio.engines import PiperEngine, TTSEngineError, select_engine
 from academic_audio.models import DialogueSegment
 from academic_audio.planner import create_dialogue
+from academic_audio.pronunciation import normalize
 from academic_audio.source import resolve_source
+from style_bert_vits2_tts import DEFAULT_VOICE_MAP, StyleBertVITS2Error, parse_voice_map
 
 ROOT = Path(__file__).resolve().parent.parent
 CLI = ROOT / "scripts" / "academic_audio_cli.py"
@@ -103,6 +105,26 @@ def test_piper_rejects_a_language_mismatch(tmp_path: Path) -> None:
 
     with pytest.raises(TTSEngineError, match="language"):
         engine.render(segment, tmp_path / "out.wav")
+
+
+def test_quality_mode_fails_loudly_without_style_bert() -> None:
+    with pytest.raises(TTSEngineError):
+        select_engine("auto", "quality")
+
+
+def test_normalize_drops_markdown_markers() -> None:
+    assert normalize("確認したいです。 - 命題は真または偽の値を取る。") == "確認したいです。 命題は真または偽の値を取る。"
+    assert normalize("## 真理値表") == "真理値表"
+    assert normalize("AND-OR 変換") == "AND-OR 変換"
+
+
+def test_style_bert_voice_map_defaults_and_overrides() -> None:
+    assert parse_voice_map(None) == DEFAULT_VOICE_MAP
+    assert parse_voice_map("learner=jvnv-F2-jp")["learner"] == "jvnv-F2-jp"
+    assert parse_voice_map("learner=jvnv-F2-jp")["host"] == DEFAULT_VOICE_MAP["host"]
+
+    with pytest.raises(StyleBertVITS2Error):
+        parse_voice_map("broken")
 
 
 def test_cli_listening_generates_multiple_speeds(tmp_path: Path) -> None:

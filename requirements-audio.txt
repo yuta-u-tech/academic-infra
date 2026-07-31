@@ -1,0 +1,11 @@
+# Academic Audio（scripts/academic_audio）の TTS エンジン依存。
+#
+# requirements.txt とは分けてある。あちらは科目リポジトリの CI（TeX ビルド → Drive 同期）が
+# 毎回インストールするもので、音声生成は CI では動かさない。torch を含むので重い。
+piper-tts==1.6.0
+style-bert-vits2==2.5.0
+# pyopenjtalk-dict（Style-Bert-VITS2 の日本語 g2p）は numpy 1.x ABI でビルドされており、
+# numpy 2 系だと import 時に "numpy.dtype size changed" で落ちる。
+numpy<2
+# 同じく pyopenjtalk-dict が pkg_resources を import する。setuptools 81 で削除された。
+setuptools<81

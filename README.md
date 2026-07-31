@@ -272,7 +272,7 @@ TTS エンジンは共通インターフェースで扱う。`--engine` は
 ### Piper のセットアップ
 
 ```bash
-python3 -m pip install piper-tts
+python3 -m pip install -r requirements-audio.txt
 python3 -m piper.download_voices en_US-lessac-medium --data-dir .venv/piper-voices
 ```
 
@@ -284,17 +284,49 @@ Piper 1.x は音声モデルが必須なので、`--piper-model <voice.onnx>` �
 **Piper には日本語音声モデルが無い**（`download_voices` の一覧は en / zh / ko などのみ）。
 日本語のテキストに英語モデルを使うと piper 自体は成功するが読み上げにならないため、
 音声モデルの言語とセグメントの `language` が食い違う場合はエラーにしている。
-したがって日本語の対話台本は Style-Bert-VITS2、またはローカル確認用の macOS `say` を使う。
+したがって日本語の対話台本は Style-Bert-VITS2 を使う。
+
+### Style-Bert-VITS2 のセットアップ
+
+`scripts/style_bert_vits2_tts.py` が `style-bert-vits2` ライブラリのアダプタになっている。
+音声モデルは JVNV（CC BY-SA 4.0）を使う。
 
 ```bash
-python3 scripts/academic_audio_cli.py generate \
-  --review-id logic.ch01.s01 --repo-root ../LogicCircuits \
-  --engine style-bert-vits2 \
-  --style-bert-command "python3 scripts/macos_say_tts.py --output {out} --text {text} --voice Kyoko"
+python3 -m pip install -r requirements-audio.txt
+python3 scripts/style_bert_vits2_tts.py download
 ```
 
-Style-Bert-VITS2 本体は `--style-bert-command` または WAV バイト列を返す
-`--style-bert-endpoint` で接続する。
+バッチでは常駐モードを使う。1発話ごとにプロセスを起こすと毎回 BERT を読み直すため遅い。
+
+```bash
+python3 scripts/style_bert_vits2_tts.py serve --port 8787 &
+python3 scripts/academic_audio_cli.py generate \
+  --review-id logic.ch01.s01 --repo-root ../LogicCircuits \
+  --engine style-bert-vits2 --mode quality \
+  --style-bert-endpoint http://127.0.0.1:8787/render
+```
+
+1発話だけ確認したいときは `--style-bert-command` でもよい。
+
+```bash
+--style-bert-command "python3 scripts/style_bert_vits2_tts.py render \
+  --output {out} --text {text} --speaker {speaker} --emotion {emotion} --speed {speed}"
+```
+
+台本の `speaker` は音声モデルへ、`emotion` は JVNV のスタイル
+（`Neutral / Angry / Disgust / Fear / Happy / Sad / Surprise`）へ割り当てる。
+既定の対応は `host` と `narrator` が `jvnv-F1-jp`、`learner` が `jvnv-M1-jp`。
+`--voice-map "learner=jvnv-F2-jp"` で上書きできる。出力は 44100 Hz。
+
+Style-Bert-VITS2 を自前で立てている場合は、WAV バイト列を返す任意の
+`--style-bert-endpoint` を指定すればよい。ローカルの簡易確認用には macOS `say`
+アダプタ（`scripts/macos_say_tts.py`）も使える。
+
+```bash
+--style-bert-command "python3 scripts/macos_say_tts.py --output {out} --text {text} --voice Kyoko"
+```
+
+`--mode quality` で Style-Bert-VITS2 が用意できていない場合は、黙って Piper に落とさずエラーにする。
 
 成果物は既定で `.academic-audio/jobs/<job-id>/` に保存される。
 
