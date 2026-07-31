@@ -245,6 +245,42 @@ python3 scripts/acenglish_cli.py note-draft                  # 誤答 → ~/engl
 **資料は無断で上書きしない。** 誤答から生まれるのは追記候補だけで、Issue 化するかは
 `promote_drive_comments.py --pick` でユーザーが選ぶ。
 
+## Academic Audio（scripts/academic_audio）
+
+教材資産から、NotebookLM の Audio Overview に近い対話形式の学習音声を作る CLI 専用の
+サブシステム。Web UI や配信処理には依存しない。責務は
+`台本生成 → 音声生成 → 後処理 → ローカル一時出力` まで。
+
+```bash
+python3 scripts/academic_audio_cli.py doctor --json
+python3 scripts/academic_audio_cli.py script generate \
+  --review-id dsa.ch02.list.s01 --repo-root ../DataStructures
+python3 scripts/academic_audio_cli.py generate \
+  --review-id dsa.ch02.list.s01 --repo-root ../DataStructures --engine piper --mode fast
+python3 scripts/academic_audio_cli.py job status <job-id>
+python3 scripts/academic_audio_cli.py job resume <job-id>
+python3 scripts/academic_audio_cli.py listening generate \
+  --source english/chapter-03.md --engine piper --speeds 0.8,1.0,1.2 --listening-mode shadowing
+```
+
+TTS エンジンは共通インターフェースで扱う。`--engine` は
+`auto | piper | style-bert-vits2 | wav`、`--mode` は `fast | balanced | quality`。
+`wav` は外部 TTS なしでジョブ・キャッシュ・結合を検証するための内蔵レンダラ。
+
+Piper は標準 CLI があれば `piper --output_file <file>` を使う。別の起動方法にしたい場合は
+`--piper-command` に `{out}` などのテンプレートを渡す。Style-Bert-VITS2 は
+`--style-bert-command` または WAV バイト列を返す `--style-bert-endpoint` で接続する。
+
+成果物は既定で `.academic-audio/jobs/<job-id>/` に保存される。
+
+| ファイル | 用途 |
+|---|---|
+| `dialogue.json` | speaker / text / language / emotion / speed / pause / source section を持つ台本 |
+| `dialogue.md` | 人間が確認しやすい台本 |
+| `segments/*.wav` | 発話単位の音声 |
+| `output.wav` | 結合済みローカル成果物 |
+| `job.json` | 進捗、失敗セグメント、再開用メタデータ |
+
 ## テスト
 
 ```bash

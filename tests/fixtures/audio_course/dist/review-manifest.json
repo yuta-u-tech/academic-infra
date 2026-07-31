@@ -1,0 +1,22 @@
+{
+  "manifest_version": 1,
+  "commit": "test-commit",
+  "course_id": "logic",
+  "course_name": "Logic",
+  "markdown_file": "latest.md",
+  "chapters": [
+    {
+      "review_id": "logic.ch01",
+      "title": "命題論理",
+      "source_file": "src/ch01.tex",
+      "included_in_pdf": true,
+      "sections": [
+        {
+          "review_id": "logic.ch01.s01",
+          "title": "真理値表",
+          "markdown_file": "sections/ch01-01.md"
+        }
+      ]
+    }
+  ]
+}
