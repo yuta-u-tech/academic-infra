@@ -256,22 +256,45 @@ python3 scripts/academic_audio_cli.py doctor --json
 python3 scripts/academic_audio_cli.py script generate \
   --review-id dsa.ch02.list.s01 --repo-root ../DataStructures
 python3 scripts/academic_audio_cli.py generate \
-  --review-id dsa.ch02.list.s01 --repo-root ../DataStructures --engine piper --mode fast
+  --review-id dsa.ch02.list.s01 --repo-root ../DataStructures --engine piper --mode fast \
+  --piper-model .venv/piper-voices/en_US-lessac-medium.onnx
 python3 scripts/academic_audio_cli.py job status <job-id>
 python3 scripts/academic_audio_cli.py job resume <job-id>
 python3 scripts/academic_audio_cli.py listening generate \
-  --source english/chapter-03.md --engine piper --speeds 0.8,1.0,1.2 --listening-mode shadowing
+  --source english/chapter-03.md --engine piper --speeds 0.8,1.0,1.2 --listening-mode shadowing \
+  --piper-model .venv/piper-voices/en_US-lessac-medium.onnx
 ```
 
 TTS エンジンは共通インターフェースで扱う。`--engine` は
 `auto | piper | style-bert-vits2 | wav`、`--mode` は `fast | balanced | quality`。
 `wav` は外部 TTS なしでジョブ・キャッシュ・結合を検証するための内蔵レンダラ。
 
-Piper は標準 CLI があれば `piper --output_file <file>` を使う。別の起動方法にしたい場合は
-`--piper-command` に `{out}` などのテンプレートを渡す。Style-Bert-VITS2 は
-`--style-bert-command` または WAV バイト列を返す `--style-bert-endpoint` で接続する。
-macOS で Piper が無い場合のローカル確認には
-`--piper-command "python3 scripts/macos_say_tts.py --output {out} --text {text}"` も使える。
+### Piper のセットアップ
+
+```bash
+python3 -m pip install piper-tts
+python3 -m piper.download_voices en_US-lessac-medium --data-dir .venv/piper-voices
+```
+
+Piper 1.x は音声モデルが必須なので、`--piper-model <voice.onnx>` を渡す。渡さない場合は
+`doctor` が `piper found, but no voice model` を返し、生成は走らない。話速は
+`--speeds` / `--speed` から `piper --length_scale`（speed の逆数）へ渡す。
+別の起動方法にしたいときだけ `--piper-command` に `{out}` などのテンプレートを渡す。
+
+**Piper には日本語音声モデルが無い**（`download_voices` の一覧は en / zh / ko などのみ）。
+日本語のテキストに英語モデルを使うと piper 自体は成功するが読み上げにならないため、
+音声モデルの言語とセグメントの `language` が食い違う場合はエラーにしている。
+したがって日本語の対話台本は Style-Bert-VITS2、またはローカル確認用の macOS `say` を使う。
+
+```bash
+python3 scripts/academic_audio_cli.py generate \
+  --review-id logic.ch01.s01 --repo-root ../LogicCircuits \
+  --engine style-bert-vits2 \
+  --style-bert-command "python3 scripts/macos_say_tts.py --output {out} --text {text} --voice Kyoko"
+```
+
+Style-Bert-VITS2 本体は `--style-bert-command` または WAV バイト列を返す
+`--style-bert-endpoint` で接続する。
 
 成果物は既定で `.academic-audio/jobs/<job-id>/` に保存される。
 

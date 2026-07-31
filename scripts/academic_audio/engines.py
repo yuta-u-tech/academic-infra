@@ -83,28 +83,76 @@ class CommandEngine(TTSEngine):
             raise TTSEngineError(f"TTS command did not create {output_path}")
 
 
+_PIPER_DEFAULT_TEMPLATE = "piper --output_file {out}"
+
+
 class PiperEngine(CommandEngine):
-    def __init__(self, command_template: str | None = None):
-        super().__init__(
-            "piper",
-            command_template or "piper --output_file {out}",
-        )
+    """Piper adapter.
+
+    piper 1.x は音声モデル (`-m`) が必須で、読み上げテキストは標準入力から受け取る。
+    `--piper-model` が渡された場合は既定の起動方法でそのまま生成でき、別の起動方法に
+    したい場合だけ `--piper-command` のテンプレートを使う。
+    """
+
+    def __init__(self, command_template: str | None = None, model: str | None = None):
+        super().__init__("piper", command_template or _PIPER_DEFAULT_TEMPLATE)
+        self.model = model
+
+    def available(self) -> tuple[bool, str]:
+        ok, reason = super().available()
+        if not ok:
+            return ok, reason
+        if self.command_template == _PIPER_DEFAULT_TEMPLATE:
+            if not self.model:
+                return False, "piper found, but no voice model. Pass --piper-model <voice.onnx>"
+            if not Path(self.model).exists():
+                return False, f"piper voice model not found: {self.model}"
+            return True, f"piper found with model {self.model}"
+        return ok, reason
+
+    def model_language(self) -> str | None:
+        """Return the voice model's language family (e.g. "en"), if the config is readable."""
+        if not self.model:
+            return None
+        config = Path(f"{self.model}.json")
+        if not config.exists():
+            return None
+        try:
+            data = json.loads(config.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            return None
+        return (data.get("language") or {}).get("family")
 
     def render(self, segment: DialogueSegment, output_path: Path) -> None:
-        if self.command_template == "piper --output_file {out}":
-            output_path.parent.mkdir(parents=True, exist_ok=True)
-            completed = subprocess.run(
-                ["piper", "--output_file", str(output_path)],
-                input=segment.text,
-                capture_output=True,
-                text=True,
-            )
-            if completed.returncode != 0:
-                raise TTSEngineError(completed.stderr.strip() or "piper failed")
-            if not output_path.exists():
-                raise TTSEngineError(f"piper did not create {output_path}")
+        if self.command_template != _PIPER_DEFAULT_TEMPLATE:
+            super().render(segment, output_path)
             return
-        super().render(segment, output_path)
+        if not self.model:
+            raise TTSEngineError("piper voice model is not configured. Pass --piper-model <voice.onnx>")
+        # 言語が違う音声モデルでも piper は成功してしまうが、出力は読み上げになっていない。
+        # 黙って品質を落とさないよう、ここで落とす。
+        model_language = self.model_language()
+        if model_language and model_language != segment.language:
+            raise TTSEngineError(
+                f"piper voice model language is '{model_language}' but segment {segment.id} is "
+                f"'{segment.language}'. Use a matching voice model, or another engine for this language."
+            )
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        command = [
+            "piper",
+            "--model",
+            self.model,
+            "--output_file",
+            str(output_path),
+            # piper は話速を length_scale (長さ倍率) で受け取るため、speed の逆数を渡す。
+            "--length_scale",
+            f"{1.0 / segment.speed:.4f}" if segment.speed > 0 else "1.0",
+        ]
+        completed = subprocess.run(command, input=segment.text, capture_output=True, text=True)
+        if completed.returncode != 0:
+            raise TTSEngineError(completed.stderr.strip() or "piper failed")
+        if not output_path.exists():
+            raise TTSEngineError(f"piper did not create {output_path}")
 
 
 class StyleBertVITS2Engine(TTSEngine):
@@ -155,13 +203,14 @@ def select_engine(
     mode: AudioMode,
     *,
     piper_command: str | None = None,
+    piper_model: str | None = None,
     style_bert_command: str | None = None,
     style_bert_endpoint: str | None = None,
 ) -> TTSEngine:
     if engine == "wav":
         return WavEngine()
     if engine == "piper" or mode == "fast":
-        return PiperEngine(piper_command)
+        return PiperEngine(piper_command, piper_model)
     if engine == "style-bert-vits2" or mode == "quality":
         selected = StyleBertVITS2Engine(style_bert_command, style_bert_endpoint)
         ok, reason = selected.available()
@@ -173,4 +222,4 @@ def select_engine(
     ok, _ = style.available()
     if ok and mode == "balanced":
         return style
-    return PiperEngine(piper_command)
+    return PiperEngine(piper_command, piper_model)

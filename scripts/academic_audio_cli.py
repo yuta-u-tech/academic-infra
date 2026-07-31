@@ -46,6 +46,7 @@ def _engine_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--mode", choices=["fast", "balanced", "quality"], default="balanced")
     parser.add_argument("--speed", type=float, default=1.0)
     parser.add_argument("--piper-command", help="Command template; supports {text}, {out}, {speaker}, {speed}, {language}")
+    parser.add_argument("--piper-model", help="Path to a Piper voice model (.onnx). Required for the default piper invocation")
     parser.add_argument("--style-bert-command", help="Command template; supports {text}, {out}, {speaker}, {speed}, {language}")
     parser.add_argument("--style-bert-endpoint", help="HTTP endpoint that returns WAV bytes")
 
@@ -56,7 +57,7 @@ def _state_dir(args: argparse.Namespace) -> Path:
 
 def _cmd_doctor(args: argparse.Namespace) -> int:
     engines = [
-        PiperEngine(args.piper_command),
+        PiperEngine(args.piper_command, args.piper_model),
         StyleBertVITS2Engine(args.style_bert_command, args.style_bert_endpoint),
         WavEngine(),
     ]
@@ -97,6 +98,7 @@ def _render_job(job: AudioJob, args: argparse.Namespace, *, force: bool = False)
         job.engine,  # type: ignore[arg-type]
         job.mode,  # type: ignore[arg-type]
         piper_command=args.piper_command,
+        piper_model=args.piper_model,
         style_bert_command=args.style_bert_command,
         style_bert_endpoint=args.style_bert_endpoint,
     )

@@ -1,10 +1,15 @@
 from __future__ import annotations
 
 import json
+import shutil
 import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
+from academic_audio.engines import PiperEngine, TTSEngineError
+from academic_audio.models import DialogueSegment
 from academic_audio.planner import create_dialogue
 from academic_audio.source import resolve_source
 
@@ -65,6 +70,39 @@ def test_cli_generate_wav_job_and_status(tmp_path: Path) -> None:
     status = run_cli("--state-dir", str(state_dir), "job", "status", "fixture-job")
     assert status.returncode == 0
     assert json.loads(status.stdout)["rendered_segments"]
+
+
+def _write_voice_model(tmp_path: Path, family: str) -> str:
+    model = tmp_path / f"{family}-voice.onnx"
+    model.write_bytes(b"")
+    model.with_suffix(".onnx.json").write_text(
+        json.dumps({"language": {"family": family, "code": family}}), encoding="utf-8"
+    )
+    return str(model)
+
+
+def test_piper_requires_a_voice_model() -> None:
+    available, reason = PiperEngine().available()
+
+    if available:
+        pytest.fail(f"expected the model-less default invocation to be unavailable: {reason}")
+    assert "piper" in reason
+
+
+def test_piper_reports_ready_with_a_voice_model(tmp_path: Path) -> None:
+    engine = PiperEngine(model=_write_voice_model(tmp_path, "en"))
+
+    if shutil.which("piper") is None:
+        pytest.skip("piper is not installed")
+    assert engine.available()[0]
+
+
+def test_piper_rejects_a_language_mismatch(tmp_path: Path) -> None:
+    engine = PiperEngine(model=_write_voice_model(tmp_path, "en"))
+    segment = DialogueSegment(id="seg-001", speaker="host", text="命題は真または偽", language="ja")
+
+    with pytest.raises(TTSEngineError, match="language"):
+        engine.render(segment, tmp_path / "out.wav")
 
 
 def test_cli_listening_generates_multiple_speeds(tmp_path: Path) -> None:
