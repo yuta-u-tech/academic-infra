@@ -270,6 +270,8 @@ TTS エンジンは共通インターフェースで扱う。`--engine` は
 Piper は標準 CLI があれば `piper --output_file <file>` を使う。別の起動方法にしたい場合は
 `--piper-command` に `{out}` などのテンプレートを渡す。Style-Bert-VITS2 は
 `--style-bert-command` または WAV バイト列を返す `--style-bert-endpoint` で接続する。
+macOS で Piper が無い場合のローカル確認には
+`--piper-command "python3 scripts/macos_say_tts.py --output {out} --text {text}"` も使える。
 
 成果物は既定で `.academic-audio/jobs/<job-id>/` に保存される。
 
