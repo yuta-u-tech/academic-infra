@@ -370,8 +370,9 @@ def _cmd_listening_request(args: argparse.Namespace) -> int:
     if args.vocab_deck:
         terms = vocab.sample_terms(args.vocab_deck, args.vocab_count)
         payload["vocabulary"] = {"source": vocab.REPOSITORY, "deck": args.vocab_deck, "terms": terms}
+        vocab_hint = "選んだシナリオに馴染むものだけを" if is_toeic else "資料の話題に馴染むものだけを"
         payload["instructions"].append(
-            f"vocabulary（{args.vocab_deck} から{len(terms)}語）のうち、資料の話題に馴染むものだけを"
+            f"vocabulary（{args.vocab_deck} から{len(terms)}語）のうち、{vocab_hint}"
             "質問文か応答のどこかで自然に使う。無理に全語を使わない。使った語は reason に書く"
         )
     args.out.parent.mkdir(parents=True, exist_ok=True)
@@ -398,7 +399,10 @@ def _cmd_listening_ingest(args: argparse.Namespace) -> int:
         answers_payload = to_answers(item_set)
         tex = render_tex(item_set, listening_format)
 
-    slug = new_job_id(f"{item_set.source_id}-{listening_format.id}")
+    # TOEIC 形式は教材(source_id)の分野と無関係な題材を選ぶので、フォルダ名/Driveの
+    # ファイル名に科目名を出さない（出すと「論理回路の問題」に見えて紛らわしい）。
+    slug_base = listening_format.id if listening_format.id.startswith("toeic-part") else f"{item_set.source_id}-{listening_format.id}"
+    slug = new_job_id(slug_base)
     out_dir = args.out_dir or (data_repo_path() / "listening" / slug)
     out_dir.mkdir(parents=True, exist_ok=True)
     script_path, script_md = script.write(out_dir)
