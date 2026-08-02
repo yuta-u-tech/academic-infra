@@ -37,6 +37,8 @@ from academic_audio.models import AudioJob  # noqa: E402
 from academic_audio.planner import create_dialogue  # noqa: E402
 from academic_audio.renderer import render_script  # noqa: E402
 from academic_audio.source import AudioSourceError, resolve_source  # noqa: E402
+from academic_audio import vocab  # noqa: E402
+from academic_audio.vocab import VocabFetchError  # noqa: E402
 from academic_audio.worksheet import WorksheetError, build_pdf, render_tex  # noqa: E402
 
 
@@ -244,6 +246,13 @@ def _cmd_listening_request(args: argparse.Namespace) -> int:
         },
         "material": source.body,
     }
+    if args.vocab_deck:
+        terms = vocab.sample_terms(args.vocab_deck, args.vocab_count)
+        payload["vocabulary"] = {"source": vocab.REPOSITORY, "deck": args.vocab_deck, "terms": terms}
+        payload["instructions"].append(
+            f"vocabulary（{args.vocab_deck} から{len(terms)}語）のうち、資料の話題に馴染むものだけを"
+            "質問文か応答のどこかで自然に使う。無理に全語を使わない。使った語は reason に書く"
+        )
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     print(json.dumps({"request": str(args.out), "format": listening_format.id, "count": args.count}, ensure_ascii=False, indent=2))
@@ -418,6 +427,8 @@ def main() -> int:
     listening_request.add_argument("--format", required=True, help=f"使えるのは: {', '.join(available_formats())}")
     listening_request.add_argument("--count", type=int, required=True, help="生成する問題数")
     listening_request.add_argument("--out", type=Path, required=True)
+    listening_request.add_argument("--vocab-deck", choices=vocab.DECKS, help="study-forge の単語デッキ（金フレ由来）から語彙を混ぜる")
+    listening_request.add_argument("--vocab-count", type=int, default=5, help="混ぜる語数")
     listening_request.set_defaults(func=_cmd_listening_request)
 
     listening_ingest = listening_sub.add_parser("ingest", help="作問結果を検証して台本・解答・問題冊子を出す")
@@ -445,6 +456,7 @@ def main() -> int:
         FormatError,
         ItemValidationError,
         TTSEngineError,
+        VocabFetchError,
         WorksheetError,
         FileNotFoundError,
         json.JSONDecodeError,
