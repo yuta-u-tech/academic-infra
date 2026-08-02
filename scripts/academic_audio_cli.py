@@ -352,6 +352,12 @@ def _cmd_listening_request(args: argparse.Namespace) -> int:
             f"{args.count} 組を items 配列として書く。各 item は passage（発話配列）と "
             f"{listening_format.question_slot.count} 問の questions を持つ。足りなければ減らしてよい"
         )
+    if is_toeic:
+        instructions.append(
+            "結果 JSON の source_id には review_id ではなく format id "
+            f"（\"{listening_format.id}\"）をそのまま書く。YouTube の説明文・タグ・"
+            "Driveのファイル名に出るので、資料の科目名を出さないため"
+        )
     payload = {
         "schema_version": 1,
         "prompt_version": PROMPT_VERSION,
@@ -359,7 +365,10 @@ def _cmd_listening_request(args: argparse.Namespace) -> int:
         "format": format_payload,
         "count": args.count,
         "target": {
-            "source_id": source.source_id,
+            # TOEIC は題材を資料から切り離しているので、source_id は format id にする
+            # （YouTube description/tags・Drive ファイル名にそのまま出るため）。
+            # review_id/course_id は生成の文脈記録として残す。
+            "source_id": listening_format.id if is_toeic else source.source_id,
             "review_id": source.review_id,
             "course_id": source.course_id,
             "title": source.title,
@@ -392,12 +401,12 @@ def _cmd_listening_ingest(args: argparse.Namespace) -> int:
         item_set = load_passage_result(args.file, listening_format)
         script = passage_to_script(item_set, listening_format)
         answers_payload = passage_to_answers(item_set)
-        tex = render_passage_tex(item_set, listening_format)
+        tex = render_passage_tex(item_set, listening_format, youtube_url=args.youtube_url)
     else:
         item_set = load_result(args.file, listening_format)
         script = to_script(item_set, listening_format)
         answers_payload = to_answers(item_set)
-        tex = render_tex(item_set, listening_format)
+        tex = render_tex(item_set, listening_format, youtube_url=args.youtube_url)
 
     # TOEIC 形式は教材(source_id)の分野と無関係な題材を選ぶので、フォルダ名/Driveの
     # ファイル名に科目名を出さない（出すと「論理回路の問題」に見えて紛らわしい）。
@@ -405,6 +414,10 @@ def _cmd_listening_ingest(args: argparse.Namespace) -> int:
     slug = new_job_id(slug_base)
     out_dir = args.out_dir or (data_repo_path() / "listening" / slug)
     out_dir.mkdir(parents=True, exist_ok=True)
+    # 元の作問結果もそのまま残す。youtube publish 後に URL を差し込んで
+    # worksheet を作り直す（listening attach-youtube-url）ときの再入力になる。
+    result_path = out_dir / "result.json"
+    result_path.write_text(args.file.read_text(encoding="utf-8"), encoding="utf-8")
     script_path, script_md = script.write(out_dir)
     answers_path = out_dir / "answers.json"
     answers_path.write_text(json.dumps(answers_payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
@@ -425,8 +438,43 @@ def _cmd_listening_ingest(args: argparse.Namespace) -> int:
     if args.push:
         try:
             pushed = commit_and_push(
-                data_repo_path(), [script_path, script_md, answers_path, tex_path], f"listening: {slug}"
+                data_repo_path(), [result_path, script_path, script_md, answers_path, tex_path], f"listening: {slug}"
             )
+        except DataRepoError as error:
+            print(f"push できませんでした: {error}", file=sys.stderr)
+            return 1
+        result["pushed"] = pushed
+    print(json.dumps(result, ensure_ascii=False, indent=2))
+    return 0
+
+
+def _cmd_listening_attach_youtube_url(args: argparse.Namespace) -> int:
+    """listening ingest 済みの set-dir に、あとから分かる YouTube URL を差し込んで worksheet を作り直す。
+
+    音声(YouTube投稿)は dialogue.json ができてから作るので、冊子は URL を知らない状態で
+    先にできている。result.json（元の作問結果）から作り直す。
+    """
+    listening_format = load_format(args.format)
+    result_path = args.set_dir / "result.json"
+    if not result_path.exists():
+        raise FileNotFoundError(f"{result_path} がありません。listening ingest の出力先を指定してください。")
+
+    if listening_format.grouping == "passage":
+        item_set = load_passage_result(result_path, listening_format)
+        tex = render_passage_tex(item_set, listening_format, youtube_url=args.youtube_url)
+    else:
+        item_set = load_result(result_path, listening_format)
+        tex = render_tex(item_set, listening_format, youtube_url=args.youtube_url)
+
+    tex_path = args.set_dir / "worksheet.tex"
+    tex_path.write_text(tex, encoding="utf-8")
+
+    result = {"worksheet_tex": str(tex_path)}
+    if not args.no_pdf:
+        result["worksheet_pdf"] = str(build_pdf(tex_path))
+    if args.push:
+        try:
+            pushed = commit_and_push(data_repo_path(), [tex_path], f"listening: attach youtube url ({args.set_dir.name})")
         except DataRepoError as error:
             print(f"push できませんでした: {error}", file=sys.stderr)
             return 1
@@ -568,7 +616,18 @@ def main() -> int:
     listening_ingest.add_argument("--out-dir", type=Path, help="既定: academic-english-data/listening/<slug>")
     listening_ingest.add_argument("--no-pdf", action="store_true", help="TeX まで出して組版しない")
     listening_ingest.add_argument("--push", action="store_true", help="出力を academic-english-data へ commit + push する")
+    listening_ingest.add_argument("--youtube-url", help="既に YouTube へ投稿済みの場合、冊子にURLを載せる")
     listening_ingest.set_defaults(func=_cmd_listening_ingest)
+
+    listening_attach_url = listening_sub.add_parser(
+        "attach-youtube-url", help="youtube publish で得たURLを冊子に載せて作り直す"
+    )
+    listening_attach_url.add_argument("--set-dir", type=Path, required=True, help="listening ingest の出力先")
+    listening_attach_url.add_argument("--format", required=True)
+    listening_attach_url.add_argument("--youtube-url", required=True)
+    listening_attach_url.add_argument("--no-pdf", action="store_true")
+    listening_attach_url.add_argument("--push", action="store_true", help="更新した worksheet.tex を academic-english-data へ commit + push する")
+    listening_attach_url.set_defaults(func=_cmd_listening_attach_youtube_url)
 
     listening_publish = listening_sub.add_parser("publish", help="問題冊子PDFを Drive の科目フォルダへ上げる")
     listening_publish.add_argument("--set-dir", type=Path, required=True, help="listening ingest の出力先")

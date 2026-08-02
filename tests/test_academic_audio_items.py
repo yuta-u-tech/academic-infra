@@ -144,6 +144,18 @@ def test_latex_special_characters_are_escaped() -> None:
     assert escape("100% & <A_B>") == r"100\% \& <A\_B>"
 
 
+def test_worksheet_includes_the_youtube_url_when_given(tmp_path: Path, toeic: ListeningFormat) -> None:
+    tex = render_tex(load_result(_write(tmp_path, _result()), toeic), toeic, youtube_url="https://youtu.be/abc123")
+
+    assert r"\url{https://youtu.be/abc123}" in tex
+
+
+def test_worksheet_omits_the_youtube_line_when_no_url(tmp_path: Path, toeic: ListeningFormat) -> None:
+    tex = render_tex(load_result(_write(tmp_path, _result()), toeic), toeic)
+
+    assert r"\url{" not in tex
+
+
 def test_timeline_accumulates_pause_and_groups_chapters() -> None:
     script = DialogueScript(
         title="t", source_id="s", source_commit="c",
@@ -218,6 +230,22 @@ def test_cli_ingest_writes_script_answers_and_tex(tmp_path: Path) -> None:
     assert (out_dir / "dialogue.json").exists()
     assert (out_dir / "answers.json").exists()
     assert (out_dir / "worksheet.tex").exists()
+    assert (out_dir / "result.json").exists()  # attach-youtube-url の再入力用に残す
+
+
+def test_cli_attach_youtube_url_rebuilds_the_worksheet_with_the_url(tmp_path: Path) -> None:
+    path = _write(tmp_path, _result())
+    out_dir = tmp_path / "set"
+    run_cli("listening", "ingest", "--file", str(path), "--format", "toeic-part2", "--out-dir", str(out_dir), "--no-pdf")
+
+    result = run_cli(
+        "listening", "attach-youtube-url", "--set-dir", str(out_dir), "--format", "toeic-part2",
+        "--youtube-url", "https://youtu.be/xyz789", "--no-pdf",
+    )
+
+    assert result.returncode == 0, result.stderr
+    tex = (out_dir / "worksheet.tex").read_text(encoding="utf-8")
+    assert r"\url{https://youtu.be/xyz789}" in tex
 
 
 def test_cli_ingest_rejects_a_broken_result(tmp_path: Path) -> None:

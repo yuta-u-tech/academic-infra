@@ -47,7 +47,13 @@ def escape(text: str) -> str:
     return "".join(_LATEX_ESCAPES.get(char, char) for char in text)
 
 
-def render_tex(listening_set: ListeningSet, listening_format: ListeningFormat) -> str:
+def _youtube_line(youtube_url: str | None) -> list[str]:
+    if not youtube_url:
+        return []
+    return [r"\par\noindent\textbf{音声（YouTube・限定公開）:} \url{" + youtube_url + "}", ""]
+
+
+def render_tex(listening_set: ListeningSet, listening_format: ListeningFormat, youtube_url: str | None = None) -> str:
     """Two sections: the questions to solve, then the answer key."""
     lines = [
         _PREAMBLE,
@@ -57,6 +63,7 @@ def render_tex(listening_set: ListeningSet, listening_format: ListeningFormat) -
         r"\maketitle",
         r"\section*{" + escape(listening_format.name) + "}",
         "",
+        *_youtube_line(youtube_url),
         _instructions(listening_format),
         "",
     ]
@@ -102,7 +109,9 @@ def _instructions(listening_format: ListeningFormat) -> str:
     return "音声を聴いて設問に答えなさい。"
 
 
-def render_passage_tex(passage_set: PassageSet, listening_format: ListeningFormat) -> str:
+def render_passage_tex(
+    passage_set: PassageSet, listening_format: ListeningFormat, youtube_url: str | None = None
+) -> str:
     """grouping: passage 用（TOEIC Part 3/4）。
 
     設問ページには passage（会話・説明文）を出さない。聴いて答える形式なので、
@@ -116,6 +125,7 @@ def render_passage_tex(passage_set: PassageSet, listening_format: ListeningForma
         r"\maketitle",
         r"\section*{" + escape(listening_format.name) + "}",
         "",
+        *_youtube_line(youtube_url),
         _passage_instructions(listening_format),
         "",
     ]
