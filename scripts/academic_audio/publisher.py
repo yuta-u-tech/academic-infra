@@ -152,16 +152,29 @@ class YouTubePublisher:
     ) -> PublishResult:
         try:
             video_id = self._upload(video_path, record)
-            if background_path is not None:
-                self._set_thumbnail(video_id, background_path)
-            if record.playlist_id:
-                self._add_to_playlist(video_id, record.playlist_id)
         except PublishError as error:
             record.status, record.error = "failed", str(error)
             write_publication(self.state_dir, record)
             raise
 
-        record.status, record.video_id, record.url, record.error = "uploaded", video_id, f"https://youtu.be/{video_id}", None
+        # 動画自体のアップロードはここで確定している。サムネイル・再生リストは
+        # 付加機能なので、失敗しても投稿全体を failed 扱いにせず video_id/url は残す
+        # （新規チャンネルはカスタムサムネイル権限が無いことがあり、実際にこれで
+        # video_id が記録されないまま落ちる不具合があった）。
+        warnings: list[str] = []
+        if background_path is not None:
+            try:
+                self._set_thumbnail(video_id, background_path)
+            except Exception as error:  # googleapiclient は多様な例外を投げる
+                warnings.append(f"サムネイル設定に失敗しました: {error}")
+        if record.playlist_id:
+            try:
+                self._add_to_playlist(video_id, record.playlist_id)
+            except Exception as error:
+                warnings.append(f"再生リストへの追加に失敗しました: {error}")
+
+        record.status, record.video_id, record.url = "uploaded", video_id, f"https://youtu.be/{video_id}"
+        record.error = "; ".join(warnings) if warnings else None
         if not keep_video:
             # 保持方針: 動画はアップロード後の一時ファイル。音声・台本の正本は別にある。
             video_path.unlink(missing_ok=True)
