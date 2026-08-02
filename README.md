@@ -330,8 +330,64 @@ python3 scripts/academic_audio_cli.py listening publish \
 
 新しい試験形式を足すときは `audio/formats/<id>.md` を 1 枚追加するだけ。コードは触らない。
 
-Drive へは科目フォルダ直下の `Listening/` に上げる（`sections/` と同じ階層）。
+Drive へは独立フォルダ「英語リスニング/`<形式>`/」に上げる（科目フォルダの下ではない。
+リスニング教材はある科目のセクションに由来していても、英語運用の練習という別の科目として扱う）。
 **音声は容量が大きいので Drive へ上げない。** 配信は issue #3 の Publisher が担う。
+
+### 1問＝1音声＋複数設問の形式（TOEIC Part 3/4）
+
+TOEIC Part 2 は「1問＝1つの正解」だが、Part 3/4 は「1つの会話・説明文＋3つの設問」という
+別の構造を持つ。形式の front matter に `grouping: passage` を立てるとこの構造になる。
+
+```yaml
+grouping: passage
+passage:
+  speakers: 2          # 1: 説明文(Part4) / 2: 会話(Part3)
+  turns: [4, 8]         # 発話数の範囲
+  words_per_turn: [10, 25]
+questions:
+  count: 3
+  words: [8, 15]
+  choice_count: 4
+  choice_words: [3, 12]
+```
+
+`items` の中身も変わる（`parts`/`answer_index` ではなく `passage`/`questions`）。
+
+```json
+{
+  "item_id": "item-001",
+  "passage": [
+    {"speaker": "A", "text": "..."},
+    {"speaker": "B", "text": "..."}
+  ],
+  "questions": [
+    {"text": "...", "choices": ["...", "...", "...", "..."], "answer_index": 0, "explanation": "..."}
+  ],
+  "reason": "..."
+}
+```
+
+選択肢は音声では読まれない（`answer_in_audio: false`）。問題冊子の設問ページには
+質問文と選択肢だけを出し、会話・説明文の書き起こしは解答ページにだけ出す
+（先に印刷してしまうと聴解にならない）。
+
+Part 3（会話）は話者を声で聴き分けられないと成立しない。Piper は 1 ジョブ 1 モデルしか
+使えないので、話者ごとに別の音声モデルを割り当てる。
+
+```bash
+python3 scripts/academic_audio_cli.py listening request \
+  --review-id logic.ch01.s01 --repo-root ../LogicCircuits --format toeic-part3 --count 3 --out request.json
+# Claude が items を書く（result.json）
+python3 scripts/academic_audio_cli.py listening ingest --file result.json --format toeic-part3 --push
+python3 scripts/academic_audio_cli.py render \
+  --script ~/academic-english-data/listening/<slug>/dialogue.json \
+  --engine piper \
+  --piper-voice-map "A=.venv/piper-voices/en_US-lessac-medium.onnx,B=.venv/piper-voices/en_US-ryan-medium.onnx,narrator=.venv/piper-voices/en_US-lessac-medium.onnx"
+```
+
+`narrator` は設問を読む声（話者の1人と同じモデルでよい）。Part 4（1人の説明文）は
+`--piper-voice-map` を使わず、通常の `--piper-model` 1本で足りる。
 
 書き上げた `dialogue.json` は `render` にそのまま渡す。
 

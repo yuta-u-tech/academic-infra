@@ -21,12 +21,31 @@ class FormatError(Exception):
 
 @dataclass(frozen=True)
 class ItemSlot:
-    """1問の中に現れる発話の枠。"""
+    """1問の中に現れる発話の枠（grouping: flat の形式で使う）。"""
 
     role: str
     count: int = 1
     words: tuple[int, int] | None = None
     pause: float = 0.5
+
+
+@dataclass(frozen=True)
+class PassageSlot:
+    """1問＝1つの音声（会話・説明文）の制約（grouping: passage の形式で使う）。"""
+
+    speakers: int
+    turns: tuple[int, int]
+    words_per_turn: tuple[int, int]
+
+
+@dataclass(frozen=True)
+class QuestionSlot:
+    """passage に続く設問の制約（grouping: passage の形式で使う）。"""
+
+    count: int
+    words: tuple[int, int]
+    choice_count: int
+    choice_words: tuple[int, int]
 
 
 @dataclass(frozen=True)
@@ -37,7 +56,10 @@ class ListeningFormat:
     language: str
     speakers: int
     answer_in_audio: bool
-    item: list[ItemSlot]
+    grouping: str  # "flat"（1問=1発話群、TOEIC Part 2 等） | "passage"（1問=1音声+複数設問、Part 3/4）
+    item: list[ItemSlot]  # grouping: flat のみ。grouping: passage では空
+    passage_slot: PassageSlot | None  # grouping: passage のみ
+    question_slot: QuestionSlot | None  # grouping: passage のみ
     guidance: str
     path: Path
 
@@ -86,15 +108,31 @@ def _split_front_matter(path: Path) -> tuple[dict, str]:
 
 
 def _build_format(front_matter: dict, guidance: str, path: Path) -> ListeningFormat:
-    for key in ("id", "name", "engine", "language", "item"):
+    for key in ("id", "name", "engine", "language"):
         if key not in front_matter:
             raise FormatError(f"{path} の front matter に {key} がありません。")
     if front_matter["id"] != path.stem:
         raise FormatError(f"{path}: front matter の id '{front_matter['id']}' がファイル名と違います。")
 
-    slots = [_build_slot(raw, path, index) for index, raw in enumerate(front_matter["item"], start=1)]
-    if not slots:
-        raise FormatError(f"{path}: item が空です。")
+    grouping = front_matter.get("grouping", "flat")
+    if grouping not in ("flat", "passage"):
+        raise FormatError(f"{path}: grouping は flat か passage です（実際: {grouping}）")
+
+    if grouping == "flat":
+        if "item" not in front_matter:
+            raise FormatError(f"{path} の front matter に item がありません。")
+        slots = [_build_slot(raw, path, index) for index, raw in enumerate(front_matter["item"], start=1)]
+        if not slots:
+            raise FormatError(f"{path}: item が空です。")
+        passage_slot: PassageSlot | None = None
+        question_slot: QuestionSlot | None = None
+    else:
+        for key in ("passage", "questions"):
+            if key not in front_matter:
+                raise FormatError(f"{path}: grouping: passage には front matter に {key} が必要です。")
+        slots = []
+        passage_slot = _build_passage_slot(front_matter["passage"], path)
+        question_slot = _build_question_slot(front_matter["questions"], path)
 
     return ListeningFormat(
         id=front_matter["id"],
@@ -103,7 +141,10 @@ def _build_format(front_matter: dict, guidance: str, path: Path) -> ListeningFor
         language=front_matter["language"],
         speakers=int(front_matter.get("speakers", 1)),
         answer_in_audio=bool(front_matter.get("answer_in_audio", False)),
+        grouping=grouping,
         item=slots,
+        passage_slot=passage_slot,
+        question_slot=question_slot,
         guidance=guidance,
         path=path,
     )
@@ -114,12 +155,43 @@ def _build_slot(raw: object, path: Path, index: int) -> ItemSlot:
         raise FormatError(f"{path}: item[{index}] に role がありません。")
     words = raw.get("words")
     if words is not None:
-        if not isinstance(words, list) or len(words) != 2:
-            raise FormatError(f"{path}: item[{index}] の words は [最小, 最大] で書いてください。")
-        words = (int(words[0]), int(words[1]))
+        words = _pair(words, path, f"item[{index}].words")
     return ItemSlot(
         role=str(raw["role"]),
         count=int(raw.get("count", 1)),
         words=words,
         pause=float(raw.get("pause", 0.5)),
     )
+
+
+def _build_passage_slot(raw: object, path: Path) -> PassageSlot:
+    if not isinstance(raw, dict):
+        raise FormatError(f"{path}: passage がマッピングではありません。")
+    for key in ("speakers", "turns", "words_per_turn"):
+        if key not in raw:
+            raise FormatError(f"{path}: passage.{key} がありません。")
+    return PassageSlot(
+        speakers=int(raw["speakers"]),
+        turns=_pair(raw["turns"], path, "passage.turns"),
+        words_per_turn=_pair(raw["words_per_turn"], path, "passage.words_per_turn"),
+    )
+
+
+def _build_question_slot(raw: object, path: Path) -> QuestionSlot:
+    if not isinstance(raw, dict):
+        raise FormatError(f"{path}: questions がマッピングではありません。")
+    for key in ("count", "words", "choice_count", "choice_words"):
+        if key not in raw:
+            raise FormatError(f"{path}: questions.{key} がありません。")
+    return QuestionSlot(
+        count=int(raw["count"]),
+        words=_pair(raw["words"], path, "questions.words"),
+        choice_count=int(raw["choice_count"]),
+        choice_words=_pair(raw["choice_words"], path, "questions.choice_words"),
+    )
+
+
+def _pair(value: object, path: Path, name: str) -> tuple[int, int]:
+    if not isinstance(value, list) or len(value) != 2:
+        raise FormatError(f"{path}: {name} は [最小, 最大] で書いてください。")
+    return (int(value[0]), int(value[1]))

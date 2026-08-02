@@ -22,15 +22,25 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from _data_repo import DataRepoError, commit_and_push, data_repo_path  # noqa: E402
 from academic_audio.engines import (  # noqa: E402
+    MultiSpeakerPiperEngine,
     PiperEngine,
     StyleBertVITS2Engine,
     TTSEngineError,
     WavEngine,
+    parse_speaker_map,
     select_engine,
 )
 from academic_audio.artifact import build_artifact, write_artifact  # noqa: E402
 from academic_audio.formats import FormatError, available_formats, load_format  # noqa: E402
-from academic_audio.items import ItemValidationError, load_result, to_answers, to_script  # noqa: E402
+from academic_audio.items import (  # noqa: E402
+    ItemValidationError,
+    load_passage_result,
+    load_result,
+    passage_to_answers,
+    passage_to_script,
+    to_answers,
+    to_script,
+)
 from academic_audio.jobs import default_state_dir, job_path, new_job_id, read_job, read_script, write_job  # noqa: E402
 from academic_audio.listening import create_listening_script  # noqa: E402
 from academic_audio.models import AudioJob  # noqa: E402
@@ -39,7 +49,7 @@ from academic_audio.renderer import render_script  # noqa: E402
 from academic_audio.source import AudioSourceError, resolve_source  # noqa: E402
 from academic_audio import vocab  # noqa: E402
 from academic_audio.vocab import VocabFetchError  # noqa: E402
-from academic_audio.worksheet import WorksheetError, build_pdf, render_tex  # noqa: E402
+from academic_audio.worksheet import WorksheetError, build_pdf, render_passage_tex, render_tex  # noqa: E402
 
 
 def _source_args(parser: argparse.ArgumentParser) -> None:
@@ -57,6 +67,11 @@ def _engine_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--piper-model", help="Path to a Piper voice model (.onnx). Required for the default piper invocation")
     parser.add_argument("--style-bert-command", help="Command template; supports {text}, {out}, {speaker}, {speed}, {language}")
     parser.add_argument("--style-bert-endpoint", help="HTTP endpoint that returns WAV bytes")
+    parser.add_argument(
+        "--piper-voice-map",
+        help='話者ごとに別の Piper 音声モデルを使う（会話形式向け）。例: "A=<voice1.onnx>,B=<voice2.onnx>,narrator=<voice1.onnx>"。'
+        "指定すると --engine / --mode より優先される",
+    )
 
 
 def _state_dir(args: argparse.Namespace) -> Path:
@@ -102,14 +117,18 @@ def _cmd_script_generate(args: argparse.Namespace) -> int:
 
 def _render_job(job: AudioJob, args: argparse.Namespace, *, force: bool = False) -> AudioJob:
     script = read_script(Path(job.script_path))
-    engine = select_engine(
-        job.engine,  # type: ignore[arg-type]
-        job.mode,  # type: ignore[arg-type]
-        piper_command=args.piper_command,
-        piper_model=args.piper_model,
-        style_bert_command=args.style_bert_command,
-        style_bert_endpoint=args.style_bert_endpoint,
-    )
+    voice_map_raw = getattr(args, "piper_voice_map", None)
+    if voice_map_raw:
+        engine = MultiSpeakerPiperEngine(parse_speaker_map(voice_map_raw))
+    else:
+        engine = select_engine(
+            job.engine,  # type: ignore[arg-type]
+            job.mode,  # type: ignore[arg-type]
+            piper_command=args.piper_command,
+            piper_model=args.piper_model,
+            style_bert_command=args.style_bert_command,
+            style_bert_endpoint=args.style_bert_endpoint,
+        )
     ok, reason = engine.available()
     if not ok:
         raise TTSEngineError(reason)
@@ -218,24 +237,45 @@ def _cmd_listening_request(args: argparse.Namespace) -> int:
     source = resolve_source(
         review_id=args.review_id, source_path=args.source, repo_root=args.repo_root, course=args.course
     )
+    format_payload = {
+        "id": listening_format.id,
+        "name": listening_format.name,
+        "language": listening_format.language,
+        "answer_in_audio": listening_format.answer_in_audio,
+        "grouping": listening_format.grouping,
+    }
+    instructions = [
+        "audio/prompts/listening.md の共通方針に従う",
+        f"{listening_format.path.relative_to(Path.cwd()) if listening_format.path.is_relative_to(Path.cwd()) else listening_format.path} の作問方針に従う",
+    ]
+    if listening_format.grouping == "flat":
+        format_payload["item"] = [
+            {"role": slot.role, "count": slot.count, "words": list(slot.words) if slot.words else None}
+            for slot in listening_format.item
+        ]
+        instructions.append(f"{args.count} 問を items 配列として書く。足りなければ減らしてよい")
+    else:
+        assert listening_format.passage_slot is not None and listening_format.question_slot is not None
+        format_payload["passage"] = {
+            "speakers": listening_format.passage_slot.speakers,
+            "turns": list(listening_format.passage_slot.turns),
+            "words_per_turn": list(listening_format.passage_slot.words_per_turn),
+        }
+        format_payload["questions"] = {
+            "count": listening_format.question_slot.count,
+            "words": list(listening_format.question_slot.words),
+            "choice_count": listening_format.question_slot.choice_count,
+            "choice_words": list(listening_format.question_slot.choice_words),
+        }
+        instructions.append(
+            f"{args.count} 組を items 配列として書く。各 item は passage（発話配列）と "
+            f"{listening_format.question_slot.count} 問の questions を持つ。足りなければ減らしてよい"
+        )
     payload = {
         "schema_version": 1,
         "prompt_version": PROMPT_VERSION,
-        "instructions": [
-            "audio/prompts/listening.md の共通方針に従う",
-            f"{listening_format.path.relative_to(Path.cwd()) if listening_format.path.is_relative_to(Path.cwd()) else listening_format.path} の作問方針に従う",
-            f"{args.count} 問を items 配列として書く。足りなければ減らしてよい",
-        ],
-        "format": {
-            "id": listening_format.id,
-            "name": listening_format.name,
-            "language": listening_format.language,
-            "answer_in_audio": listening_format.answer_in_audio,
-            "item": [
-                {"role": slot.role, "count": slot.count, "words": list(slot.words) if slot.words else None}
-                for slot in listening_format.item
-            ],
-        },
+        "instructions": instructions,
+        "format": format_payload,
         "count": args.count,
         "target": {
             "source_id": source.source_id,
@@ -266,22 +306,28 @@ def _cmd_listening_ingest(args: argparse.Namespace) -> int:
     持つのと同じ形で、生成した教材のソース（台本・解答・.tex）はそこに置く。
     """
     listening_format = load_format(args.format)
-    listening_set = load_result(args.file, listening_format)
-    script = to_script(listening_set, listening_format)
+    if listening_format.grouping == "passage":
+        item_set = load_passage_result(args.file, listening_format)
+        script = passage_to_script(item_set, listening_format)
+        answers_payload = passage_to_answers(item_set)
+        tex = render_passage_tex(item_set, listening_format)
+    else:
+        item_set = load_result(args.file, listening_format)
+        script = to_script(item_set, listening_format)
+        answers_payload = to_answers(item_set)
+        tex = render_tex(item_set, listening_format)
 
-    slug = new_job_id(f"{listening_set.source_id}-{listening_format.id}")
+    slug = new_job_id(f"{item_set.source_id}-{listening_format.id}")
     out_dir = args.out_dir or (data_repo_path() / "listening" / slug)
     out_dir.mkdir(parents=True, exist_ok=True)
     script_path, script_md = script.write(out_dir)
     answers_path = out_dir / "answers.json"
-    answers_path.write_text(
-        json.dumps(to_answers(listening_set), ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
-    )
+    answers_path.write_text(json.dumps(answers_payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     tex_path = out_dir / "worksheet.tex"
-    tex_path.write_text(render_tex(listening_set, listening_format), encoding="utf-8")
+    tex_path.write_text(tex, encoding="utf-8")
 
     result = {
-        "items": len(listening_set.items),
+        "items": len(item_set.items),
         "segments": len(script.segments),
         "dialogue_json": str(script_path),
         "dialogue_md": str(script_md),

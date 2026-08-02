@@ -11,7 +11,7 @@ import subprocess
 from pathlib import Path
 
 from .formats import ListeningFormat
-from .items import ListeningSet, _label
+from .items import ListeningSet, PassageSet, _label
 
 # 科目リポジトリと同じ lualatex を使う。日本語と英語が同居するので luatexja。
 _PREAMBLE = r"""\documentclass[a4paper,11pt]{ltjsarticle}
@@ -100,6 +100,64 @@ def _instructions(listening_format: ListeningFormat) -> str:
             r"(A)〜(C) から1つ選びなさい。音声に正解は含まれません。"
         )
     return "音声を聴いて設問に答えなさい。"
+
+
+def render_passage_tex(passage_set: PassageSet, listening_format: ListeningFormat) -> str:
+    """grouping: passage 用（TOEIC Part 3/4）。
+
+    設問ページには passage（会話・説明文）を出さない。聴いて答える形式なので、
+    印刷してしまうと聴解にならない。passage は解答ページ（スクリプト確認用）にだけ出す。
+    """
+    lines = [
+        _PREAMBLE,
+        r"\title{" + escape(passage_set.title) + "}",
+        r"\date{}",
+        r"\begin{document}",
+        r"\maketitle",
+        r"\section*{" + escape(listening_format.name) + "}",
+        "",
+        _passage_instructions(listening_format),
+        "",
+    ]
+
+    lines.append(r"\begin{enumerate}[label=\textbf{\arabic*.}]")
+    for item in passage_set.items:
+        for question in item.questions:
+            lines.append(r"  \item " + escape(question.text))
+            lines.append(r"    \begin{enumerate}[label=(\Alph*)]")
+            for choice in question.choices:
+                lines.append(r"      \item " + escape(choice))
+            lines.append(r"    \end{enumerate}")
+    lines.append(r"\end{enumerate}")
+
+    lines.extend(["", r"\clearpage", r"\section*{スクリプトと解答}", ""])
+    for item_number, item in enumerate(passage_set.items, start=1):
+        lines.append(r"\subsection*{問題 " + str(item_number) + "}")
+        lines.append(r"\begin{quote}\noindent")
+        for line in item.passage:
+            lines.append(escape(f"{line.speaker}: {line.text}") + r"\\")
+        lines.append(r"\end{quote}")
+        lines.append(r"\begin{enumerate}[label=\textbf{\arabic*.}]")
+        for question in item.questions:
+            lines.append(r"  \item \textbf{正解: " + escape(_label(question.answer_index) or "—") + "} " + escape(question.text))
+            for choice_index, choice in enumerate(question.choices):
+                marker = r"$\checkmark$ " if choice_index == question.answer_index else ""
+                lines.append(
+                    r"    \par\noindent\hspace{1em}(" + escape(_label(choice_index) or "") + ") "
+                    + marker + escape(choice)
+                )
+            lines.append(r"    \par\medskip\noindent " + escape(question.explanation))
+        lines.append(r"\end{enumerate}")
+    lines.append(r"\end{document}")
+    return "\n".join(lines) + "\n"
+
+
+def _passage_instructions(listening_format: ListeningFormat) -> str:
+    if listening_format.id.startswith("toeic-part3"):
+        return "音声で会話を聴き、続く3つの設問それぞれについて最も適切な答えを (A)〜(D) から選びなさい。"
+    if listening_format.id.startswith("toeic-part4"):
+        return "音声で説明文を聴き、続く3つの設問それぞれについて最も適切な答えを (A)〜(D) から選びなさい。"
+    return "音声を聴いて、続く設問に答えなさい。"
 
 
 def build_pdf(tex_path: Path) -> Path:

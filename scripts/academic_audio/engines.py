@@ -198,6 +198,50 @@ class StyleBertVITS2Engine(TTSEngine):
             raise TTSEngineError(str(error)) from error
 
 
+class MultiSpeakerPiperEngine(TTSEngine):
+    """Dispatch to a different Piper voice model per DialogueSegment.speaker.
+
+    TOEIC Part 3 の会話は複数話者を音で聴き分けられないと成立しない。Piper は
+    1回の起動につき1モデルしか使えないので、話者ラベルごとに別の PiperEngine を
+    内部に持ち、segment.speaker で振り分ける。
+    """
+
+    name = "piper"
+
+    def __init__(self, voice_map: dict[str, str]):
+        if not voice_map:
+            raise TTSEngineError('--piper-voice-map が必要です（例: "A=<voice1.onnx>,B=<voice2.onnx>,narrator=<voice1.onnx>"）')
+        self.voice_map = voice_map
+        self._engines = {speaker: PiperEngine(model=model) for speaker, model in voice_map.items()}
+
+    def available(self) -> tuple[bool, str]:
+        for speaker, engine in self._engines.items():
+            ok, reason = engine.available()
+            if not ok:
+                return False, f"speaker '{speaker}': {reason}"
+        return True, f"{len(self._engines)} 話者ぶんのモデルが揃っています: {', '.join(self.voice_map)}"
+
+    def render(self, segment: DialogueSegment, output_path: Path) -> None:
+        engine = self._engines.get(segment.speaker)
+        if engine is None:
+            raise TTSEngineError(
+                f"speaker '{segment.speaker}' のモデルが --piper-voice-map にありません"
+                f"（登録済み: {', '.join(self.voice_map)}）"
+            )
+        engine.render(segment, output_path)
+
+
+def parse_speaker_map(raw: str) -> dict[str, str]:
+    """Parse "A=path1,B=path2" into {"A": "path1", "B": "path2"}."""
+    mapping: dict[str, str] = {}
+    for pair in raw.split(","):
+        speaker, _, value = pair.partition("=")
+        if not speaker.strip() or not value.strip():
+            raise TTSEngineError(f"--piper-voice-map の書式が不正です: {pair!r}")
+        mapping[speaker.strip()] = value.strip()
+    return mapping
+
+
 def select_engine(
     engine: EngineName,
     mode: AudioMode,
