@@ -478,6 +478,71 @@ Style-Bert-VITS2 を自前で立てている場合は、WAV バイト列を返�
 `artifact.json` は issue #3 の Publisher への受け渡し。チャプターは `item_id` 単位で
 切るので、問題単位の教材ならそのまま「第1問」「第2問」の頭出しになる。
 
+### YouTube への投稿（issue #3, Publisher）
+
+音声ファイルは容量が大きいので Academic-Infra 側には置かない。動画化して YouTube へ
+**限定公開**で自動投稿し、video ID・URL・メタデータだけを手元に残す。
+
+```bash
+python3 scripts/academic_audio_cli.py --state-dir .academic-audio youtube doctor
+python3 scripts/academic_audio_cli.py --state-dir .academic-audio youtube publish <job-id> --dry-run
+python3 scripts/academic_audio_cli.py --state-dir .academic-audio youtube publish <job-id>
+python3 scripts/academic_audio_cli.py --state-dir .academic-audio youtube status <job-id>
+python3 scripts/academic_audio_cli.py --state-dir .academic-audio youtube resume <job-id>
+```
+
+`<job-id>` のジョブ配下に `artifact.json` がある必要がある（`generate` / `render` が作る）。
+流れは次の通り。
+
+```
+artifact.json (音声 + タイムライン + チャプター + hash)
+  ↓
+タイトル・説明文（チャプター付き）・タグを artifact から機械的に生成
+  ↓
+--dry-run で確認（動画化・投稿はしない）
+  ↓
+Pillow でタイトルカードの静止画を作り、ffmpeg で音声と結合して MP4 化
+  ↓
+audio_hash で重複投稿を確認（既に uploaded なら再アップロードしない。--force で上書き）
+  ↓
+YouTube Data API v3 でアップロード（限定公開が既定。--visibility で変更可）
+  ↓
+タイトルカードをサムネイルに設定 / --playlist-id が指定されていれば再生リストへ追加
+  ↓
+video ID・URL・hash を .academic-audio/publications/ に記録
+  ↓
+アップロード成功後、ローカルの動画ファイルを削除（--keep-video で残せる）
+```
+
+`--local` を付けると YouTube に触れず、動画化・重複判定・記録だけをローカルで確認できる
+（`LocalPublisher`）。認証を用意する前の動作確認や、テストに使う。
+
+アップロード中の 5xx エラーは自動でリトライする（指数バックオフ、最大5回）。
+それでも失敗した場合は動画ファイルをローカルに残し、`youtube resume <job-id>` で
+動画の作り直しなしに再送できる。
+
+#### セットアップ（初回のみ）
+
+Drive とは**別の OAuth クライアント**を使う（`scripts/_youtube_common.py` 参照。
+スコープが違うので分けている）。
+
+1. [Google Cloud Console](https://console.cloud.google.com/) でプロジェクトを開き、
+   **YouTube Data API v3** を有効化する。
+2. OAuth 同意画面を用意し（Drive と共用可）、認証情報 → **OAuth クライアント ID**
+   （アプリの種類: **デスクトップ**）を作成して JSON をダウンロードする。
+3. 投稿先チャンネルを持つ Google アカウントで認可する:
+
+   ```bash
+   python3 scripts/authorize_youtube.py --client-secret ~/Downloads/client_secret_XXX.json
+   ```
+
+   既定で `~/.academic-audio/youtube-secrets.env`（0600）に書き込まれる。
+   `YOUTUBE_OAUTH_CLIENT_ID` / `YOUTUBE_OAUTH_CLIENT_SECRET` / `YOUTUBE_OAUTH_REFRESH_TOKEN`
+   を環境変数で渡してもよい。
+
+未設定のまま `youtube publish`（`--local` 無し）を実行すると、何が足りないかを
+明示するエラーで止まる。
+
 ## テスト
 
 ```bash

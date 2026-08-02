@@ -9,3 +9,7 @@ style-bert-vits2==2.5.0
 numpy<2
 # 同じく pyopenjtalk-dict が pkg_resources を import する。setuptools 81 で削除された。
 setuptools<81
+# YouTube 投稿用の動画化（scripts/academic_audio/video.py）。タイトルカードの生成に使う。
+# ffmpeg が drawtext フィルタ(fontconfig)無しでビルドされていることが多いための代替。
+Pillow==11.1.0
+

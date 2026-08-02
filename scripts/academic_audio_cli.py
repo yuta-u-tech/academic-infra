@@ -9,6 +9,7 @@ Examples:
   python3 scripts/academic_audio_cli.py job status <job-id>
   python3 scripts/academic_audio_cli.py job resume <job-id>
   python3 scripts/academic_audio_cli.py listening generate --source english.md --speeds 0.8,1.0,1.2
+  python3 scripts/academic_audio_cli.py youtube publish <job-id> --dry-run
 """
 
 from __future__ import annotations
@@ -17,6 +18,7 @@ import argparse
 import json
 import re
 import sys
+from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -32,7 +34,7 @@ from academic_audio.engines import (  # noqa: E402
     parse_speaker_map,
     select_engine,
 )
-from academic_audio.artifact import build_artifact, write_artifact  # noqa: E402
+from academic_audio.artifact import build_artifact, read_artifact, write_artifact  # noqa: E402
 from academic_audio.formats import FormatError, available_formats, load_format  # noqa: E402
 from academic_audio.items import (  # noqa: E402
     ItemValidationError,
@@ -45,13 +47,18 @@ from academic_audio.items import (  # noqa: E402
 )
 from academic_audio.jobs import default_state_dir, job_path, new_job_id, read_job, read_script, write_job  # noqa: E402
 from academic_audio.listening import create_listening_script  # noqa: E402
+from academic_audio.metadata import describe as describe_video_metadata  # noqa: E402
 from academic_audio.models import AudioJob  # noqa: E402
 from academic_audio.planner import create_dialogue  # noqa: E402
+from academic_audio.publications import read_publication  # noqa: E402
+from academic_audio.publisher import DEFAULT_VISIBILITY, LocalPublisher, PublishError, YouTubePublisher  # noqa: E402
 from academic_audio.renderer import render_script  # noqa: E402
 from academic_audio.source import AudioSourceError, resolve_source  # noqa: E402
 from academic_audio import vocab  # noqa: E402
 from academic_audio.vocab import VocabFetchError  # noqa: E402
+from academic_audio.video import VideoError  # noqa: E402
 from academic_audio.worksheet import WorksheetError, build_pdf, render_passage_tex, render_tex  # noqa: E402
+from _youtube_common import YouTubeConfigError, resolve_credentials as resolve_youtube_credentials  # noqa: E402
 
 
 def _source_args(parser: argparse.ArgumentParser) -> None:
@@ -234,6 +241,68 @@ def _cmd_listening_publish(args: argparse.Namespace) -> int:
         {"drive_path": drive_path, "file_id": file_id, "url": f"https://drive.google.com/file/d/{file_id}/view"},
         ensure_ascii=False, indent=2))
     return 0
+
+
+def _build_publisher(args: argparse.Namespace):
+    if args.local:
+        return LocalPublisher(state_dir=_state_dir(args))
+    credentials = resolve_youtube_credentials()
+    return YouTubePublisher(
+        state_dir=_state_dir(args), credentials=credentials, visibility=args.visibility, playlist_id=args.playlist_id
+    )
+
+
+def _cmd_youtube_doctor(args: argparse.Namespace) -> int:
+    publisher = _build_publisher(args)
+    publisher.health_check()
+    print(json.dumps({"ok": True, "publisher": "local" if args.local else "youtube"}, ensure_ascii=False, indent=2))
+    return 0
+
+
+def _cmd_youtube_publish(args: argparse.Namespace) -> int:
+    """Turn a rendered job's audio into an MP4 and publish it (既定は限定公開)。
+
+    重複投稿防止: 同じ audio_hash が既に uploaded なら再アップロードしない（--force で上書き）。
+    """
+    job_dir = job_path(_state_dir(args), args.job_id)
+    artifact = read_artifact(job_dir)
+    publisher = _build_publisher(args)
+
+    if args.dry_run:
+        metadata = describe_video_metadata(artifact)
+        result = publisher.publish(artifact, dry_run=True)
+        print(json.dumps(
+            {**asdict(result), "preview": asdict(metadata), "duration": artifact.duration, "chapters": len(artifact.chapters)},
+            ensure_ascii=False, indent=2,
+        ))
+        return 0
+
+    try:
+        result = publisher.publish(artifact, force=args.force, keep_video=args.keep_video)
+    except PublishError as error:
+        print(json.dumps({"status": "failed", "error": str(error)}, ensure_ascii=False), file=sys.stderr)
+        return 1
+    print(json.dumps(asdict(result), ensure_ascii=False, indent=2))
+    return 0 if result.status in ("uploaded", "duplicate") else 1
+
+
+def _cmd_youtube_status(args: argparse.Namespace) -> int:
+    record = read_publication(_state_dir(args), args.publication_id)
+    payload = {"publication_id": record.publication_id, "status": record.status, "video_id": record.video_id, "url": record.url, "error": record.error}
+    print(json.dumps(payload, ensure_ascii=False, indent=2))
+    return 0 if record.status != "failed" else 2
+
+
+def _cmd_youtube_resume(args: argparse.Namespace) -> int:
+    credentials = resolve_youtube_credentials()
+    publisher = YouTubePublisher(state_dir=_state_dir(args), credentials=credentials)
+    try:
+        result = publisher.resume(args.publication_id, keep_video=args.keep_video)
+    except PublishError as error:
+        print(json.dumps({"status": "failed", "error": str(error)}, ensure_ascii=False), file=sys.stderr)
+        return 1
+    print(json.dumps(asdict(result), ensure_ascii=False, indent=2))
+    return 0 if result.status in ("uploaded", "duplicate") else 1
 
 
 def _cmd_listening_request(args: argparse.Namespace) -> int:
@@ -498,6 +567,34 @@ def main() -> int:
     listening_publish.add_argument("--dry-run", action="store_true")
     listening_publish.set_defaults(func=_cmd_listening_publish)
 
+    youtube = subparsers.add_parser("youtube", help="音声を動画化して YouTube へ投稿する（Issue #3）")
+    youtube_sub = youtube.add_subparsers(dest="youtube_command", required=True)
+
+    youtube_doctor = youtube_sub.add_parser("doctor", help="YouTube API に接続できるか確認する")
+    youtube_doctor.add_argument("--local", action="store_true", help="YouTube に接続せず LocalPublisher で確認する")
+    youtube_doctor.add_argument("--visibility", choices=["unlisted", "private", "public"], default=DEFAULT_VISIBILITY)
+    youtube_doctor.add_argument("--playlist-id")
+    youtube_doctor.set_defaults(func=_cmd_youtube_doctor)
+
+    youtube_publish = youtube_sub.add_parser("publish", help="ジョブの音声を動画化して投稿する")
+    youtube_publish.add_argument("job_id")
+    youtube_publish.add_argument("--visibility", choices=["unlisted", "private", "public"], default=DEFAULT_VISIBILITY, help="既定は限定公開")
+    youtube_publish.add_argument("--playlist-id", help="投稿後に追加する再生リストID")
+    youtube_publish.add_argument("--dry-run", action="store_true", help="動画化・投稿をせず、タイトル/説明文/タグの案だけ見る")
+    youtube_publish.add_argument("--force", action="store_true", help="同じ音声が投稿済みでも再投稿する")
+    youtube_publish.add_argument("--keep-video", action="store_true", help="投稿後もローカルの動画ファイルを消さない")
+    youtube_publish.add_argument("--local", action="store_true", help="YouTube に投稿せず、動画化だけローカルで確認する")
+    youtube_publish.set_defaults(func=_cmd_youtube_publish)
+
+    youtube_status = youtube_sub.add_parser("status", help="投稿状態を確認する")
+    youtube_status.add_argument("publication_id")
+    youtube_status.set_defaults(func=_cmd_youtube_status)
+
+    youtube_resume = youtube_sub.add_parser("resume", help="失敗した投稿をローカルの動画ファイルからやり直す")
+    youtube_resume.add_argument("publication_id")
+    youtube_resume.add_argument("--keep-video", action="store_true")
+    youtube_resume.set_defaults(func=_cmd_youtube_resume)
+
     args = parser.parse_args()
     try:
         return args.func(args)
@@ -506,9 +603,12 @@ def main() -> int:
         DataRepoError,
         FormatError,
         ItemValidationError,
+        PublishError,
         TTSEngineError,
+        VideoError,
         VocabFetchError,
         WorksheetError,
+        YouTubeConfigError,
         FileNotFoundError,
         json.JSONDecodeError,
         ValueError,

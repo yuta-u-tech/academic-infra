@@ -150,6 +150,20 @@ def write_artifact(artifact: AudioArtifact, job_dir: Path) -> Path:
     return path
 
 
+def read_artifact(job_dir: Path) -> AudioArtifact:
+    path = job_dir / "artifact.json"
+    if not path.exists():
+        raise FileNotFoundError(f"{path} がありません。先に generate / render で音声を作ってください。")
+    data = json.loads(path.read_text(encoding="utf-8"))
+    return AudioArtifact(
+        **{
+            **data,
+            "segments": [SegmentTiming(**segment) for segment in data.get("segments", [])],
+            "chapters": [Chapter(**chapter) for chapter in data.get("chapters", [])],
+        }
+    )
+
+
 def _wav_seconds(path: Path) -> float:
     with wave.open(str(path), "rb") as handle:
         return handle.getnframes() / handle.getframerate()
