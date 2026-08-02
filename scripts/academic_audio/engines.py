@@ -28,6 +28,16 @@ class TTSEngine:
     def render(self, segment: DialogueSegment, output_path: Path) -> None:
         raise NotImplementedError
 
+    def cache_identity(self, segment: DialogueSegment) -> str:
+        """Key used to dedupe rendered segment audio across runs.
+
+        既定は `self.name` だけ（例: "piper"）。これだけだと、同じ話者ラベルで
+        `--piper-voice-map` の中身（実際のモデル）を変えて再実行しても、前回と
+        同じキャッシュを再利用してしまい、新しいモデルの音声にならない
+        （実際に起きたバグ）。モデル/コマンドで音声が変わるエンジンは上書きする。
+        """
+        return self.name
+
 
 class WavEngine(TTSEngine):
     """Generate short valid WAV files without external dependencies."""
@@ -62,6 +72,9 @@ class CommandEngine(TTSEngine):
         if shutil.which(executable):
             return True, f"{executable} found"
         return False, f"{executable} is not installed"
+
+    def cache_identity(self, segment: DialogueSegment) -> str:
+        return f"{self.name}:{self.command_template}"
 
     def render(self, segment: DialogueSegment, output_path: Path) -> None:
         output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -109,6 +122,9 @@ class PiperEngine(CommandEngine):
                 return False, f"piper voice model not found: {self.model}"
             return True, f"piper found with model {self.model}"
         return ok, reason
+
+    def cache_identity(self, segment: DialogueSegment) -> str:
+        return f"{self.name}:{self.command_template}:{self.model or ''}"
 
     def model_language(self) -> str | None:
         """Return the voice model's language family (e.g. "en"), if the config is readable."""
@@ -170,6 +186,9 @@ class StyleBertVITS2Engine(TTSEngine):
             return True, f"endpoint configured: {self.endpoint}"
         return False, "configure --style-bert-command or --style-bert-endpoint"
 
+    def cache_identity(self, segment: DialogueSegment) -> str:
+        return f"{self.name}:{self.command_template or ''}:{self.endpoint or ''}"
+
     def render(self, segment: DialogueSegment, output_path: Path) -> None:
         output_path.parent.mkdir(parents=True, exist_ok=True)
         if self.command_template:
@@ -222,13 +241,20 @@ class MultiSpeakerPiperEngine(TTSEngine):
         return True, f"{len(self._engines)} 話者ぶんのモデルが揃っています: {', '.join(self.voice_map)}"
 
     def render(self, segment: DialogueSegment, output_path: Path) -> None:
+        engine = self._engine_for(segment)
+        engine.render(segment, output_path)
+
+    def cache_identity(self, segment: DialogueSegment) -> str:
+        return self._engine_for(segment).cache_identity(segment)
+
+    def _engine_for(self, segment: DialogueSegment) -> PiperEngine:
         engine = self._engines.get(segment.speaker)
         if engine is None:
             raise TTSEngineError(
                 f"speaker '{segment.speaker}' のモデルが --piper-voice-map にありません"
                 f"（登録済み: {', '.join(self.voice_map)}）"
             )
-        engine.render(segment, output_path)
+        return engine
 
 
 def parse_speaker_map(raw: str) -> dict[str, str]:

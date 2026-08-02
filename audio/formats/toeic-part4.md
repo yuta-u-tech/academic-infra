@@ -56,6 +56,12 @@ questions:
 - 各設問の前: `Number N.`（冊子側の通し番号と一致）
 - 各設問の後: 約8秒のマーク時間（ETS本番と同じ長さ）
 
+## 音声生成時の話者マッピング
+
+`render` に `--piper-voice-map "A=<voice1.onnx>,narrator=<voice2.onnx>"` を渡す。
+**`narrator`（設問を読む声）は `A`（説明文を話す声）と別のモデルにする。** 同じ声だと
+"Number N." や設問文が説明文の続きに聞こえてしまい、どこからが設問か判別できない。
+
 作問側（Claude）は `passage`（発話）と `questions`（設問文・選択肢・正解・解説）の
 本文だけを書けばよい。
 

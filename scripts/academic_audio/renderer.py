@@ -13,13 +13,13 @@ from .models import DialogueScript, DialogueSegment
 from .pronunciation import normalize
 
 
-def cache_key(segment: DialogueSegment, engine_name: str) -> str:
+def cache_key(segment: DialogueSegment, engine_identity: str) -> str:
     data = {
         "text": segment.text,
         "language": segment.language,
         "speaker": segment.speaker,
         "speed": segment.speed,
-        "engine": engine_name,
+        "engine": engine_identity,
         "emotion": segment.emotion,
     }
     encoded = json.dumps(data, ensure_ascii=False, sort_keys=True).encode("utf-8")
@@ -44,7 +44,7 @@ def render_script(
         normalized = DialogueSegment(
             **{**segment.__dict__, "text": normalize(segment.text)}
         )
-        cached = cache_dir / f"{cache_key(normalized, engine.name)}.wav"
+        cached = cache_dir / f"{cache_key(normalized, engine.cache_identity(normalized))}.wav"
         output = segments_dir / f"{segment.id}.wav"
         if cached.exists() and not force:
             shutil.copyfile(cached, output)

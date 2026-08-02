@@ -81,7 +81,9 @@ B: 合意・代案・懸念
 
 ## 音声生成時の話者マッピング
 
-`render` に `--piper-voice-map "A=<voice1.onnx>,B=<voice2.onnx>,narrator=<voice1.onnx>"`
-を渡す。`narrator` は設問を読む声（`A` と同じモデルでよい）。3人以上の会話は現状
+`render` に `--piper-voice-map "A=<voice1.onnx>,B=<voice2.onnx>,narrator=<voice3.onnx>"`
+を渡す。**`narrator` は `A`・`B` のどちらとも別のモデルにする。** 同じ声を使い回すと、
+"Number N." や設問文が会話の続きに聞こえてしまい、どこまでが会話でどこからが設問か
+判別できなくなる（実際にこの問題が起きて修正した）。3人以上の会話は現状
 未対応（`passage.speakers` は最大3だが、Piper の声質バリエーションが限られるため
 実運用は2人を基本にする）。

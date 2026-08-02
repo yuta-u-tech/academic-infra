@@ -196,6 +196,23 @@ def test_multi_speaker_engine_rejects_an_unmapped_speaker(tmp_path: Path) -> Non
         engine.render(segment, tmp_path / "out.wav")
 
 
+def test_multi_speaker_engine_cache_identity_differs_per_speaker_model(tmp_path: Path) -> None:
+    """再現テスト: narrator の声だけモデルを差し替えても、同じキャッシュキーのままだと
+    renderer.py が古い音声を再利用してしまう不具合があった（実際に起きた）。
+    speaker が違えばモデルが違う限りキャッシュキーも変わらないといけない。"""
+    from academic_audio.models import DialogueSegment
+
+    model_a = tmp_path / "a.onnx"
+    model_b = tmp_path / "b.onnx"
+    model_a.write_bytes(b"")
+    model_b.write_bytes(b"")
+    engine = MultiSpeakerPiperEngine({"A": str(model_a), "narrator": str(model_a)})
+    other_engine = MultiSpeakerPiperEngine({"A": str(model_a), "narrator": str(model_b)})
+    segment = DialogueSegment(id="seg-001", speaker="narrator", text="Number 1.")
+
+    assert engine.cache_identity(segment) != other_engine.cache_identity(segment)
+
+
 # --- CLI: request / ingest の grouping: passage 経路 -------------------------------------
 
 

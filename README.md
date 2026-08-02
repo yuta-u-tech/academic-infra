@@ -387,11 +387,14 @@ python3 scripts/academic_audio_cli.py listening ingest --file result.json --form
 python3 scripts/academic_audio_cli.py render \
   --script ~/academic-english-data/listening/<slug>/dialogue.json \
   --engine piper \
-  --piper-voice-map "A=.venv/piper-voices/en_US-lessac-medium.onnx,B=.venv/piper-voices/en_US-ryan-medium.onnx,narrator=.venv/piper-voices/en_US-lessac-medium.onnx"
+  --piper-voice-map "A=.venv/piper-voices/en_US-ryan-medium.onnx,B=.venv/piper-voices/en_US-lessac-medium.onnx,narrator=.venv/piper-voices/en_US-amy-medium.onnx"
 ```
 
-`narrator` は設問を読む声（話者の1人と同じモデルでよい）。Part 4（1人の説明文）は
-`--piper-voice-map` を使わず、通常の `--piper-model` 1本で足りる。
+`narrator`（"Number N." と設問を読む声）は **`A`・`B` のどちらとも別のモデルにする。**
+同じ声を使い回すと会話と設問の境目が聴き取れない（実際に発生し、修正済み）。
+Part 4（1人の説明文）も同じ理由で `--piper-voice-map "A=...,narrator=..."` を使い、
+`narrator` を `A` と別モデルにする。単一 `--piper-model` だけだと全セグメントが
+同じ声になり、設問がどこから始まるか分からなくなる。
 
 書き上げた `dialogue.json` は `render` にそのまま渡す。
 
@@ -410,6 +413,9 @@ python3 scripts/academic_audio_cli.py render \
 ```bash
 python3 -m pip install -r requirements-audio.txt
 python3 -m piper.download_voices en_US-lessac-medium --data-dir .venv/piper-voices
+# TOEIC Part 3/4（複数話者・話者+narrator）用に、互いに別モデルをもう2つ落としておく。
+python3 -m piper.download_voices en_US-ryan-medium --data-dir .venv/piper-voices
+python3 -m piper.download_voices en_US-amy-medium --data-dir .venv/piper-voices
 ```
 
 Piper 1.x は音声モデルが必須なので、`--piper-model <voice.onnx>` を渡す。渡さない場合は
