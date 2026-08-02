@@ -129,18 +129,15 @@ def test_answers_carry_the_label_and_text(tmp_path: Path, toeic: ListeningFormat
     assert answers["items"][0]["answer_text"] == "By the end of this afternoon."
 
 
-def test_worksheet_prints_the_question_but_not_the_choices_on_the_question_page(
+def test_worksheet_keeps_the_question_page_blank_like_the_real_exam(
     tmp_path: Path, toeic: ListeningFormat
 ) -> None:
     tex = render_tex(load_result(_write(tmp_path, _result()), toeic), toeic)
 
     questions, _, answers = tex.partition(r"\section*{解答と解説}")
-    # 質問文は印刷してよい（音声の冒頭で読まれるだけで、正解の手がかりにはならない）。
-    # 復習用に、聴き取れなくても内容を確認できるようにする。
-    assert "When will you finish checking" in questions
+    # 本番の Part 2 は冊子に何も印刷されない（質問文も選択肢も音声のみ、ETS公式仕様）。
+    assert "When will you finish checking" not in questions
     assert "When will you finish checking" in answers
-    # 本番同様、応答(A)(B)(C)は音声でのみ読まれる（answer_in_audio: true）。
-    # 冊子の設問ページには印刷しない。答え合わせページにだけ出す。
     assert "By the end of this afternoon." not in questions
     assert "By the end of this afternoon." in answers
 

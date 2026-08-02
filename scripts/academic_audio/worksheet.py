@@ -70,15 +70,12 @@ def render_tex(listening_set: ListeningSet, listening_format: ListeningFormat, y
 
     lines.append(r"\begin{enumerate}[label=\textbf{\arabic*.}]")
     for item in listening_set.items:
+        lines.append(r"  \item")
         if listening_format.answer_in_audio:
-            # 選択肢を音声で読む形式では、冊子に選択肢を書かない（先に読まれてしまう）。
-            # 質問文（音声の冒頭で読まれるだけの文）は復習用に印刷してよい —
-            # 選択肢と違って、印刷しても正解の手がかりにはならない。
-            question_text = item.parts_with_role("question")[0].text if item.parts_with_role("question") else ""
-            lines.append(r"  \item " + escape(question_text))
-            lines.append(r"    \hfill (A) \hspace{2em} (B) \hspace{2em} (C)")
+            # 本番の Part 2 は冊子に何も印刷されない（質問文も選択肢も音声のみ）。
+            # それに合わせ、設問ページは空欄にする。
+            lines.append(r"    \hfill")
         else:
-            lines.append(r"  \item")
             lines.append(r"    \begin{enumerate}[label=(\Alph*)]")
             for choice in item.parts_with_role("choice"):
                 lines.append(r"      \item " + escape(choice.text))
