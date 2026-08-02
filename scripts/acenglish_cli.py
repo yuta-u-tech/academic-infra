@@ -22,10 +22,12 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+from _data_repo import DataRepoError, commit_and_push, data_repo_path  # noqa: E402
 from acenglish import fetch, generate, notes, promote  # noqa: E402
 from acenglish.api import DEFAULT_HOST, DEFAULT_PORT, NonLoopbackBindError  # noqa: E402
 from acenglish.db import backup, connect, database_path  # noqa: E402
@@ -132,7 +134,16 @@ def _cmd_serve(args: argparse.Namespace) -> int:
 
 
 def _cmd_backup(args: argparse.Namespace) -> int:
-    print(f"バックアップ: {backup(args.out, args.db)}")
+    out = args.out or (data_repo_path() / "backups" / f"english-{datetime.now(timezone.utc):%Y%m%dT%H%M%SZ}.db")
+    snapshot = backup(out, args.db)
+    print(f"バックアップ: {snapshot}")
+    if args.push:
+        try:
+            pushed = commit_and_push(data_repo_path(), [snapshot], f"backup: {snapshot.name}")
+        except DataRepoError as error:
+            print(f"push できませんでした: {error}", file=sys.stderr)
+            return 1
+        print("push: 完了" if pushed else "push: 差分なし")
     return 0
 
 
@@ -233,7 +244,8 @@ def main() -> int:
     serve.set_defaults(func=_cmd_serve)
 
     backup_parser = subparsers.add_parser("backup", help="SQLiteのスナップショットを取る")
-    backup_parser.add_argument("--out", type=Path, required=True)
+    backup_parser.add_argument("--out", type=Path, help="既定: academic-english-data/backups/english-<UTC>.db")
+    backup_parser.add_argument("--push", action="store_true", help="取った後 academic-english-data へ commit + push する")
     backup_parser.set_defaults(func=_cmd_backup)
 
     schema = subparsers.add_parser("schema", help="JSON Schema を書き出す")

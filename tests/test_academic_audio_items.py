@@ -219,3 +219,40 @@ def test_cli_ingest_rejects_a_broken_result(tmp_path: Path) -> None:
 
     assert result.returncode == 1
     assert "範囲外" in result.stderr
+
+
+def test_cli_ingest_defaults_into_the_data_repo(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("ACADEMIC_ENGLISH_DATA_REPO", str(tmp_path / "data-repo"))
+    path = _write(tmp_path, _result())
+
+    result = run_cli("listening", "ingest", "--file", str(path), "--format", "toeic-part2", "--no-pdf")
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    # 科目リポジトリと同じ形: コード(academic-infra)は生成物を書き出す先を
+    # academic-english-data(正本)にデフォルトで向ける。
+    assert str(tmp_path / "data-repo" / "listening") in payload["dialogue_json"]
+
+
+def test_cli_listening_publish_dry_run_needs_no_credentials(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.delenv("GDRIVE_OAUTH_CLIENT_ID", raising=False)
+    set_dir = tmp_path / "set"
+    set_dir.mkdir()
+    (set_dir / "worksheet.pdf").write_bytes(b"%PDF-fake")
+    (set_dir / "answers.json").write_text(json.dumps({"format": "toeic-part2"}), encoding="utf-8")
+
+    result = run_cli("listening", "publish", "--set-dir", str(set_dir), "--dry-run")
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["drive_path"] == "英語リスニング/toeic-part2/set.pdf"
+
+
+def test_cli_listening_publish_requires_the_worksheet(tmp_path: Path) -> None:
+    set_dir = tmp_path / "set"
+    set_dir.mkdir()
+
+    result = run_cli("listening", "publish", "--set-dir", str(set_dir), "--dry-run")
+
+    assert result.returncode == 1
+    assert "worksheet.pdf" in result.stderr

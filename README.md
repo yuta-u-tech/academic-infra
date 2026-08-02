@@ -283,8 +283,9 @@ TTS エンジンは共通インターフェースで扱う。`--engine` は
 
 ### 試験形式ごとの作問フロー
 
-音声だけでは学習が完結しないので、設問・正解・解説を組んだ問題冊子（PDF）も併産し、
-Drive の科目フォルダへ上げる。
+音声だけでは学習が完結しないので、設問・正解・解説を組んだ問題冊子（PDF）も併産する。
+コード（このリポジトリ、public）と生成した教材（`academic-english-data`、private）は別物として扱う。
+科目リポジトリが TeX ソースの正本を持ち、academic-infra はビルド・配布ロジックだけを持つのと同じ形。
 
 ```bash
 # 1. 依頼を出す（件数と形式は呼び出し側が決める）
@@ -295,28 +296,37 @@ python3 scripts/academic_audio_cli.py listening request \
 # 2. Claude が audio/prompts/listening.md と audio/formats/toeic-part2.md に従って
 #    items 配列を書く（result.json）
 
-# 3. 検証して台本・解答・問題冊子を導出する
+# 3. 検証して台本・解答・問題冊子を導出する。既定の出力先は academic-english-data/listening/<slug>
+#    --push で commit + push まで行う
 python3 scripts/academic_audio_cli.py listening ingest \
-  --file result.json --format toeic-part2 --out-dir sets/logic-ch01-toeic
+  --file result.json --format toeic-part2 --push
 
 # 4. 音声化
 python3 scripts/academic_audio_cli.py render \
-  --script sets/logic-ch01-toeic/dialogue.json \
+  --script ~/academic-english-data/listening/<slug>/dialogue.json \
   --engine piper --piper-model .venv/piper-voices/en_US-lessac-medium.onnx
 
-# 5. 問題冊子を Drive へ（--dry-run で投稿先を確認できる）
+# 5. 問題冊子を Drive へ。科目フォルダの下ではなく「英語リスニング/<形式>/」に出す
+#    （--dry-run で投稿先を確認できる）
 python3 scripts/academic_audio_cli.py listening publish \
-  --set-dir sets/logic-ch01-toeic --course logic
+  --set-dir ~/academic-english-data/listening/<slug>
 ```
 
 `ingest` が形式定義と突き合わせて検証するので、選択肢の数・語数・`answer_index` の
 範囲は目視で確かめなくてよい。`items` から次を機械的に導く。
 
-| ファイル | 用途 |
-|---|---|
-| `dialogue.json` | 音声用の台本。各発話が `item_id` と `role` を持つ |
-| `answers.json` | 正解・解説 |
-| `worksheet.tex` / `.pdf` | 問題冊子。設問ページには選択肢だけ出し、質問文は解答ページに置く |
+| ファイル | 用途 | 置き場所 |
+|---|---|---|
+| `dialogue.json` / `.md` | 音声用の台本。各発話が `item_id` と `role` を持つ | academic-english-data（正本） |
+| `answers.json` | 正解・解説 | academic-english-data（正本） |
+| `worksheet.tex` | 問題冊子のソース | academic-english-data（正本） |
+| `worksheet.pdf` | 組版済み。`.tex` から再現できるので正本には置かない | Drive（配布） |
+| `output.wav` | 音声。容量が大きいので正本には置かない | ローカル一時 / issue #3 の Publisher |
+
+`~/academic-english-data`（[リポジトリ](https://github.com/yuta-u-tech/academic-english-data)）が
+無い場合は先に `git clone` する。場所を変えたい場合は `ACADEMIC_ENGLISH_DATA_REPO` で上書きできる。
+`acenglish_cli.py backup --push` も同じ仕組みで、語彙・学習履歴（`~/.academic-english/english.db`）の
+スナップショットをそこへ commit する。
 
 新しい試験形式を足すときは `audio/formats/<id>.md` を 1 枚追加するだけ。コードは触らない。
 

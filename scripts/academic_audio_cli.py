@@ -20,6 +20,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+from _data_repo import DataRepoError, commit_and_push, data_repo_path  # noqa: E402
 from academic_audio.engines import (  # noqa: E402
     PiperEngine,
     StyleBertVITS2Engine,
@@ -161,13 +162,16 @@ def _cmd_generate(args: argparse.Namespace) -> int:
 
 
 PROMPT_VERSION = "2026-08-02.1"
-# Drive の科目フォルダ直下。sections/ と同じ階層に置く。
-DRIVE_SUBFOLDER = "Listening"
+# 科目フォルダの下ではなく、Academic Materials 直下の独立フォルダに出す。
+DEFAULT_DRIVE_FOLDER_NAME = "英語リスニング"
 
 
 def _cmd_listening_publish(args: argparse.Namespace) -> int:
-    """Upload the worksheet PDF to Drive, next to the course materials.
+    """Upload the worksheet PDF to Drive, in its own space — not nested under a course.
 
+    リスニング教材は特定の科目に従属しない（内容がある科目のセクションに由来していても、
+    英語運用の練習という別の科目である）。academic-english-data がコンテンツの正本を
+    持つのに合わせて、Drive 側も科目フォルダとは別の場所へ出す。
     音声そのものは容量が大きいので上げない。配信は Issue #3 の Publisher が担う。
     """
     import _drive_common
@@ -176,26 +180,33 @@ def _cmd_listening_publish(args: argparse.Namespace) -> int:
     if not worksheet.exists():
         raise FileNotFoundError(f"{worksheet} がありません。先に listening ingest を実行してください。")
 
-    course = _drive_common.resolve_course(args.course)
+    answers_path = args.set_dir / "answers.json"
+    format_id = None
+    if answers_path.exists():
+        format_id = json.loads(answers_path.read_text(encoding="utf-8")).get("format")
+
+    drive_name = args.name or f"{args.set_dir.name}.pdf"
+    folder_names = [args.folder_name, *([format_id] if format_id else [])]
+    drive_path = "/".join([*folder_names, drive_name])
+
+    if args.dry_run:
+        # 認証情報が無くても投稿先は確認できるべきなので、ここでは要求しない。
+        print(json.dumps({"dry_run": True, "drive_path": drive_path, "local": str(worksheet)}, ensure_ascii=False, indent=2))
+        return 0
+
     credentials = _drive_common.resolve_credentials()
     parent_id = args.parent_id or credentials.get("GDRIVE_PARENT_FOLDER_ID", "")
     if not parent_id:
         raise ValueError("--parent-id か GDRIVE_PARENT_FOLDER_ID が必要です。")
 
-    drive_name = args.name or f"{args.set_dir.name}.pdf"
-    if args.dry_run:
-        print(json.dumps(
-            {"dry_run": True, "drive_path": f"{course.drive_folder}/{DRIVE_SUBFOLDER}/{drive_name}",
-             "local": str(worksheet)}, ensure_ascii=False, indent=2))
-        return 0
-
     service = _drive_common.build_service(credentials)
-    course_folder = _drive_common.ensure_folder(service, parent_id, course.drive_folder)
-    listening_folder = _drive_common.ensure_folder(service, course_folder, DRIVE_SUBFOLDER)
-    file_id = _drive_common.upload_file(service, listening_folder, worksheet, "application/pdf", name=drive_name)
+    folder_id = parent_id
+    for name in folder_names:
+        folder_id = _drive_common.ensure_folder(service, folder_id, name)
+    file_id = _drive_common.upload_file(service, folder_id, worksheet, "application/pdf", name=drive_name)
     print(json.dumps(
-        {"drive_path": f"{course.drive_folder}/{DRIVE_SUBFOLDER}/{drive_name}", "file_id": file_id,
-         "url": f"https://drive.google.com/file/d/{file_id}/view"}, ensure_ascii=False, indent=2))
+        {"drive_path": drive_path, "file_id": file_id, "url": f"https://drive.google.com/file/d/{file_id}/view"},
+        ensure_ascii=False, indent=2))
     return 0
 
 
@@ -240,12 +251,17 @@ def _cmd_listening_request(args: argparse.Namespace) -> int:
 
 
 def _cmd_listening_ingest(args: argparse.Namespace) -> int:
-    """Validate Claude's items, then derive the script, the answer key and the worksheet."""
+    """Validate Claude's items, then derive the script, the answer key and the worksheet.
+
+    出力先の既定は academic-english-data（正本）。科目リポジトリが TeX ソースの正本を
+    持つのと同じ形で、生成した教材のソース（台本・解答・.tex）はそこに置く。
+    """
     listening_format = load_format(args.format)
     listening_set = load_result(args.file, listening_format)
     script = to_script(listening_set, listening_format)
 
-    out_dir = args.out_dir or (_state_dir(args) / "sets" / new_job_id(f"{listening_set.source_id}-{listening_format.id}"))
+    slug = new_job_id(f"{listening_set.source_id}-{listening_format.id}")
+    out_dir = args.out_dir or (data_repo_path() / "listening" / slug)
     out_dir.mkdir(parents=True, exist_ok=True)
     script_path, script_md = script.write(out_dir)
     answers_path = out_dir / "answers.json"
@@ -264,7 +280,17 @@ def _cmd_listening_ingest(args: argparse.Namespace) -> int:
         "worksheet_tex": str(tex_path),
     }
     if not args.no_pdf:
+        # PDF は academic-english-data の .gitignore で除外している。正本は .tex から再現できる形。
         result["worksheet_pdf"] = str(build_pdf(tex_path))
+    if args.push:
+        try:
+            pushed = commit_and_push(
+                data_repo_path(), [script_path, script_md, answers_path, tex_path], f"listening: {slug}"
+            )
+        except DataRepoError as error:
+            print(f"push できませんでした: {error}", file=sys.stderr)
+            return 1
+        result["pushed"] = pushed
     print(json.dumps(result, ensure_ascii=False, indent=2))
     return 0
 
@@ -397,13 +423,14 @@ def main() -> int:
     listening_ingest = listening_sub.add_parser("ingest", help="作問結果を検証して台本・解答・問題冊子を出す")
     listening_ingest.add_argument("--file", type=Path, required=True)
     listening_ingest.add_argument("--format", required=True)
-    listening_ingest.add_argument("--out-dir", type=Path)
+    listening_ingest.add_argument("--out-dir", type=Path, help="既定: academic-english-data/listening/<slug>")
     listening_ingest.add_argument("--no-pdf", action="store_true", help="TeX まで出して組版しない")
+    listening_ingest.add_argument("--push", action="store_true", help="出力を academic-english-data へ commit + push する")
     listening_ingest.set_defaults(func=_cmd_listening_ingest)
 
     listening_publish = listening_sub.add_parser("publish", help="問題冊子PDFを Drive の科目フォルダへ上げる")
     listening_publish.add_argument("--set-dir", type=Path, required=True, help="listening ingest の出力先")
-    listening_publish.add_argument("--course", required=True, help="courses.yml のキー")
+    listening_publish.add_argument("--folder-name", default=DEFAULT_DRIVE_FOLDER_NAME, help="Drive 上のトップフォルダ名")
     listening_publish.add_argument("--name", help="Drive 上のファイル名（既定: <set-dir名>.pdf）")
     listening_publish.add_argument("--parent-id", help="Academic Materials のフォルダID")
     listening_publish.add_argument("--dry-run", action="store_true")
@@ -414,6 +441,7 @@ def main() -> int:
         return args.func(args)
     except (
         AudioSourceError,
+        DataRepoError,
         FormatError,
         ItemValidationError,
         TTSEngineError,

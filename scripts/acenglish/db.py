@@ -5,7 +5,9 @@
 そもそもリポジトリの外に出しておく。
 
 Drive 同期フォルダ上では稼働させない（SQLite のロックがネットワーク同期と噛み合わない）。
-バックアップは `backup()` が `sqlite3 .backup` 相当のスナップショットを取る。
+バックアップは `backup()` が `sqlite3 .backup` 相当のスナップショットを取り、
+`acenglish_cli.py backup --push` で private な `academic-english-data` リポジトリへ
+commit する（正本はそちら。ここは運用中の実体が置いてあるだけ）。
 """
 
 from __future__ import annotations
