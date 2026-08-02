@@ -53,8 +53,8 @@ questions:
 `items.py: passage_to_script()` が本番同様の進行を自動で付与する。
 
 - 説明文の前: `Questions N through M refer to the following talk.`
-- 各設問の前: `Number N.`（冊子側の通し番号と一致）
-- 各設問の後: 約8秒のマーク時間（ETS本番と同じ長さ）
+- 各設問: `Number N.` と設問文を1回の発話にまとめて読む（冊子側の通し番号と一致）
+- 各設問の後: 約8秒のマーク時間（ETS本番と同じ長さ。「本当に尋ねている」間も兼ねる）
 
 ## 音声生成時の話者マッピング
 

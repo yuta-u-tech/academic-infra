@@ -111,11 +111,13 @@ def test_invalid_result_says_what_is_wrong(tmp_path: Path, toeic: ListeningForma
 def test_items_become_segments_with_item_id_and_role(tmp_path: Path, toeic: ListeningFormat) -> None:
     script = to_script(load_result(_write(tmp_path, _result()), toeic), toeic)
 
-    # "Number 1." の通し番号読み上げが先頭に付く（本番の Part 2 と同じ進行）。
-    assert [segment.role for segment in script.segments] == ["number", "question", "choice", "choice", "choice"]
+    # "Number 1." は質問文と同じ発話にまとめる（別々に合成すると機械的な読み方になるため）。
+    assert [segment.role for segment in script.segments] == ["question", "choice", "choice", "choice"]
+    assert script.segments[0].text == "Number 1. When will you finish checking the truth table?"
     assert all(segment.item_id == "item-001" for segment in script.segments)
     assert all(segment.language == "en" for segment in script.segments)
-    # 最後の選択肢だけ次の問題までのマーク時間（5秒）を空ける。
+    # 疑問文の後は「本当に尋ねている」間(1.2秒)、最後の選択肢だけ次の問題までのマーク時間(5秒)。
+    assert script.segments[0].pause == 1.2
     choice_segments = [s for s in script.segments if s.role == "choice"]
     assert [s.pause for s in choice_segments] == [1.0, 1.0, 5.0]
 
@@ -127,12 +129,15 @@ def test_answers_carry_the_label_and_text(tmp_path: Path, toeic: ListeningFormat
     assert answers["items"][0]["answer_text"] == "By the end of this afternoon."
 
 
-def test_worksheet_keeps_the_answer_out_of_the_question_page(tmp_path: Path, toeic: ListeningFormat) -> None:
+def test_worksheet_prints_the_question_but_not_the_choices_on_the_question_page(
+    tmp_path: Path, toeic: ListeningFormat
+) -> None:
     tex = render_tex(load_result(_write(tmp_path, _result()), toeic), toeic)
 
     questions, _, answers = tex.partition(r"\section*{解答と解説}")
-    # 設問ページに質問文（＝音声で読まれる文）を出さない。読んでしまえば聴解にならない。
-    assert "When will you finish checking" not in questions
+    # 質問文は印刷してよい（音声の冒頭で読まれるだけで、正解の手がかりにはならない）。
+    # 復習用に、聴き取れなくても内容を確認できるようにする。
+    assert "When will you finish checking" in questions
     assert "When will you finish checking" in answers
     # 本番同様、応答(A)(B)(C)は音声でのみ読まれる（answer_in_audio: true）。
     # 冊子の設問ページには印刷しない。答え合わせページにだけ出す。
@@ -226,7 +231,7 @@ def test_cli_ingest_writes_script_answers_and_tex(tmp_path: Path) -> None:
 
     assert result.returncode == 0, result.stderr
     payload = json.loads(result.stdout)
-    assert payload["items"] == 1 and payload["segments"] == 5  # Number 1. + question + choice×3
+    assert payload["items"] == 1 and payload["segments"] == 4  # "Number 1. question" + choice×3
     assert (out_dir / "dialogue.json").exists()
     assert (out_dir / "answers.json").exists()
     assert (out_dir / "worksheet.tex").exists()

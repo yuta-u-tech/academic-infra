@@ -156,7 +156,7 @@ def _validate_answer(raw: dict, where: str, parts: list[ItemPart], listening_for
 
 
 # 実際の ETS 音源のペーシングに合わせる（Part 2 は選択肢間 約1秒、次の問題まで 約5秒）。
-_PART2_NUMBER_ANNOUNCE_PAUSE = 0.3
+_PART2_QUESTION_PAUSE = 1.2  # 疑問文の後は「本当に尋ねている」間を置く（応答の一つ一つより少し長め）
 _PART2_CHOICE_PAUSE = 1.0
 _PART2_ANSWER_WINDOW = 5.0
 
@@ -164,45 +164,44 @@ _PART2_ANSWER_WINDOW = 5.0
 def to_script(listening_set: ListeningSet, listening_format: ListeningFormat) -> DialogueScript:
     """Flatten items into the segment list the renderer consumes.
 
-    本番の Part 2 は "Number 7." のような通し番号の読み上げから始まり、3つの応答を
-    そのまま読み上げる（選択肢は冊子に印刷されない）。選択肢間は短い間、最後の選択肢の
-    後だけ次の問題までのマーク時間（約5秒）を空ける。
+    "Number 7." と質問文は同じ人が続けて話す一息の発話なので、TTS も1回の合成にまとめる
+    （別々に合成して無音でつなぐと、単文を機械的に貼り合わせたような読み方になる）。
+    質問文の後だけ、聞き手に「本当に尋ねている」と感じさせる間を置いてから応答に移る。
+    応答（choice）どうしは短い間、最後の応答の後だけ次の問題までのマーク時間（約5秒）。
     """
     segments: list[DialogueSegment] = []
     for item_index, item in enumerate(listening_set.items, start=1):
+        question_text = item.parts_with_role("question")[0].text
         segments.append(
             DialogueSegment(
                 id=f"seg-{len(segments) + 1:03d}",
                 speaker="narrator",
-                text=f"Number {item_index}.",
+                text=f"Number {item_index}. {question_text}",
                 language=listening_format.language,
                 emotion="Neutral",
                 speed=1.0,
-                pause=_PART2_NUMBER_ANNOUNCE_PAUSE,
+                pause=_PART2_QUESTION_PAUSE,
                 source_section=listening_set.source_id,
                 item_id=item.item_id,
-                role="number",
+                role="question",
             )
         )
-        for part_index, part in enumerate(item.parts):
-            is_last_part = part_index == len(item.parts) - 1
-            if part.role == "choice":
-                pause = _PART2_ANSWER_WINDOW if is_last_part else _PART2_CHOICE_PAUSE
-            else:
-                slot = listening_format.slot_for(part.role)
-                pause = slot.pause if slot else 0.5
+        choices = item.parts_with_role("choice")
+        for choice_index, choice in enumerate(choices):
+            is_last_choice = choice_index == len(choices) - 1
+            pause = _PART2_ANSWER_WINDOW if is_last_choice else _PART2_CHOICE_PAUSE
             segments.append(
                 DialogueSegment(
                     id=f"seg-{len(segments) + 1:03d}",
                     speaker="narrator",
-                    text=part.text,
+                    text=choice.text,
                     language=listening_format.language,
                     emotion="Neutral",
                     speed=1.0,
                     pause=pause,
                     source_section=listening_set.source_id,
                     item_id=item.item_id,
-                    role=part.role,
+                    role="choice",
                 )
             )
     return DialogueScript(
@@ -405,7 +404,6 @@ def _build_passage_question(raw: Any, where: str, q_index: int, question_slot: Q
 # 各設問の前に "Number N."。設問の後は答えをマークする時間として約8秒空く。
 _PASSAGE_INTRO_PAUSE = 0.5
 _PASSAGE_LINE_PAUSE = 0.4
-_QUESTION_NUMBER_ANNOUNCE_PAUSE = 0.3
 _QUESTION_ANSWER_WINDOW = 8.0
 
 
@@ -454,25 +452,14 @@ def passage_to_script(passage_set: PassageSet, listening_format: ListeningFormat
             )
         for question in item.questions:
             question_number += 1
+            # "Number N." と設問文は同じ narrator が続けて話す一息の発話なので、TTS も
+            # 1回の合成にまとめる（別々に合成して無音でつなぐと機械的な読み方になる）。
+            # 設問の後の8秒はマーク時間そのもの＝「本当に尋ねている」間として十分機能する。
             segments.append(
                 DialogueSegment(
                     id=f"seg-{len(segments) + 1:03d}",
                     speaker="narrator",
-                    text=f"Number {question_number}.",
-                    language=listening_format.language,
-                    emotion="Neutral",
-                    speed=1.0,
-                    pause=_QUESTION_NUMBER_ANNOUNCE_PAUSE,
-                    source_section=passage_set.source_id,
-                    item_id=item.item_id,
-                    role="number",
-                )
-            )
-            segments.append(
-                DialogueSegment(
-                    id=f"seg-{len(segments) + 1:03d}",
-                    speaker="narrator",
-                    text=question.text,
+                    text=f"Number {question_number}. {question.text}",
                     language=listening_format.language,
                     emotion="Neutral",
                     speed=1.0,
