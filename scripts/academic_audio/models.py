@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, fields
 from pathlib import Path
 from typing import Any, Literal
 
@@ -36,6 +36,28 @@ class DialogueSegment:
     source_section: str | None = None
 
 
+_SEGMENT_FIELDS = {field_.name for field_ in fields(DialogueSegment)}
+_REQUIRED_SEGMENT_FIELDS = ("id", "speaker", "text")
+
+
+def _segment_from_json_dict(raw: Any, index: int) -> DialogueSegment:
+    if not isinstance(raw, dict):
+        raise ValueError(f"segments[{index}] がオブジェクトではありません。")
+    unknown = sorted(set(raw) - _SEGMENT_FIELDS)
+    if unknown:
+        raise ValueError(
+            f"segments[{index}] に未知のフィールドがあります: {', '.join(unknown)}"
+            f"（使えるのは {', '.join(sorted(_SEGMENT_FIELDS))}）"
+        )
+    missing = [key for key in _REQUIRED_SEGMENT_FIELDS if not raw.get(key)]
+    if missing:
+        raise ValueError(f"segments[{index}] に {', '.join(missing)} がありません。")
+    try:
+        return DialogueSegment(**raw)
+    except TypeError as error:  # 型が違う場合（speed に文字列など）
+        raise ValueError(f"segments[{index}]: {error}") from error
+
+
 @dataclass(frozen=True)
 class DialogueScript:
     title: str
@@ -48,11 +70,31 @@ class DialogueScript:
 
     @classmethod
     def from_json_dict(cls, data: dict[str, Any]) -> "DialogueScript":
+        """Build a script from JSON.
+
+        `audio/prompts/*.md` に従って人手や Claude が書いた dialogue.json も通るため、
+        壊れた入力は TypeError ではなく、どこが悪いか分かる ValueError で落とす。
+        """
+        for key in ("title", "source_id"):
+            if not data.get(key):
+                raise ValueError(f"dialogue.json に {key} がありません。")
+        raw_segments = data.get("segments") or []
+        if not raw_segments:
+            raise ValueError("dialogue.json の segments が空です。")
+
+        segments: list[DialogueSegment] = []
+        seen_ids: set[str] = set()
+        for index, raw in enumerate(raw_segments, start=1):
+            segments.append(_segment_from_json_dict(raw, index))
+            if segments[-1].id in seen_ids:
+                raise ValueError(f"segments[{index}]: id '{segments[-1].id}' が重複しています。")
+            seen_ids.add(segments[-1].id)
+
         return cls(
             title=data["title"],
             source_id=data["source_id"],
             source_commit=data.get("source_commit", "unknown"),
-            segments=[DialogueSegment(**segment) for segment in data.get("segments", [])],
+            segments=segments,
         )
 
     def write(self, output_dir: Path) -> tuple[Path, Path]:

@@ -58,19 +58,39 @@ def render_script(
             failed.append(segment.id)
     final = job_dir / "output.wav"
     if rendered:
-        concatenate_wav([segments_dir / f"{segment_id}.wav" for segment_id in rendered], final)
+        rendered_ids = set(rendered)
+        concatenate_wav(
+            [
+                (segments_dir / f"{segment.id}.wav", segment.pause)
+                for segment in script.segments
+                if segment.id in rendered_ids
+            ],
+            final,
+        )
     return rendered, failed, final
 
 
-def concatenate_wav(inputs: list[Path], output_path: Path) -> None:
-    first = inputs[0]
+def concatenate_wav(pieces: list[tuple[Path, float]], output_path: Path) -> None:
+    """Join segment WAVs, inserting each segment's `pause` as silence after it.
+
+    間が無いと発話が続けて聞こえて対話に聞こえない。台本の `pause` はそのための値。
+    """
+    first, _ = pieces[0]
     with wave.open(str(first), "rb") as source:
         params = source.getparams()
     output_path.parent.mkdir(parents=True, exist_ok=True)
     with wave.open(str(output_path), "wb") as destination:
         destination.setparams(params)
-        for path in inputs:
+        for path, pause in pieces:
             with wave.open(str(path), "rb") as source:
                 if source.getparams()[:3] != params[:3]:
                     raise TTSEngineError(f"WAV format mismatch: {path}")
                 destination.writeframes(source.readframes(source.getnframes()))
+            destination.writeframes(_silence(params, pause))
+
+
+def _silence(params, seconds: float) -> bytes:
+    if seconds <= 0:
+        return b""
+    frames = int(params.framerate * seconds)
+    return b"\x00" * (frames * params.sampwidth * params.nchannels)

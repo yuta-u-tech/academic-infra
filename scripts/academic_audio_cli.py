@@ -5,6 +5,7 @@ Examples:
   python3 scripts/academic_audio_cli.py doctor --json
   python3 scripts/academic_audio_cli.py script generate --review-id dsa.ch02.list.s01 --repo-root ../DSA
   python3 scripts/academic_audio_cli.py generate --source notes.md --engine wav
+  python3 scripts/academic_audio_cli.py render --script dialogue.json --engine wav
   python3 scripts/academic_audio_cli.py job status <job-id>
   python3 scripts/academic_audio_cli.py job resume <job-id>
   python3 scripts/academic_audio_cli.py listening generate --source english.md --speeds 0.8,1.0,1.2
@@ -143,6 +144,31 @@ def _cmd_generate(args: argparse.Namespace) -> int:
     return 0 if job.status == "completed" else 2
 
 
+def _cmd_render(args: argparse.Namespace) -> int:
+    """Render a dialogue.json that was written outside the deterministic planner.
+
+    `audio/prompts/*.md` に従って書いた台本を、そのまま音声にするための入口。
+    """
+    script = read_script(args.script)
+    job_id = args.job_id or new_job_id(script.source_id)
+    directory = args.out_dir or job_path(_state_dir(args), job_id)
+    # 台本をジョブ配下へ写しておく。job resume が同じ台本を読めるようにするため。
+    script_path, _ = script.write(directory)
+    job = AudioJob(
+        job_id=job_id,
+        status="planned",
+        engine=args.engine,
+        mode=args.mode,
+        speed=args.speed,
+        job_dir=str(directory),
+        script_path=str(script_path),
+    )
+    write_job(job)
+    job = _render_job(job, args, force=args.force)
+    print(json.dumps(job.to_json_dict(), ensure_ascii=False, indent=2))
+    return 0 if job.status == "completed" else 2
+
+
 def _cmd_job_status(args: argparse.Namespace) -> int:
     job = read_job(_state_dir(args), args.job_id)
     print(json.dumps(job.to_json_dict(), ensure_ascii=False, indent=2))
@@ -204,6 +230,14 @@ def main() -> int:
     generate.add_argument("--job-id")
     generate.add_argument("--force", action="store_true")
     generate.set_defaults(func=_cmd_generate)
+
+    render = subparsers.add_parser("render", help="既存の台本ファイルから音声を生成する")
+    render.add_argument("--script", type=Path, required=True, help="dialogue.json のパス")
+    _engine_args(render)
+    render.add_argument("--out-dir", type=Path)
+    render.add_argument("--job-id")
+    render.add_argument("--force", action="store_true")
+    render.set_defaults(func=_cmd_render)
 
     job = subparsers.add_parser("job", help="ジョブ操作")
     job_sub = job.add_subparsers(dest="job_command", required=True)

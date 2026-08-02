@@ -4,12 +4,13 @@ import json
 import shutil
 import subprocess
 import sys
+import wave
 from pathlib import Path
 
 import pytest
 
 from academic_audio.engines import PiperEngine, TTSEngineError, select_engine
-from academic_audio.models import DialogueSegment
+from academic_audio.models import DialogueScript, DialogueSegment
 from academic_audio.planner import create_dialogue
 from academic_audio.pronunciation import normalize
 from academic_audio.source import resolve_source
@@ -125,6 +126,114 @@ def test_style_bert_voice_map_defaults_and_overrides() -> None:
 
     with pytest.raises(StyleBertVITS2Error):
         parse_voice_map("broken")
+
+
+def _authored_script(**overrides: object) -> dict:
+    """A dialogue.json as audio/prompts/dialogue.md tells the author to write it."""
+    segment = {
+        "id": "seg-001",
+        "speaker": "host",
+        "text": "今日は真理値表を扱います。",
+        "language": "ja",
+        "emotion": "Neutral",
+        "speed": 1.0,
+        "pause": 0.4,
+        "source_section": "logic.ch01.s01",
+    }
+    segment.update(overrides)
+    return {
+        "title": "真理値表",
+        "source_id": "logic.ch01.s01",
+        "source_commit": "test-commit",
+        "segments": [segment],
+    }
+
+
+def test_authored_script_round_trips() -> None:
+    script = DialogueScript.from_json_dict(_authored_script())
+
+    assert script.segments[0].emotion == "Neutral"
+    assert script.segments[0].pause == 0.4
+
+
+@pytest.mark.parametrize(
+    ("mutate", "expected"),
+    [
+        (lambda data: data.update(segments=[]), "segments が空"),
+        (lambda data: data.pop("title"), "title がありません"),
+        (lambda data: data["segments"][0].update(style="Happy"), "未知のフィールド"),
+        (lambda data: data["segments"][0].pop("text"), "text がありません"),
+        (lambda data: data["segments"].append(data["segments"][0]), "重複"),
+    ],
+)
+def test_broken_authored_script_reports_where(mutate, expected: str) -> None:
+    data = _authored_script()
+    mutate(data)
+
+    with pytest.raises(ValueError, match=expected):
+        DialogueScript.from_json_dict(data)
+
+
+def test_cli_render_takes_an_authored_script(tmp_path: Path) -> None:
+    script_path = tmp_path / "dialogue.json"
+    script_path.write_text(json.dumps(_authored_script(), ensure_ascii=False), encoding="utf-8")
+    state_dir = tmp_path / "state"
+
+    result = run_cli(
+        "--state-dir",
+        str(state_dir),
+        "render",
+        "--script",
+        str(script_path),
+        "--engine",
+        "wav",
+        "--job-id",
+        "authored",
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["status"] == "completed"
+    assert Path(payload["output_path"]).exists()
+    # 台本がジョブ配下に写っていないと job resume が読めない。
+    assert (state_dir / "jobs" / "authored" / "dialogue.json").exists()
+    assert (state_dir / "jobs" / "authored" / "dialogue.md").exists()
+
+
+def test_render_inserts_the_authored_pause(tmp_path: Path) -> None:
+    data = _authored_script(pause=1.0)
+    data["segments"].append({**data["segments"][0], "id": "seg-002", "pause": 0.0})
+    script_path = tmp_path / "dialogue.json"
+    script_path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+    state_dir = tmp_path / "state"
+
+    result = run_cli(
+        "--state-dir", str(state_dir), "render", "--script", str(script_path),
+        "--engine", "wav", "--job-id", "paused",
+    )
+    assert result.returncode == 0, result.stderr
+
+    job_dir = state_dir / "jobs" / "paused"
+    segments = _wav_seconds(job_dir / "segments" / "seg-001.wav") + _wav_seconds(job_dir / "segments" / "seg-002.wav")
+    # seg-001 の後ろにだけ 1.0 秒の無音が入る。
+    assert _wav_seconds(job_dir / "output.wav") == pytest.approx(segments + 1.0, abs=0.01)
+
+
+def _wav_seconds(path: Path) -> float:
+    with wave.open(str(path), "rb") as handle:
+        return handle.getnframes() / handle.getframerate()
+
+
+def test_cli_render_rejects_a_broken_script(tmp_path: Path) -> None:
+    data = _authored_script()
+    data["segments"][0]["style"] = "Happy"
+    script_path = tmp_path / "dialogue.json"
+    script_path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+
+    result = run_cli("--state-dir", str(tmp_path / "state"), "render", "--script", str(script_path), "--engine", "wav")
+
+    assert result.returncode == 1
+    assert "未知のフィールド" in result.stderr
 
 
 def test_cli_listening_generates_multiple_speeds(tmp_path: Path) -> None:

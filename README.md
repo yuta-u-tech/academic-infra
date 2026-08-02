@@ -269,6 +269,29 @@ TTS エンジンは共通インターフェースで扱う。`--engine` は
 `auto | piper | style-bert-vits2 | wav`、`--mode` は `fast | balanced | quality`。
 `wav` は外部 TTS なしでジョブ・キャッシュ・結合を検証するための内蔵レンダラ。
 
+### 台本の中身は Claude が書く
+
+`script generate` / `listening generate` の台本生成は決定論コードで、見出しと箇条書きを
+並べ替えているだけ。**教材として使える台本は `audio/prompts/*.md` に従って Claude が書く。**
+`acenglish` と同じ思想で、生成そのものを LLM API へ投げるコードは置かない。
+
+| プロンプト | 何を書くか |
+|---|---|
+| `audio/prompts/dialogue.md` | 対話台本。Style-Bert-VITS2 で聴く日本語の復習音声 |
+| `audio/prompts/listening.md` | リスニング教材。Piper で量産する英語の台本 |
+
+書き上げた `dialogue.json` は `render` にそのまま渡す。
+
+```bash
+python3 scripts/academic_audio_cli.py render \
+  --script path/to/dialogue.json --engine style-bert-vits2 --mode quality \
+  --style-bert-endpoint http://127.0.0.1:8787/render
+```
+
+`render` は台本を検証してからジョブ配下へ写す。フィールド名の間違いや `id` の重複は、
+どのセグメントが悪いかを示して落ちる。`dialogue.md`（人間可読の台本）も併産されるので、
+ディクテーションの答え合わせにはこれを使う。
+
 ### Piper のセットアップ
 
 ```bash
