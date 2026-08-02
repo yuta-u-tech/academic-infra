@@ -82,9 +82,10 @@ CLI の `--listening-mode` は機械的な変形（`shadowing` は同じ文を2�
 
 ## 会話形式について
 
-**Piper は 1ジョブ 1音声モデル**なので、複数話者の会話を作っても全員同じ声になる。
-TOEIC Part 3・Part 4 のような会話形式は、話者ごとにジョブを分けて別々の
-`--piper-model` を当てる必要がある（未実装）。今は単一話者の形式に限る。
+このプロンプト（単一話者の `sentence`/`vocab_example` 等）は単一話者専用。
+複数話者の会話（TOEIC Part 3）は `MultiSpeakerPiperEngine` + `--piper-voice-map`
+で話者ごとに別モデルを当てて生成する（実装済み。`audio/formats/toeic-part3.md` 参照）。
+このファイルの対象ではない。
 
 ## 各フィールド
 

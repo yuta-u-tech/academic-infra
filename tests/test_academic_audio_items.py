@@ -63,7 +63,7 @@ def test_toeic_part2_is_available() -> None:
 
 def test_format_exposes_the_item_shape(toeic: ListeningFormat) -> None:
     assert toeic.language == "en"
-    assert toeic.answer_in_audio is False
+    assert toeic.answer_in_audio is True  # 本番同様、応答は音声でのみ読まれる
     assert toeic.choice_count == 3
     assert toeic.segments_per_item == 4
     # 本文の作問方針も一緒に読めていること（front matter だけでは作問できない）。
@@ -111,9 +111,13 @@ def test_invalid_result_says_what_is_wrong(tmp_path: Path, toeic: ListeningForma
 def test_items_become_segments_with_item_id_and_role(tmp_path: Path, toeic: ListeningFormat) -> None:
     script = to_script(load_result(_write(tmp_path, _result()), toeic), toeic)
 
-    assert [segment.role for segment in script.segments] == ["question", "choice", "choice", "choice"]
+    # "Number 1." の通し番号読み上げが先頭に付く（本番の Part 2 と同じ進行）。
+    assert [segment.role for segment in script.segments] == ["number", "question", "choice", "choice", "choice"]
     assert all(segment.item_id == "item-001" for segment in script.segments)
     assert all(segment.language == "en" for segment in script.segments)
+    # 最後の選択肢だけ次の問題までのマーク時間（5秒）を空ける。
+    choice_segments = [s for s in script.segments if s.role == "choice"]
+    assert [s.pause for s in choice_segments] == [1.0, 1.0, 5.0]
 
 
 def test_answers_carry_the_label_and_text(tmp_path: Path, toeic: ListeningFormat) -> None:
@@ -130,7 +134,10 @@ def test_worksheet_keeps_the_answer_out_of_the_question_page(tmp_path: Path, toe
     # 設問ページに質問文（＝音声で読まれる文）を出さない。読んでしまえば聴解にならない。
     assert "When will you finish checking" not in questions
     assert "When will you finish checking" in answers
-    assert "By the end of this afternoon." in questions
+    # 本番同様、応答(A)(B)(C)は音声でのみ読まれる（answer_in_audio: true）。
+    # 冊子の設問ページには印刷しない。答え合わせページにだけ出す。
+    assert "By the end of this afternoon." not in questions
+    assert "By the end of this afternoon." in answers
 
 
 def test_latex_special_characters_are_escaped() -> None:
@@ -207,7 +214,7 @@ def test_cli_ingest_writes_script_answers_and_tex(tmp_path: Path) -> None:
 
     assert result.returncode == 0, result.stderr
     payload = json.loads(result.stdout)
-    assert payload["items"] == 1 and payload["segments"] == 4
+    assert payload["items"] == 1 and payload["segments"] == 5  # Number 1. + question + choice×3
     assert (out_dir / "dialogue.json").exists()
     assert (out_dir / "answers.json").exists()
     assert (out_dir / "worksheet.tex").exists()

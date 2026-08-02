@@ -135,10 +135,17 @@ def test_passage_becomes_segments_with_speaker_and_role(tmp_path: Path, part3: L
 
     passage_segments = [s for s in script.segments if s.role == "passage"]
     question_segments = [s for s in script.segments if s.role == "question"]
+    number_segments = [s for s in script.segments if s.role == "number"]
+    intro_segments = [s for s in script.segments if s.role == "intro"]
     assert [s.speaker for s in passage_segments] == ["A", "B", "A", "B"]
     assert all(s.speaker == "narrator" for s in question_segments)
     assert len(question_segments) == 3
     assert all(s.item_id == "item-001" for s in script.segments)
+    # 本番同様の進行: "Questions 1 through 3 refer to the following conversation." →
+    # 会話 → ("Number N." → 設問) ×3、設問の後は約8秒のマーク時間。
+    assert intro_segments[0].text == "Questions 1 through 3 refer to the following conversation."
+    assert [s.text for s in number_segments] == ["Number 1.", "Number 2.", "Number 3."]
+    assert all(s.pause == 8.0 for s in question_segments)
 
 
 def test_passage_answers_never_include_choice_text_from_the_passage(tmp_path: Path, part3: ListeningFormat) -> None:
@@ -220,7 +227,8 @@ def test_cli_ingest_writes_grouped_script_and_worksheet(tmp_path: Path) -> None:
     assert result.returncode == 0, result.stderr
     payload = json.loads(result.stdout)
     assert payload["items"] == 1
-    assert payload["segments"] == 7  # 4発話 + 3設問
+    # intro(Questions...) + 4発話 + (Number + question)×3
+    assert payload["segments"] == 11
     assert (out_dir / "worksheet.tex").exists()
 
 

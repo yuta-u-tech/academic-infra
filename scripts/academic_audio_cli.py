@@ -191,7 +191,7 @@ def _cmd_generate(args: argparse.Namespace) -> int:
     return 0 if job.status == "completed" else 2
 
 
-PROMPT_VERSION = "2026-08-02.1"
+PROMPT_VERSION = "2026-08-02.2"
 # 科目フォルダの下ではなく、Academic Materials 直下の固定フォルダに出す。
 # 毎回同じ場所に格納されることを優先し、形式(Part2/3/4)ではフォルダを分けない。
 DEFAULT_DRIVE_FOLDER_NAME = "TOEIC/listening"
@@ -318,10 +318,17 @@ def _cmd_listening_request(args: argparse.Namespace) -> int:
         "answer_in_audio": listening_format.answer_in_audio,
         "grouping": listening_format.grouping,
     }
+    is_toeic = listening_format.id.startswith("toeic-part")
     instructions = [
-        "audio/prompts/listening.md の共通方針に従う",
         f"{listening_format.path.relative_to(Path.cwd()) if listening_format.path.is_relative_to(Path.cwd()) else listening_format.path} の作問方針に従う",
     ]
+    if is_toeic:
+        # TOEIC は特定分野の専門知識を前提にしない試験なので、資料の分野に題材を
+        # 縛る audio/prompts/listening.md の共通方針(資料の中心概念から文を選ぶ、等)は
+        # 適用しない。代わりに TOEIC 実際の頻出シナリオから題材を選ばせる。
+        instructions.append("audio/prompts/toeic-topics.md のシナリオ分類から題材を選ぶ。資料の分野に話題を縛らない")
+    else:
+        instructions.insert(0, "audio/prompts/listening.md の共通方針に従う")
     if listening_format.grouping == "flat":
         format_payload["item"] = [
             {"role": slot.role, "count": slot.count, "words": list(slot.words) if slot.words else None}

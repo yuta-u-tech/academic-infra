@@ -155,12 +155,42 @@ def _validate_answer(raw: dict, where: str, parts: list[ItemPart], listening_for
     return answer_index
 
 
+# 実際の ETS 音源のペーシングに合わせる（Part 2 は選択肢間 約1秒、次の問題まで 約5秒）。
+_PART2_NUMBER_ANNOUNCE_PAUSE = 0.3
+_PART2_CHOICE_PAUSE = 1.0
+_PART2_ANSWER_WINDOW = 5.0
+
+
 def to_script(listening_set: ListeningSet, listening_format: ListeningFormat) -> DialogueScript:
-    """Flatten items into the segment list the renderer consumes."""
+    """Flatten items into the segment list the renderer consumes.
+
+    本番の Part 2 は "Number 7." のような通し番号の読み上げから始まり、3つの応答を
+    そのまま読み上げる（選択肢は冊子に印刷されない）。選択肢間は短い間、最後の選択肢の
+    後だけ次の問題までのマーク時間（約5秒）を空ける。
+    """
     segments: list[DialogueSegment] = []
-    for item in listening_set.items:
-        for part in item.parts:
-            slot = listening_format.slot_for(part.role)
+    for item_index, item in enumerate(listening_set.items, start=1):
+        segments.append(
+            DialogueSegment(
+                id=f"seg-{len(segments) + 1:03d}",
+                speaker="narrator",
+                text=f"Number {item_index}.",
+                language=listening_format.language,
+                emotion="Neutral",
+                speed=1.0,
+                pause=_PART2_NUMBER_ANNOUNCE_PAUSE,
+                source_section=listening_set.source_id,
+                item_id=item.item_id,
+                role="number",
+            )
+        )
+        for part_index, part in enumerate(item.parts):
+            is_last_part = part_index == len(item.parts) - 1
+            if part.role == "choice":
+                pause = _PART2_ANSWER_WINDOW if is_last_part else _PART2_CHOICE_PAUSE
+            else:
+                slot = listening_format.slot_for(part.role)
+                pause = slot.pause if slot else 0.5
             segments.append(
                 DialogueSegment(
                     id=f"seg-{len(segments) + 1:03d}",
@@ -169,7 +199,7 @@ def to_script(listening_set: ListeningSet, listening_format: ListeningFormat) ->
                     language=listening_format.language,
                     emotion="Neutral",
                     speed=1.0,
-                    pause=slot.pause if slot else 0.5,
+                    pause=pause,
                     source_section=listening_set.source_id,
                     item_id=item.item_id,
                     role=part.role,
@@ -371,11 +401,42 @@ def _build_passage_question(raw: Any, where: str, q_index: int, question_slot: Q
     )
 
 
+# 実際の ETS 音源: 会話/説明文の前に "Questions X through Y refer to the following ..."、
+# 各設問の前に "Number N."。設問の後は答えをマークする時間として約8秒空く。
+_PASSAGE_INTRO_PAUSE = 0.5
+_PASSAGE_LINE_PAUSE = 0.4
+_QUESTION_NUMBER_ANNOUNCE_PAUSE = 0.3
+_QUESTION_ANSWER_WINDOW = 8.0
+
+
 def passage_to_script(passage_set: PassageSet, listening_format: ListeningFormat) -> DialogueScript:
     """Flatten passage lines + question text into segments. Choices are never spoken —
-    real TOEIC Part 3/4 only speaks the passage and the question, not the printed choices."""
+    real TOEIC Part 3/4 only speaks the passage and the question, not the printed choices.
+
+    設問番号は冊子側の通し番号（全 item を跨いで連番）と一致させる。
+    """
+    assert listening_format.passage_slot is not None
+    kind = "conversation" if listening_format.passage_slot.speakers > 1 else "talk"
     segments: list[DialogueSegment] = []
+    question_number = 0
     for item in passage_set.items:
+        start = question_number + 1
+        end = question_number + len(item.questions)
+        span = f"{start} through {end}" if end > start else str(start)
+        segments.append(
+            DialogueSegment(
+                id=f"seg-{len(segments) + 1:03d}",
+                speaker="narrator",
+                text=f"Questions {span} refer to the following {kind}.",
+                language=listening_format.language,
+                emotion="Neutral",
+                speed=1.0,
+                pause=_PASSAGE_INTRO_PAUSE,
+                source_section=passage_set.source_id,
+                item_id=item.item_id,
+                role="intro",
+            )
+        )
         for line in item.passage:
             segments.append(
                 DialogueSegment(
@@ -385,13 +446,28 @@ def passage_to_script(passage_set: PassageSet, listening_format: ListeningFormat
                     language=listening_format.language,
                     emotion="Neutral",
                     speed=1.0,
-                    pause=0.4,
+                    pause=_PASSAGE_LINE_PAUSE,
                     source_section=passage_set.source_id,
                     item_id=item.item_id,
                     role="passage",
                 )
             )
         for question in item.questions:
+            question_number += 1
+            segments.append(
+                DialogueSegment(
+                    id=f"seg-{len(segments) + 1:03d}",
+                    speaker="narrator",
+                    text=f"Number {question_number}.",
+                    language=listening_format.language,
+                    emotion="Neutral",
+                    speed=1.0,
+                    pause=_QUESTION_NUMBER_ANNOUNCE_PAUSE,
+                    source_section=passage_set.source_id,
+                    item_id=item.item_id,
+                    role="number",
+                )
+            )
             segments.append(
                 DialogueSegment(
                     id=f"seg-{len(segments) + 1:03d}",
@@ -400,7 +476,7 @@ def passage_to_script(passage_set: PassageSet, listening_format: ListeningFormat
                     language=listening_format.language,
                     emotion="Neutral",
                     speed=1.0,
-                    pause=1.0,
+                    pause=_QUESTION_ANSWER_WINDOW,
                     source_section=passage_set.source_id,
                     item_id=item.item_id,
                     role="question",
