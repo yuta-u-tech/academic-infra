@@ -218,8 +218,14 @@ def _cmd_listening_publish(args: argparse.Namespace) -> int:
     # 上書きにならず、Drive 上で「いつの分か」が一目でわかる。
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     descriptive_name = _JOB_TIMESTAMP_PREFIX.sub("", args.set_dir.name)
-    drive_name = args.name or f"{today}-{descriptive_name}.pdf"
     folder_names = [part for part in args.folder_name.split("/") if part]
+    # TOEIC は Part ごとにサブフォルダへ分ける（Part2/3/4 が同じ場所に混ざると探しにくいため）。
+    part_match = re.match(r"toeic-(part\d+)$", descriptive_name)
+    if part_match:
+        folder_names.append(part_match.group(1))
+        drive_name = args.name or f"{today}.pdf"
+    else:
+        drive_name = args.name or f"{today}-{descriptive_name}.pdf"
     drive_path = "/".join([*folder_names, drive_name])
 
     if args.dry_run:
@@ -410,9 +416,16 @@ def _cmd_listening_ingest(args: argparse.Namespace) -> int:
 
     # TOEIC 形式は教材(source_id)の分野と無関係な題材を選ぶので、フォルダ名/Driveの
     # ファイル名に科目名を出さない（出すと「論理回路の問題」に見えて紛らわしい）。
-    slug_base = listening_format.id if listening_format.id.startswith("toeic-part") else f"{item_set.source_id}-{listening_format.id}"
+    is_toeic_format = listening_format.id.startswith("toeic-part")
+    slug_base = listening_format.id if is_toeic_format else f"{item_set.source_id}-{listening_format.id}"
     slug = new_job_id(slug_base)
-    out_dir = args.out_dir or (data_repo_path() / "listening" / slug)
+    # Part2/3/4 が listening/ 直下に混ざると探しにくいので、Part ごとのサブフォルダへ分ける。
+    listening_subdir = listening_format.id.removeprefix("toeic-") if is_toeic_format else None
+    out_dir = args.out_dir or (
+        data_repo_path() / "listening" / listening_subdir / slug
+        if listening_subdir
+        else data_repo_path() / "listening" / slug
+    )
     out_dir.mkdir(parents=True, exist_ok=True)
     # 元の作問結果もそのまま残す。youtube publish 後に URL を差し込んで
     # worksheet を作り直す（listening attach-youtube-url）ときの再入力になる。

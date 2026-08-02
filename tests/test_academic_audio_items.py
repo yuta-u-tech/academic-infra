@@ -276,6 +276,8 @@ def test_cli_ingest_defaults_into_the_data_repo(tmp_path: Path, monkeypatch) -> 
     # 科目リポジトリと同じ形: コード(academic-infra)は生成物を書き出す先を
     # academic-english-data(正本)にデフォルトで向ける。
     assert str(tmp_path / "data-repo" / "listening") in payload["dialogue_json"]
+    # Part2/3/4 が同じ場所に混ざると探しにくいので、Part ごとのサブフォルダに分ける。
+    assert str(tmp_path / "data-repo" / "listening" / "part2") in payload["dialogue_json"]
 
 
 def test_cli_listening_publish_dry_run_needs_no_credentials(tmp_path: Path, monkeypatch) -> None:
@@ -307,6 +309,21 @@ def test_cli_listening_publish_strips_the_generation_timestamp(tmp_path: Path) -
     payload = json.loads(result.stdout)
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     assert payload["drive_path"] == f"TOEIC/listening/{today}-logic.ch01.s01-toeic-part2.pdf"
+
+
+def test_cli_listening_publish_uses_a_part_subfolder_for_toeic_sets(tmp_path: Path) -> None:
+    # Part2/3/4 が同じ TOEIC/listening 直下に混ざると探しにくいので、Part ごとの
+    # サブフォルダに分ける（set-dir 名が "<timestamp>-toeic-partN" の形のとき）。
+    set_dir = tmp_path / "20260802T131511Z-toeic-part2"
+    set_dir.mkdir()
+    (set_dir / "worksheet.pdf").write_bytes(b"%PDF-fake")
+
+    result = run_cli("listening", "publish", "--set-dir", str(set_dir), "--dry-run")
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    assert payload["drive_path"] == f"TOEIC/listening/part2/{today}.pdf"
 
 
 def test_cli_listening_publish_name_overrides_the_dated_default(tmp_path: Path) -> None:
