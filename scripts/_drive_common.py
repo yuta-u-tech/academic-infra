@@ -132,6 +132,49 @@ def find_child(service, parent_id: str, name: str, mime_type: str | None) -> str
     return files[0]["id"] if files else None
 
 
+def ensure_folder(service, parent_id: str, name: str) -> str:
+    """Return the folder id under `parent_id`, creating it when missing."""
+    existing = find_child(service, parent_id, name, _FOLDER_MIME)
+    if existing:
+        return existing
+    created = (
+        service.files()
+        .create(
+            body={"name": name, "parents": [parent_id], "mimeType": _FOLDER_MIME},
+            fields="id",
+            supportsAllDrives=True,
+        )
+        .execute()
+    )
+    return created["id"]
+
+
+def upload_file(service, parent_id: str, path: Path, mime_type: str, name: str | None = None) -> str:
+    """Create or overwrite `path` under `parent_id`, keeping the Drive file ID stable.
+
+    ID を保つのは、閲覧者が付けたコメントと共有リンクを切らさないため。
+    """
+    from googleapiclient.http import MediaFileUpload
+
+    drive_name = name or path.name
+    media = MediaFileUpload(str(path), mimetype=mime_type, resumable=False)
+    existing = find_child(service, parent_id, drive_name, None)
+    if existing:
+        service.files().update(fileId=existing, media_body=media, supportsAllDrives=True).execute()
+        return existing
+    created = (
+        service.files()
+        .create(
+            body={"name": drive_name, "parents": [parent_id]},
+            media_body=media,
+            fields="id",
+            supportsAllDrives=True,
+        )
+        .execute()
+    )
+    return created["id"]
+
+
 def find_course_pdf_file_id(service, parent_folder_id: str, course: CourseEntry) -> str:
     course_folder_id = find_child(service, parent_folder_id, course.drive_folder, _FOLDER_MIME)
     if course_folder_id is None:

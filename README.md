@@ -278,7 +278,50 @@ TTS エンジンは共通インターフェースで扱う。`--engine` は
 | プロンプト | 何を書くか |
 |---|---|
 | `audio/prompts/dialogue.md` | 対話台本。Style-Bert-VITS2 で聴く日本語の復習音声 |
-| `audio/prompts/listening.md` | リスニング教材。Piper で量産する英語の台本 |
+| `audio/prompts/listening.md` | リスニング教材の共通方針 |
+| `audio/formats/<形式>.md` | 試験形式ごとの作問方針。front matter に機械可読の制約 |
+
+### 試験形式ごとの作問フロー
+
+音声だけでは学習が完結しないので、設問・正解・解説を組んだ問題冊子（PDF）も併産し、
+Drive の科目フォルダへ上げる。
+
+```bash
+# 1. 依頼を出す（件数と形式は呼び出し側が決める）
+python3 scripts/academic_audio_cli.py listening request \
+  --review-id logic.ch01.s01 --repo-root ../LogicCircuits \
+  --format toeic-part2 --count 10 --out request.json
+
+# 2. Claude が audio/prompts/listening.md と audio/formats/toeic-part2.md に従って
+#    items 配列を書く（result.json）
+
+# 3. 検証して台本・解答・問題冊子を導出する
+python3 scripts/academic_audio_cli.py listening ingest \
+  --file result.json --format toeic-part2 --out-dir sets/logic-ch01-toeic
+
+# 4. 音声化
+python3 scripts/academic_audio_cli.py render \
+  --script sets/logic-ch01-toeic/dialogue.json \
+  --engine piper --piper-model .venv/piper-voices/en_US-lessac-medium.onnx
+
+# 5. 問題冊子を Drive へ（--dry-run で投稿先を確認できる）
+python3 scripts/academic_audio_cli.py listening publish \
+  --set-dir sets/logic-ch01-toeic --course logic
+```
+
+`ingest` が形式定義と突き合わせて検証するので、選択肢の数・語数・`answer_index` の
+範囲は目視で確かめなくてよい。`items` から次を機械的に導く。
+
+| ファイル | 用途 |
+|---|---|
+| `dialogue.json` | 音声用の台本。各発話が `item_id` と `role` を持つ |
+| `answers.json` | 正解・解説 |
+| `worksheet.tex` / `.pdf` | 問題冊子。設問ページには選択肢だけ出し、質問文は解答ページに置く |
+
+新しい試験形式を足すときは `audio/formats/<id>.md` を 1 枚追加するだけ。コードは触らない。
+
+Drive へは科目フォルダ直下の `Listening/` に上げる（`sections/` と同じ階層）。
+**音声は容量が大きいので Drive へ上げない。** 配信は issue #3 の Publisher が担う。
 
 書き上げた `dialogue.json` は `render` にそのまま渡す。
 
@@ -360,6 +403,10 @@ Style-Bert-VITS2 を自前で立てている場合は、WAV バイト列を返�
 | `segments/*.wav` | 発話単位の音声 |
 | `output.wav` | 結合済みローカル成果物 |
 | `job.json` | 進捗、失敗セグメント、再開用メタデータ |
+| `artifact.json` | 発話タイムライン、チャプター、source/script/audio hash |
+
+`artifact.json` は issue #3 の Publisher への受け渡し。チャプターは `item_id` 単位で
+切るので、問題単位の教材ならそのまま「第1問」「第2問」の頭出しになる。
 
 ## テスト
 

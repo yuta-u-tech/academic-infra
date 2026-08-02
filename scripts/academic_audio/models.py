@@ -34,6 +34,10 @@ class DialogueSegment:
     speed: float = 1.0
     pause: float = 0.35
     source_section: str | None = None
+    # 問題単位の教材で使う。1問が複数発話にまたがるため、どの問題の何の役割かを持つ。
+    # 対話台本では両方 None。Issue #3 のチャプター生成も item_id を単位にする。
+    item_id: str | None = None
+    role: str | None = None
 
 
 _SEGMENT_FIELDS = {field_.name for field_ in fields(DialogueSegment)}

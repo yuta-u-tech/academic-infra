@@ -27,12 +27,16 @@ from academic_audio.engines import (  # noqa: E402
     WavEngine,
     select_engine,
 )
+from academic_audio.artifact import build_artifact, write_artifact  # noqa: E402
+from academic_audio.formats import FormatError, available_formats, load_format  # noqa: E402
+from academic_audio.items import ItemValidationError, load_result, to_answers, to_script  # noqa: E402
 from academic_audio.jobs import default_state_dir, job_path, new_job_id, read_job, read_script, write_job  # noqa: E402
 from academic_audio.listening import create_listening_script  # noqa: E402
 from academic_audio.models import AudioJob  # noqa: E402
 from academic_audio.planner import create_dialogue  # noqa: E402
 from academic_audio.renderer import render_script  # noqa: E402
 from academic_audio.source import AudioSourceError, resolve_source  # noqa: E402
+from academic_audio.worksheet import WorksheetError, build_pdf, render_tex  # noqa: E402
 
 
 def _source_args(parser: argparse.ArgumentParser) -> None:
@@ -121,6 +125,18 @@ def _render_job(job: AudioJob, args: argparse.Namespace, *, force: bool = False)
     job.status = "failed" if failed else "completed"
     job.error = f"failed segments: {', '.join(failed)}" if failed else None
     write_job(job)
+    if rendered and output.exists():
+        # Publisher (Issue #3) への受け渡し。タイムライン・hash・チャプターを添える。
+        write_artifact(
+            build_artifact(
+                job=job,
+                script=script,
+                script_path=Path(job.script_path),
+                audio_path=output,
+                rendered=rendered,
+            ),
+            Path(job.job_dir),
+        )
     return job
 
 
@@ -142,6 +158,115 @@ def _cmd_generate(args: argparse.Namespace) -> int:
     job = _render_job(job, args, force=args.force)
     print(json.dumps(job.to_json_dict(), ensure_ascii=False, indent=2))
     return 0 if job.status == "completed" else 2
+
+
+PROMPT_VERSION = "2026-08-02.1"
+# Drive の科目フォルダ直下。sections/ と同じ階層に置く。
+DRIVE_SUBFOLDER = "Listening"
+
+
+def _cmd_listening_publish(args: argparse.Namespace) -> int:
+    """Upload the worksheet PDF to Drive, next to the course materials.
+
+    音声そのものは容量が大きいので上げない。配信は Issue #3 の Publisher が担う。
+    """
+    import _drive_common
+
+    worksheet = args.set_dir / "worksheet.pdf"
+    if not worksheet.exists():
+        raise FileNotFoundError(f"{worksheet} がありません。先に listening ingest を実行してください。")
+
+    course = _drive_common.resolve_course(args.course)
+    credentials = _drive_common.resolve_credentials()
+    parent_id = args.parent_id or credentials.get("GDRIVE_PARENT_FOLDER_ID", "")
+    if not parent_id:
+        raise ValueError("--parent-id か GDRIVE_PARENT_FOLDER_ID が必要です。")
+
+    drive_name = args.name or f"{args.set_dir.name}.pdf"
+    if args.dry_run:
+        print(json.dumps(
+            {"dry_run": True, "drive_path": f"{course.drive_folder}/{DRIVE_SUBFOLDER}/{drive_name}",
+             "local": str(worksheet)}, ensure_ascii=False, indent=2))
+        return 0
+
+    service = _drive_common.build_service(credentials)
+    course_folder = _drive_common.ensure_folder(service, parent_id, course.drive_folder)
+    listening_folder = _drive_common.ensure_folder(service, course_folder, DRIVE_SUBFOLDER)
+    file_id = _drive_common.upload_file(service, listening_folder, worksheet, "application/pdf", name=drive_name)
+    print(json.dumps(
+        {"drive_path": f"{course.drive_folder}/{DRIVE_SUBFOLDER}/{drive_name}", "file_id": file_id,
+         "url": f"https://drive.google.com/file/d/{file_id}/view"}, ensure_ascii=False, indent=2))
+    return 0
+
+
+def _cmd_listening_request(args: argparse.Namespace) -> int:
+    """Emit the request Claude answers. 件数と形式は呼び出し側が決めて渡す。"""
+    listening_format = load_format(args.format)
+    source = resolve_source(
+        review_id=args.review_id, source_path=args.source, repo_root=args.repo_root, course=args.course
+    )
+    payload = {
+        "schema_version": 1,
+        "prompt_version": PROMPT_VERSION,
+        "instructions": [
+            "audio/prompts/listening.md の共通方針に従う",
+            f"{listening_format.path.relative_to(Path.cwd()) if listening_format.path.is_relative_to(Path.cwd()) else listening_format.path} の作問方針に従う",
+            f"{args.count} 問を items 配列として書く。足りなければ減らしてよい",
+        ],
+        "format": {
+            "id": listening_format.id,
+            "name": listening_format.name,
+            "language": listening_format.language,
+            "answer_in_audio": listening_format.answer_in_audio,
+            "item": [
+                {"role": slot.role, "count": slot.count, "words": list(slot.words) if slot.words else None}
+                for slot in listening_format.item
+            ],
+        },
+        "count": args.count,
+        "target": {
+            "source_id": source.source_id,
+            "review_id": source.review_id,
+            "course_id": source.course_id,
+            "title": source.title,
+            "source_commit": source.source_commit,
+        },
+        "material": source.body,
+    }
+    args.out.parent.mkdir(parents=True, exist_ok=True)
+    args.out.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    print(json.dumps({"request": str(args.out), "format": listening_format.id, "count": args.count}, ensure_ascii=False, indent=2))
+    return 0
+
+
+def _cmd_listening_ingest(args: argparse.Namespace) -> int:
+    """Validate Claude's items, then derive the script, the answer key and the worksheet."""
+    listening_format = load_format(args.format)
+    listening_set = load_result(args.file, listening_format)
+    script = to_script(listening_set, listening_format)
+
+    out_dir = args.out_dir or (_state_dir(args) / "sets" / new_job_id(f"{listening_set.source_id}-{listening_format.id}"))
+    out_dir.mkdir(parents=True, exist_ok=True)
+    script_path, script_md = script.write(out_dir)
+    answers_path = out_dir / "answers.json"
+    answers_path.write_text(
+        json.dumps(to_answers(listening_set), ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+    )
+    tex_path = out_dir / "worksheet.tex"
+    tex_path.write_text(render_tex(listening_set, listening_format), encoding="utf-8")
+
+    result = {
+        "items": len(listening_set.items),
+        "segments": len(script.segments),
+        "dialogue_json": str(script_path),
+        "dialogue_md": str(script_md),
+        "answers_json": str(answers_path),
+        "worksheet_tex": str(tex_path),
+    }
+    if not args.no_pdf:
+        result["worksheet_pdf"] = str(build_pdf(tex_path))
+    print(json.dumps(result, ensure_ascii=False, indent=2))
+    return 0
 
 
 def _cmd_render(args: argparse.Namespace) -> int:
@@ -262,10 +387,41 @@ def main() -> int:
     listening_generate.add_argument("--force", action="store_true")
     listening_generate.set_defaults(func=_cmd_listening_generate)
 
+    listening_request = listening_sub.add_parser("request", help="作問の依頼JSONを書き出す")
+    _source_args(listening_request)
+    listening_request.add_argument("--format", required=True, help=f"使えるのは: {', '.join(available_formats())}")
+    listening_request.add_argument("--count", type=int, required=True, help="生成する問題数")
+    listening_request.add_argument("--out", type=Path, required=True)
+    listening_request.set_defaults(func=_cmd_listening_request)
+
+    listening_ingest = listening_sub.add_parser("ingest", help="作問結果を検証して台本・解答・問題冊子を出す")
+    listening_ingest.add_argument("--file", type=Path, required=True)
+    listening_ingest.add_argument("--format", required=True)
+    listening_ingest.add_argument("--out-dir", type=Path)
+    listening_ingest.add_argument("--no-pdf", action="store_true", help="TeX まで出して組版しない")
+    listening_ingest.set_defaults(func=_cmd_listening_ingest)
+
+    listening_publish = listening_sub.add_parser("publish", help="問題冊子PDFを Drive の科目フォルダへ上げる")
+    listening_publish.add_argument("--set-dir", type=Path, required=True, help="listening ingest の出力先")
+    listening_publish.add_argument("--course", required=True, help="courses.yml のキー")
+    listening_publish.add_argument("--name", help="Drive 上のファイル名（既定: <set-dir名>.pdf）")
+    listening_publish.add_argument("--parent-id", help="Academic Materials のフォルダID")
+    listening_publish.add_argument("--dry-run", action="store_true")
+    listening_publish.set_defaults(func=_cmd_listening_publish)
+
     args = parser.parse_args()
     try:
         return args.func(args)
-    except (AudioSourceError, TTSEngineError, FileNotFoundError, json.JSONDecodeError, ValueError) as error:
+    except (
+        AudioSourceError,
+        FormatError,
+        ItemValidationError,
+        TTSEngineError,
+        WorksheetError,
+        FileNotFoundError,
+        json.JSONDecodeError,
+        ValueError,
+    ) as error:
         if getattr(args, "json", False):
             print(json.dumps({"error": str(error)}, ensure_ascii=False), file=sys.stderr)
         else:
