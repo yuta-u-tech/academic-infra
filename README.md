@@ -293,18 +293,18 @@ python3 scripts/academic_audio_cli.py listening request \
   --review-id logic.ch01.s01 --repo-root ../LogicCircuits \
   --format toeic-part2 --count 10 --out request.json
 
-# 2. Claude が audio/prompts/listening.md と audio/formats/toeic-part2.md に従って
-#    items 配列を書く（result.json）
+# 2. Claude が audio/formats/toeic-part2.md と audio/prompts/toeic-topics.md に従って
+#    items 配列を書く（result.json。題材は資料の分野に縛らない）
 
 # 3. 検証して台本・解答・問題冊子を導出する。既定の出力先は academic-english-data/listening/<slug>
 #    --push で commit + push まで行う
 python3 scripts/academic_audio_cli.py listening ingest \
   --file result.json --format toeic-part2 --push
 
-# 4. 音声化
+# 4. 音声化。質問と応答は別の声にする（本番は同じナレーターだが、聴き分けやすくする脚色）
 python3 scripts/academic_audio_cli.py render \
   --script ~/academic-english-data/listening/<slug>/dialogue.json \
-  --engine piper --piper-model .venv/piper-voices/en_US-lessac-medium.onnx
+  --piper-voice-map "narrator=.venv/piper-voices/en_US-lessac-medium.onnx,respondent=.venv/piper-voices/en_US-ryan-medium.onnx"
 
 # 5. 問題冊子を Drive へ。Academic Materials 直下の固定フォルダ「TOEIC/listening/」に
 #    毎回同じ場所へ格納する（--dry-run で投稿先を確認できる）

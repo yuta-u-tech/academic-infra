@@ -155,19 +155,22 @@ def _validate_answer(raw: dict, where: str, parts: list[ItemPart], listening_for
     return answer_index
 
 
-# 実際の ETS 音源のペーシングに合わせる（Part 2 は選択肢間 約1秒、次の問題まで 約5秒）。
-_PART2_QUESTION_PAUSE = 1.2  # 疑問文の後は「本当に尋ねている」間を置く（応答の一つ一つより少し長め）
-_PART2_CHOICE_PAUSE = 1.0
+# 実際の ETS 音源のペーシングに合わせる（Part 2 は質問の後 約1.2秒、次の問題まで 約5秒）。
+_PART2_QUESTION_PAUSE = 1.2  # 疑問文の後は「本当に尋ねている」間を置く
 _PART2_ANSWER_WINDOW = 5.0
 
 
 def to_script(listening_set: ListeningSet, listening_format: ListeningFormat) -> DialogueScript:
     """Flatten items into the segment list the renderer consumes.
 
-    "Number 7." と質問文は同じ人が続けて話す一息の発話なので、TTS も1回の合成にまとめる
-    （別々に合成して無音でつなぐと、単文を機械的に貼り合わせたような読み方になる）。
-    質問文の後だけ、聞き手に「本当に尋ねている」と感じさせる間を置いてから応答に移る。
-    応答（choice）どうしは短い間、最後の応答の後だけ次の問題までのマーク時間（約5秒）。
+    1問につき2つの発話にまとめる:
+      1. "Number N. <質問文>"（speaker="narrator"）— 同じ人が続けて話す一息の発話なので
+         1回の合成にまとめる。
+      2. 3つの応答をまとめて1回の合成にする（speaker="respondent"）— 応答ごとに別々に
+         合成して無音でつなぐと、文と文のつながりの抑揚が失われ棒読みに聞こえる。
+         1回の合成にまとめることで Piper 自身の文末ポーズ・抑揚がそのまま活きる。
+    質問と応答を別の声にするのは、本番より聴き取りやすくするための意図的な脚色
+    （本番は全て同じナレーターが読む）。どちらの発話かが声で分かるようにする。
     """
     segments: list[DialogueSegment] = []
     for item_index, item in enumerate(listening_set.items, start=1):
@@ -186,24 +189,21 @@ def to_script(listening_set: ListeningSet, listening_format: ListeningFormat) ->
                 role="question",
             )
         )
-        choices = item.parts_with_role("choice")
-        for choice_index, choice in enumerate(choices):
-            is_last_choice = choice_index == len(choices) - 1
-            pause = _PART2_ANSWER_WINDOW if is_last_choice else _PART2_CHOICE_PAUSE
-            segments.append(
-                DialogueSegment(
-                    id=f"seg-{len(segments) + 1:03d}",
-                    speaker="narrator",
-                    text=choice.text,
-                    language=listening_format.language,
-                    emotion="Neutral",
-                    speed=1.0,
-                    pause=pause,
-                    source_section=listening_set.source_id,
-                    item_id=item.item_id,
-                    role="choice",
-                )
+        choices_text = " ".join(choice.text for choice in item.parts_with_role("choice"))
+        segments.append(
+            DialogueSegment(
+                id=f"seg-{len(segments) + 1:03d}",
+                speaker="respondent",
+                text=choices_text,
+                language=listening_format.language,
+                emotion="Neutral",
+                speed=1.0,
+                pause=_PART2_ANSWER_WINDOW,
+                source_section=listening_set.source_id,
+                item_id=item.item_id,
+                role="choice",
             )
+        )
     return DialogueScript(
         title=listening_set.title,
         source_id=listening_set.source_id,
