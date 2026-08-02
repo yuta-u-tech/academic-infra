@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
@@ -245,7 +246,36 @@ def test_cli_listening_publish_dry_run_needs_no_credentials(tmp_path: Path, monk
 
     assert result.returncode == 0, result.stderr
     payload = json.loads(result.stdout)
-    assert payload["drive_path"] == "英語リスニング/toeic-part2/set.pdf"
+    # 固定の TOEIC/listening 配下に、当日の日付を先頭に付けたファイル名で置く。
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    assert payload["drive_path"] == f"TOEIC/listening/{today}-set.pdf"
+
+
+def test_cli_listening_publish_strips_the_generation_timestamp(tmp_path: Path) -> None:
+    # new_job_id() のスラッグは既に生成時刻を持つ。当日日付をさらに前置すると
+    # "2026-08-02-20260802T...``` のように日付が二重になるので剥がす。
+    set_dir = tmp_path / "20260802T072921Z-logic.ch01.s01-toeic-part2"
+    set_dir.mkdir()
+    (set_dir / "worksheet.pdf").write_bytes(b"%PDF-fake")
+
+    result = run_cli("listening", "publish", "--set-dir", str(set_dir), "--dry-run")
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    assert payload["drive_path"] == f"TOEIC/listening/{today}-logic.ch01.s01-toeic-part2.pdf"
+
+
+def test_cli_listening_publish_name_overrides_the_dated_default(tmp_path: Path) -> None:
+    set_dir = tmp_path / "set"
+    set_dir.mkdir()
+    (set_dir / "worksheet.pdf").write_bytes(b"%PDF-fake")
+
+    result = run_cli("listening", "publish", "--set-dir", str(set_dir), "--dry-run", "--name", "custom.pdf")
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["drive_path"] == "TOEIC/listening/custom.pdf"
 
 
 def test_cli_listening_publish_requires_the_worksheet(tmp_path: Path) -> None:

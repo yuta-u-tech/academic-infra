@@ -15,7 +15,9 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -183,8 +185,12 @@ def _cmd_generate(args: argparse.Namespace) -> int:
 
 
 PROMPT_VERSION = "2026-08-02.1"
-# 科目フォルダの下ではなく、Academic Materials 直下の独立フォルダに出す。
-DEFAULT_DRIVE_FOLDER_NAME = "英語リスニング"
+# 科目フォルダの下ではなく、Academic Materials 直下の固定フォルダに出す。
+# 毎回同じ場所に格納されることを優先し、形式(Part2/3/4)ではフォルダを分けない。
+DEFAULT_DRIVE_FOLDER_NAME = "TOEIC/listening"
+# new_job_id() が付ける生成時刻の接頭辞（例: 20260802T072921Z-）。Drive 上のファイル名は
+# 投稿日を先頭に付けるので、ここに元々ある時刻と二重にならないよう剥がす。
+_JOB_TIMESTAMP_PREFIX = re.compile(r"^\d{8}T\d{6}Z-")
 
 
 def _cmd_listening_publish(args: argparse.Namespace) -> int:
@@ -201,13 +207,12 @@ def _cmd_listening_publish(args: argparse.Namespace) -> int:
     if not worksheet.exists():
         raise FileNotFoundError(f"{worksheet} がありません。先に listening ingest を実行してください。")
 
-    answers_path = args.set_dir / "answers.json"
-    format_id = None
-    if answers_path.exists():
-        format_id = json.loads(answers_path.read_text(encoding="utf-8")).get("format")
-
-    drive_name = args.name or f"{args.set_dir.name}.pdf"
-    folder_names = [args.folder_name, *([format_id] if format_id else [])]
+    # 日次更新を想定し、投稿日を先頭に付ける。同じ set-dir を別日に publish しても
+    # 上書きにならず、Drive 上で「いつの分か」が一目でわかる。
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    descriptive_name = _JOB_TIMESTAMP_PREFIX.sub("", args.set_dir.name)
+    drive_name = args.name or f"{today}-{descriptive_name}.pdf"
+    folder_names = [part for part in args.folder_name.split("/") if part]
     drive_path = "/".join([*folder_names, drive_name])
 
     if args.dry_run:
@@ -487,8 +492,8 @@ def main() -> int:
 
     listening_publish = listening_sub.add_parser("publish", help="問題冊子PDFを Drive の科目フォルダへ上げる")
     listening_publish.add_argument("--set-dir", type=Path, required=True, help="listening ingest の出力先")
-    listening_publish.add_argument("--folder-name", default=DEFAULT_DRIVE_FOLDER_NAME, help="Drive 上のトップフォルダ名")
-    listening_publish.add_argument("--name", help="Drive 上のファイル名（既定: <set-dir名>.pdf）")
+    listening_publish.add_argument("--folder-name", default=DEFAULT_DRIVE_FOLDER_NAME, help="Drive 上のフォルダパス（/ 区切りで階層を作る）")
+    listening_publish.add_argument("--name", help="Drive 上のファイル名（既定: <当日の日付>-<set-dir名>.pdf）")
     listening_publish.add_argument("--parent-id", help="Academic Materials のフォルダID")
     listening_publish.add_argument("--dry-run", action="store_true")
     listening_publish.set_defaults(func=_cmd_listening_publish)

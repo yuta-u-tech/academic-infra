@@ -306,8 +306,8 @@ python3 scripts/academic_audio_cli.py render \
   --script ~/academic-english-data/listening/<slug>/dialogue.json \
   --engine piper --piper-model .venv/piper-voices/en_US-lessac-medium.onnx
 
-# 5. 問題冊子を Drive へ。科目フォルダの下ではなく「英語リスニング/<形式>/」に出す
-#    （--dry-run で投稿先を確認できる）
+# 5. 問題冊子を Drive へ。Academic Materials 直下の固定フォルダ「TOEIC/listening/」に
+#    毎回同じ場所へ格納する（--dry-run で投稿先を確認できる）
 python3 scripts/academic_audio_cli.py listening publish \
   --set-dir ~/academic-english-data/listening/<slug>
 ```
@@ -330,8 +330,12 @@ python3 scripts/academic_audio_cli.py listening publish \
 
 新しい試験形式を足すときは `audio/formats/<id>.md` を 1 枚追加するだけ。コードは触らない。
 
-Drive へは独立フォルダ「英語リスニング/`<形式>`/」に上げる（科目フォルダの下ではない。
-リスニング教材はある科目のセクションに由来していても、英語運用の練習という別の科目として扱う）。
+Drive へは Academic Materials 直下の固定フォルダ「`TOEIC/listening/`」へ、形式（Part2/3/4）に
+関わらず毎回同じ場所に上げる（科目フォルダの下ではない。リスニング教材はある科目のセクション
+に由来していても、英語運用の練習という別の科目として扱う）。ファイル名は既定で
+`<投稿日>-<教材のslug>.pdf`（例: `2026-08-02-logic.ch01.s01-toeic-part2.pdf`）。日次で同じ
+教材を再生成しても上書きにならず、Drive 上で「いつの分か」が一目でわかる。
+`--folder-name` / `--name` で変更できる。
 **音声は容量が大きいので Drive へ上げない。** 配信は issue #3 の Publisher が担う。
 
 ### 1問＝1音声＋複数設問の形式（TOEIC Part 3/4）
