@@ -156,19 +156,24 @@ def _validate_answer(raw: dict, where: str, parts: list[ItemPart], listening_for
 
 
 # 実際の ETS 音源のペーシングに合わせる（Part 2 は質問の後 約1.2秒、次の問題まで 約5秒）。
+_PART2_NUMBER_PAUSE = 0.5  # "Number N." の後、質問文が始まる前に置く間（聞き取りやすさのための脚色）
 _PART2_QUESTION_PAUSE = 1.2  # 疑問文の後は「本当に尋ねている」間を置く
 _PART2_ANSWER_WINDOW = 5.0
+_CHOICE_LABELS = ("A", "B", "C", "D")
 
 
 def to_script(listening_set: ListeningSet, listening_format: ListeningFormat) -> DialogueScript:
     """Flatten items into the segment list the renderer consumes.
 
-    1問につき2つの発話にまとめる:
-      1. "Number N. <質問文>"（speaker="narrator"）— 同じ人が続けて話す一息の発話なので
-         1回の合成にまとめる。
-      2. 3つの応答をまとめて1回の合成にする（speaker="respondent"）— 応答ごとに別々に
+    1問につき3つの発話にまとめる:
+      1. "Number N."（speaker="narrator"）— 単独の発話にし、直後に短い間を置く。
+         質問文と1回の合成にまとめると発話開始直後に質問が始まってしまい、
+         「Number N.」を認識する間もなく聞き逃す、という指摘を受けて分離した。
+      2. 質問文（speaker="narrator"）。
+      3. 3つの応答をまとめて1回の合成にする（speaker="respondent"）— 応答ごとに別々に
          合成して無音でつなぐと、文と文のつながりの抑揚が失われ棒読みに聞こえる。
          1回の合成にまとめることで Piper 自身の文末ポーズ・抑揚がそのまま活きる。
+         各応答の前に "A." "B." "C." を読み上げる（本番同様、区切りが分かるようにする）。
     質問と応答を別の声にするのは、本番より聴き取りやすくするための意図的な脚色
     （本番は全て同じナレーターが読む）。どちらの発話かが声で分かるようにする。
     """
@@ -179,7 +184,21 @@ def to_script(listening_set: ListeningSet, listening_format: ListeningFormat) ->
             DialogueSegment(
                 id=f"seg-{len(segments) + 1:03d}",
                 speaker="narrator",
-                text=f"Number {item_index}. {question_text}",
+                text=f"Number {item_index}.",
+                language=listening_format.language,
+                emotion="Neutral",
+                speed=1.0,
+                pause=_PART2_NUMBER_PAUSE,
+                source_section=listening_set.source_id,
+                item_id=item.item_id,
+                role="question",
+            )
+        )
+        segments.append(
+            DialogueSegment(
+                id=f"seg-{len(segments) + 1:03d}",
+                speaker="narrator",
+                text=question_text,
                 language=listening_format.language,
                 emotion="Neutral",
                 speed=1.0,
@@ -189,7 +208,8 @@ def to_script(listening_set: ListeningSet, listening_format: ListeningFormat) ->
                 role="question",
             )
         )
-        choices_text = " ".join(choice.text for choice in item.parts_with_role("choice"))
+        choices = item.parts_with_role("choice")
+        choices_text = " ".join(f"{label}. {choice.text}" for label, choice in zip(_CHOICE_LABELS, choices))
         segments.append(
             DialogueSegment(
                 id=f"seg-{len(segments) + 1:03d}",
@@ -404,6 +424,7 @@ def _build_passage_question(raw: Any, where: str, q_index: int, question_slot: Q
 # 各設問の前に "Number N."。設問の後は答えをマークする時間として約8秒空く。
 _PASSAGE_INTRO_PAUSE = 0.5
 _PASSAGE_LINE_PAUSE = 0.4
+_PASSAGE_NUMBER_PAUSE = 0.5  # "Number N." の後、設問文が始まる前に置く間（聞き取りやすさのための脚色）
 _QUESTION_ANSWER_WINDOW = 8.0
 
 
@@ -452,14 +473,29 @@ def passage_to_script(passage_set: PassageSet, listening_format: ListeningFormat
             )
         for question in item.questions:
             question_number += 1
-            # "Number N." と設問文は同じ narrator が続けて話す一息の発話なので、TTS も
-            # 1回の合成にまとめる（別々に合成して無音でつなぐと機械的な読み方になる）。
+            # "Number N." は単独の発話にして直後に短い間を置く。設問文と1回の合成に
+            # まとめると発話開始直後に設問が始まってしまい、番号を認識する間もなく
+            # 聞き逃す、という指摘を受けて分離した（Part 2 の to_script() と同じ理由）。
+            segments.append(
+                DialogueSegment(
+                    id=f"seg-{len(segments) + 1:03d}",
+                    speaker="narrator",
+                    text=f"Number {question_number}.",
+                    language=listening_format.language,
+                    emotion="Neutral",
+                    speed=1.0,
+                    pause=_PASSAGE_NUMBER_PAUSE,
+                    source_section=passage_set.source_id,
+                    item_id=item.item_id,
+                    role="question",
+                )
+            )
             # 設問の後の8秒はマーク時間そのもの＝「本当に尋ねている」間として十分機能する。
             segments.append(
                 DialogueSegment(
                     id=f"seg-{len(segments) + 1:03d}",
                     speaker="narrator",
-                    text=f"Number {question_number}. {question.text}",
+                    text=question.text,
                     language=listening_format.language,
                     emotion="Neutral",
                     speed=1.0,

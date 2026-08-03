@@ -111,21 +111,27 @@ def test_invalid_result_says_what_is_wrong(tmp_path: Path, toeic: ListeningForma
 def test_items_become_segments_with_item_id_and_role(tmp_path: Path, toeic: ListeningFormat) -> None:
     script = to_script(load_result(_write(tmp_path, _result()), toeic), toeic)
 
-    # "Number 1." は質問文と同じ発話にまとめる。3つの応答も1回の発話にまとめる
-    # （どちらも別々に合成すると文と文のつながりの抑揚が失われ棒読みに聞こえるため）。
-    assert [segment.role for segment in script.segments] == ["question", "choice"]
-    assert script.segments[0].text == "Number 1. When will you finish checking the truth table?"
-    assert script.segments[1].text == (
-        "By the end of this afternoon. In the small lecture room. The table was quite accurate."
+    # "Number 1." は単独の発話にして直後に短い間を置く（質問文と同じ発話にまとめると
+    # 番号を認識する間もなく質問が始まってしまうため分離した）。3つの応答は
+    # 1回の発話にまとめ、各応答の前に "A." "B." "C." を読み上げる（別々に合成すると
+    # 文と文のつながりの抑揚が失われ棒読みに聞こえるため、応答自体はまとめて合成する）。
+    assert [segment.role for segment in script.segments] == ["question", "question", "choice"]
+    assert script.segments[0].text == "Number 1."
+    assert script.segments[1].text == "When will you finish checking the truth table?"
+    assert script.segments[2].text == (
+        "A. By the end of this afternoon. B. In the small lecture room. C. The table was quite accurate."
     )
     assert all(segment.item_id == "item-001" for segment in script.segments)
     assert all(segment.language == "en" for segment in script.segments)
     # 質問と応答は別の声にする（本番はどちらもナレーターの声だが、聴き分けやすくするための脚色）。
     assert script.segments[0].speaker == "narrator"
-    assert script.segments[1].speaker == "respondent"
-    # 疑問文の後は「本当に尋ねている」間(1.2秒)、応答の後は次の問題までのマーク時間(5秒)。
-    assert script.segments[0].pause == 1.2
-    assert script.segments[1].pause == 5.0
+    assert script.segments[1].speaker == "narrator"
+    assert script.segments[2].speaker == "respondent"
+    # "Number 1." の後は短い間(0.5秒)、疑問文の後は「本当に尋ねている」間(1.2秒)、
+    # 応答の後は次の問題までのマーク時間(5秒)。
+    assert script.segments[0].pause == 0.5
+    assert script.segments[1].pause == 1.2
+    assert script.segments[2].pause == 5.0
 
 
 def test_answers_carry_the_label_and_text(tmp_path: Path, toeic: ListeningFormat) -> None:
@@ -234,7 +240,7 @@ def test_cli_ingest_writes_script_answers_and_tex(tmp_path: Path) -> None:
 
     assert result.returncode == 0, result.stderr
     payload = json.loads(result.stdout)
-    assert payload["items"] == 1 and payload["segments"] == 2  # "Number 1. question" + 応答3つをまとめて1発話
+    assert payload["items"] == 1 and payload["segments"] == 3  # "Number 1." + 質問文 + 応答3つをまとめて1発話
     assert (out_dir / "dialogue.json").exists()
     assert (out_dir / "answers.json").exists()
     assert (out_dir / "worksheet.tex").exists()
