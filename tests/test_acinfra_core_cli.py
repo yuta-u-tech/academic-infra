@@ -86,7 +86,9 @@ def test_competency_mastery_reports_no_attempts_honestly(tmp_path: Path):
     assert mastery.returncode == 0, mastery.stderr
     report = {entry["competency_id"]: entry for entry in json.loads(mastery.stdout)}
     assert report["toeic.vocabulary.recall"]["mastery"] is None
-    assert report["toeic.part5.grammar"]["resource_gap_hint"]["gap_kind"] == "coverage"
+    assert report["toeic.vocabulary.recall"]["resource_gap_hint"]["gap_kind"] == "volume"
+    assert report["toeic.part5.grammar"]["resource_gap_hint"]["gap_kind"] == "volume"
+    assert report["toeic.part7.reading"]["resource_gap_hint"]["gap_kind"] == "coverage"
 
 
 def test_competency_mastery_can_open_requirements(tmp_path: Path):

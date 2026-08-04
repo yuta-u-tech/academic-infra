@@ -2,10 +2,12 @@
 
 import pytest
 
+from acenglish.items import GrammarItem
 from acenglish.sources import note_path_for, slugify
 from acenglish.sources.base import ExternalMaterial
 from acenglish.sources.studyforge import DeckNotFoundError, fetch_deck, iter_materials, split_example
 from acenglish.sources.ted import parse_vtt
+from acenglish.sources.toeic_part5 import iter_materials as iter_part5_materials
 from acenglish.sources.voa import ArticleFetchError, parse_article, to_material
 
 
@@ -88,6 +90,31 @@ def test_toeic_errors_are_routed_to_the_vocabulary_note():
 def test_entries_missing_a_term_or_definition_are_skipped():
     terms = [{"term": "", "definition": "x"}, {"term": "y", "definition": ""}, {"term": "ok", "definition": "可"}]
     assert [item.word for _, item in iter_materials("d", terms)] == ["ok"]
+
+
+# --- TOEIC Part5 (grammar) ------------------------------------------------
+
+def _grammar_item(point: str) -> GrammarItem:
+    return GrammarItem(
+        sentence="The manager ____ the report yesterday.",
+        choices=["submit", "submits", "submitted", "submitting"],
+        answer_index=2,
+        explanation="過去の出来事なので過去形。",
+        point=point,
+    )
+
+
+def test_each_part5_question_becomes_its_own_learning_target():
+    """デッキ単位にすると全問が1つの習熟度に丸められる（study-forgeと同じ理由）。"""
+    items = [_grammar_item("時制"), _grammar_item("態")]
+    pairs = list(iter_part5_materials("20260804", items))
+
+    assert [m.review_id for m, _ in pairs] == [
+        "toeic.part5.20260804.0001",
+        "toeic.part5.20260804.0002",
+    ]
+    assert all(m.source == "toeic" for m, _ in pairs)
+    assert pairs[0][0].source_file == "notes/grammar/toeic-part5-20260804.md"
 
 
 # --- VOA -----------------------------------------------------------------

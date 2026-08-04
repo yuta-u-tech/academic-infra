@@ -9,8 +9,9 @@ from __future__ import annotations
 import sqlite3
 
 from .generate import ingest, upsert_material
+from .items import GrammarItem
 from .sources import ExternalMaterial
-from .sources import studyforge, ted, voa
+from .sources import studyforge, ted, toeic_part5, voa
 
 
 def import_toeic_deck(connection: sqlite3.Connection, deck: str, limit: int | None = None) -> int:
@@ -37,6 +38,30 @@ def import_toeic_deck(connection: sqlite3.Connection, deck: str, limit: int | No
         ingest(
             connection,
             studyforge.build_result(material, item, f"TOEIC 単語集 {deck} からの取り込み"),
+        )
+        imported += 1
+    return imported
+
+
+def import_toeic_part5(connection: sqlite3.Connection, set_id: str, items: list[GrammarItem]) -> int:
+    """TOEIC Part5（空所補充）のセットを学習ループへ取り込む。
+
+    `toeic_reading_cli.py worksheet` が組む冊子と同じ items を渡す想定。再取り込みしても
+    問題が二重にならないよう、既にカードがあれば飛ばす（`import_toeic_deck` と同じ理由）。
+    """
+    imported = 0
+    for material, item in toeic_part5.iter_materials(set_id, items):
+        upsert_material(connection, material)
+        existing = connection.execute(
+            "SELECT 1 FROM generated_item WHERE review_id = ? AND kind = 'grammar'"
+            " AND retired_at IS NULL LIMIT 1",
+            (material.review_id,),
+        ).fetchone()
+        if existing:
+            continue
+        ingest(
+            connection,
+            toeic_part5.build_result(material, item, f"TOEIC Part5 セット {set_id} からの取り込み"),
         )
         imported += 1
     return imported

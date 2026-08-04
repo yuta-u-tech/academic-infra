@@ -7,6 +7,9 @@
 
     python3 scripts/toeic_reading_cli.py worksheet --items items.json --out .toeic-reading/sets/20260804-part5
     python3 scripts/toeic_reading_cli.py publish --pdf .toeic-reading/sets/20260804-part5/worksheet.pdf --dry-run
+
+    # 同じ items.json を acenglish の学習ループ（attempt/skill_state）へ取り込む
+    python3 scripts/toeic_reading_cli.py ingest --items items.json --set-id 20260804
 """
 
 from __future__ import annotations
@@ -19,6 +22,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+from acenglish.db import connect  # noqa: E402
+from acenglish.fetch import import_toeic_part5  # noqa: E402
 from acenglish.items import GrammarItem  # noqa: E402
 from pydantic import ValidationError  # noqa: E402
 from toeic_reading.render import build_pdf, render_tex  # noqa: E402
@@ -45,6 +50,14 @@ def _cmd_worksheet(args: argparse.Namespace) -> int:
     tex_path.write_text(render_tex(title, items), encoding="utf-8")
     pdf_path = build_pdf(tex_path)
     print(json.dumps({"pdf": str(pdf_path), "count": len(items)}, ensure_ascii=False, indent=2))
+    return 0
+
+
+def _cmd_ingest(args: argparse.Namespace) -> int:
+    _title, items = _load_items(args.items)
+    with connect(args.db) as connection:
+        imported = import_toeic_part5(connection, args.set_id, items)
+    print(json.dumps({"set_id": args.set_id, "count": len(items), "imported": imported}, ensure_ascii=False, indent=2))
     return 0
 
 
@@ -87,6 +100,12 @@ def build_parser() -> argparse.ArgumentParser:
     worksheet.add_argument("--items", type=Path, required=True, help="GrammarItem 形式の items.json")
     worksheet.add_argument("--out", type=Path, required=True, help="出力先ディレクトリ")
     worksheet.set_defaults(func=_cmd_worksheet)
+
+    ingest = sub.add_parser("ingest", help="items.json を acenglish の学習ループへ取り込む")
+    ingest.add_argument("--items", type=Path, required=True, help="GrammarItem 形式の items.json")
+    ingest.add_argument("--set-id", required=True, help="このセットの識別子（review_idに使う）")
+    ingest.add_argument("--db", type=Path, default=None, help="既定: ~/.academic-english/english.db")
+    ingest.set_defaults(func=_cmd_ingest)
 
     publish = sub.add_parser("publish", help="問題冊子PDFを Drive へ上げる")
     publish.add_argument("--pdf", type=Path, required=True)

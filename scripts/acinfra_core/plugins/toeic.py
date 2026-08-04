@@ -2,11 +2,11 @@
 
 設計: docs/2026-08-04-goal-driven-learning-platform.md §7
 
-現状で `attempt` が実際に貯まるのは TOEIC 語彙（`acenglish.sources.studyforge` が
-`toeic.<deck>.<index>` という review_id で取り込む）だけ。Part5 文法・Part7 読解は
-`academic_audio` / `toeic_reading` が生成するのみで学習ループに未接続（§1.3）なので、
-ここでは `domain_ref=None` のまま宣言し、`mastery_summary()` は正直に「データなし」を返す。
-接続してからここを埋める（別Issue）。
+`attempt` が実際に貯まるのは TOEIC 語彙（`acenglish.sources.studyforge`）と
+Part5 文法（`acenglish.sources.toeic_part5`、`toeic_reading_cli.py ingest` 経由）の
+2つ。Part7 読解はまだ `toeic_reading` 側に生成器が無く学習ループに未接続なので、
+ここでは `domain_ref=None` のまま宣言し、`mastery_summary()` は正直に「データなし」を
+返す。Part7用の生成器ができてから埋める（別Issue）。
 """
 
 from __future__ import annotations
@@ -18,10 +18,15 @@ from .base import CompetencyTemplate, DomainPlugin, MasterySummary, ResourceGapH
 
 DOMAIN_ID = "toeic"
 
-# target_ref_prefix は acenglish.sources.studyforge が振る review_id の接頭辞
-# （`toeic.<deck>.<index>`）に対応する。deck ごとに分けないのは、TOEIC語彙という
-# 粒度で mastery を見たいため（デッキ別の内訳が要るようになったら分割する）。
+# target_ref_prefix は各 acenglish.sources.* が振る review_id の接頭辞に対応する。
+# deck/セット単位に分けないのは、TOEIC語彙・Part5文法という粒度で mastery を見たいため
+# （内訳が要るようになったら分割する）。
 _VOCAB_REF = json.dumps({"acenglish_domain": "vocabulary", "sub_skill": "recall", "target_ref_prefix": "toeic."})
+# GrammarItem.sub_skill の既定値（"knowledge"）に合わせる。items.json 側で明示的に
+# 別の sub_skill（processing_speed 等）を指定した問題はこの集計に含まれない。
+_PART5_REF = json.dumps(
+    {"acenglish_domain": "grammar", "sub_skill": "knowledge", "target_ref_prefix": "toeic.part5."}
+)
 
 TOEIC_COMPETENCIES: tuple[CompetencyTemplate, ...] = (
     CompetencyTemplate(
@@ -35,7 +40,7 @@ TOEIC_COMPETENCIES: tuple[CompetencyTemplate, ...] = (
         competency_id="toeic.part5.grammar",
         domain_id=DOMAIN_ID,
         title="Part5 文法（短文穴埋め）",
-        domain_ref=None,
+        domain_ref=_PART5_REF,
         exam_weight=0.2,
     ),
     CompetencyTemplate(
@@ -69,7 +74,7 @@ class ToeicPlugin(DomainPlugin):
         if competency.domain_ref is None:
             return MasterySummary(
                 competency_id=competency.competency_id,
-                note="acenglish未接続（academic_audio/toeic_readingがStudyItem化されていない）",
+                note="acenglish未接続（この Competency 向けの生成器/取り込みがまだ無い）",
             )
         spec = json.loads(competency.domain_ref)
         rows = self._connection.execute(
@@ -103,7 +108,7 @@ class ToeicPlugin(DomainPlugin):
             return ResourceGapHint(
                 competency_id=competency.competency_id,
                 gap_kind="coverage",
-                reason="学習ループに未接続（academic_audio/toeic_readingのStudyItem化が先）",
+                reason="学習ループに未接続（この Competency 向けの生成器/取り込みがまだ無い）",
             )
         if summary.attempts == 0:
             return ResourceGapHint(

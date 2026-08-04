@@ -46,13 +46,33 @@ def test_mastery_summary_reports_no_attempts_honestly(tmp_path):
 
 
 def test_mastery_summary_reports_unconnected_competencies(tmp_path):
+    """Part7読解はまだ生成器が無く学習ループに未接続（Part5と違い、正直にそう返す）。"""
     with connect_acenglish(tmp_path / "english.db") as connection:
+        plugin = ToeicPlugin(connection)
+        part7 = next(c for c in plugin.competencies() if c.competency_id == "toeic.part7.reading")
+        summary = plugin.mastery_summary([part7])["toeic.part7.reading"]
+
+    assert summary.mastery is None
+    assert "未接続" in summary.note
+
+
+def test_mastery_summary_reads_part5_grammar_attempts(tmp_path):
+    """Part5はtoeic_reading_cli.py ingestで学習ループに接続済み（Part7とは違う）。"""
+    with connect_acenglish(tmp_path / "english.db") as connection:
+        connection.execute(
+            "INSERT INTO skill_state (domain, sub_skill, target_ref, mastery, confidence,"
+            " hint_rate, error_streak, attempts, updated_at) VALUES"
+            " ('grammar', 'knowledge', 'toeic.part5.20260804.0001', 0.6, 0.7, 0.0, 0, 4,"
+            " '2026-08-04T00:00:00+00:00')"
+        )
+        connection.commit()
+
         plugin = ToeicPlugin(connection)
         part5 = next(c for c in plugin.competencies() if c.competency_id == "toeic.part5.grammar")
         summary = plugin.mastery_summary([part5])["toeic.part5.grammar"]
 
-    assert summary.mastery is None
-    assert "未接続" in summary.note
+    assert summary.mastery == 0.6
+    assert summary.attempts == 4
 
 
 def test_resource_gap_hint_flags_low_mastery(tmp_path):
