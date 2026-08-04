@@ -48,3 +48,42 @@ def test_goal_list_and_update_status(tmp_path: Path):
 
     active = run_cli(db_path, "goal", "list", "--status", "active")
     assert [g["goal_id"] for g in json.loads(active.stdout)] == ["a"]
+
+
+def test_competency_register_then_list(tmp_path: Path):
+    db_path = tmp_path / "core.db"
+    english_db_path = tmp_path / "english.db"
+    run_cli(db_path, "goal", "create", "--id", "toeic-900", "--title", "TOEIC 900点")
+
+    registered = run_cli(
+        db_path, "competency", "register", "--goal", "toeic-900", "--domain", "toeic",
+        "--english-db", str(english_db_path),
+    )
+    assert registered.returncode == 0, registered.stderr
+    assert len(json.loads(registered.stdout)) == 3
+
+    listed = run_cli(db_path, "competency", "list", "--goal", "toeic-900")
+    assert listed.returncode == 0, listed.stderr
+    assert {c["competency_id"] for c in json.loads(listed.stdout)} == {
+        "toeic.vocabulary.recall",
+        "toeic.part5.grammar",
+        "toeic.part7.reading",
+    }
+
+
+def test_competency_mastery_reports_no_attempts_honestly(tmp_path: Path):
+    db_path = tmp_path / "core.db"
+    english_db_path = tmp_path / "english.db"
+    run_cli(db_path, "goal", "create", "--id", "toeic-900", "--title", "TOEIC 900点")
+    run_cli(
+        db_path, "competency", "register", "--goal", "toeic-900", "--domain", "toeic",
+        "--english-db", str(english_db_path),
+    )
+
+    mastery = run_cli(
+        db_path, "competency", "mastery", "--goal", "toeic-900", "--english-db", str(english_db_path)
+    )
+    assert mastery.returncode == 0, mastery.stderr
+    report = {entry["competency_id"]: entry for entry in json.loads(mastery.stdout)}
+    assert report["toeic.vocabulary.recall"]["mastery"] is None
+    assert report["toeic.part5.grammar"]["resource_gap_hint"]["gap_kind"] == "coverage"
