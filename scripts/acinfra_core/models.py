@@ -11,6 +11,18 @@ from pydantic import BaseModel, Field
 GOAL_STATUSES = ("active", "paused", "achieved", "abandoned")
 RESOURCE_STATUSES = ("candidate", "reviewed", "active", "deprecated", "archived")
 RESOURCE_REQUIREMENT_STATUSES = ("unresolved", "resolved", "dismissed")
+# gap_kind は設計書 §3 の resource_requirement コメント（coverage/difficulty/activity/
+# quality/evidence/volume/freshness）をそのまま踏襲する。
+RESOURCE_REQUIREMENT_GAP_KINDS = (
+    "coverage",
+    "difficulty",
+    "activity",
+    "quality",
+    "evidence",
+    "volume",
+    "freshness",
+)
+RESOURCE_REQUIREMENT_PRIORITIES = ("low", "medium", "high", "critical")
 RESEARCH_REQUEST_STATUSES = ("open", "in_progress", "done", "dismissed")
 PROPOSAL_TIERS = ("auto", "suggest", "approval_required")
 PROPOSAL_STATUSES = ("pending", "approved", "rejected", "expired")

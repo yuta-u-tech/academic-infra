@@ -87,3 +87,68 @@ def test_competency_mastery_reports_no_attempts_honestly(tmp_path: Path):
     report = {entry["competency_id"]: entry for entry in json.loads(mastery.stdout)}
     assert report["toeic.vocabulary.recall"]["mastery"] is None
     assert report["toeic.part5.grammar"]["resource_gap_hint"]["gap_kind"] == "coverage"
+
+
+def test_competency_mastery_can_open_requirements(tmp_path: Path):
+    db_path = tmp_path / "core.db"
+    english_db_path = tmp_path / "english.db"
+    run_cli(db_path, "goal", "create", "--id", "toeic-900", "--title", "TOEIC 900点")
+    run_cli(
+        db_path, "competency", "register", "--goal", "toeic-900", "--domain", "toeic",
+        "--english-db", str(english_db_path),
+    )
+
+    mastery = run_cli(
+        db_path, "competency", "mastery", "--goal", "toeic-900",
+        "--english-db", str(english_db_path), "--open-requirements",
+    )
+    assert mastery.returncode == 0, mastery.stderr
+
+    requirements = run_cli(db_path, "requirement", "list", "--goal", "toeic-900")
+    assert requirements.returncode == 0, requirements.stderr
+    listed = json.loads(requirements.stdout)
+    assert {r["requirement_id"] for r in listed} == {
+        "auto.toeic.vocabulary.recall",
+        "auto.toeic.part5.grammar",
+        "auto.toeic.part7.reading",
+    }
+    assert all(r["status"] == "unresolved" for r in listed)
+
+
+def test_resource_register_list_and_update_status(tmp_path: Path):
+    db_path = tmp_path / "core.db"
+    run_cli(db_path, "goal", "create", "--id", "toeic-900", "--title", "TOEIC 900点")
+
+    registered = run_cli(
+        db_path, "resource", "register", "--goal", "toeic-900", "--id", "vol8",
+        "--title", "TOEIC公式問題集8", "--kind", "book",
+    )
+    assert registered.returncode == 0, registered.stderr
+    assert json.loads(registered.stdout)["status"] == "candidate"
+
+    run_cli(db_path, "resource", "update-status", "vol8", "active")
+
+    listed = run_cli(db_path, "resource", "list", "--goal", "toeic-900", "--status", "active")
+    assert [r["resource_id"] for r in json.loads(listed.stdout)] == ["vol8"]
+
+
+def test_requirement_resolve_and_dismiss(tmp_path: Path):
+    db_path = tmp_path / "core.db"
+    english_db_path = tmp_path / "english.db"
+    run_cli(db_path, "goal", "create", "--id", "toeic-900", "--title", "TOEIC 900点")
+    run_cli(
+        db_path, "competency", "register", "--goal", "toeic-900", "--domain", "toeic",
+        "--english-db", str(english_db_path),
+    )
+    run_cli(
+        db_path, "competency", "mastery", "--goal", "toeic-900",
+        "--english-db", str(english_db_path), "--open-requirements",
+    )
+
+    resolved = run_cli(db_path, "requirement", "resolve", "auto.toeic.vocabulary.recall")
+    assert resolved.returncode == 0, resolved.stderr
+    assert json.loads(resolved.stdout)["status"] == "resolved"
+
+    dismissed = run_cli(db_path, "requirement", "dismiss", "auto.toeic.part5.grammar")
+    assert dismissed.returncode == 0, dismissed.stderr
+    assert json.loads(dismissed.stdout)["status"] == "dismissed"

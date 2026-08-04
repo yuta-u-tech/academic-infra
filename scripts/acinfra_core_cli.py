@@ -17,6 +17,17 @@
 
     # acenglish の Evidence/Mastery を読んで要約する（Core には保存しない）
     python3 scripts/acinfra_core_cli.py competency mastery --goal toeic-900
+    # 不足が見つかった Competency を resource_requirement として起票する
+    python3 scripts/acinfra_core_cli.py competency mastery --goal toeic-900 --open-requirements
+
+    # 教材台帳
+    python3 scripts/acinfra_core_cli.py resource register --goal toeic-900 --id vol8 \
+        --title "TOEIC公式問題集8" --kind book
+    python3 scripts/acinfra_core_cli.py resource list --goal toeic-900
+
+    # 不足診断
+    python3 scripts/acinfra_core_cli.py requirement list --goal toeic-900
+    python3 scripts/acinfra_core_cli.py requirement resolve req-id
 """
 from __future__ import annotations
 
@@ -28,7 +39,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from acenglish.db import connect as connect_acenglish  # noqa: E402
-from acinfra_core import competency, goal  # noqa: E402
+from acinfra_core import competency, goal, resource  # noqa: E402
+from acinfra_core import resource_requirement as rr  # noqa: E402
 from acinfra_core.db import connect  # noqa: E402
 from acinfra_core.plugins.toeic import ToeicPlugin  # noqa: E402
 
@@ -94,36 +106,88 @@ def _cmd_competency_mastery(args: argparse.Namespace) -> int:
     with connect(args.db) as connection:
         competencies = competency.list_competencies(connection, args.goal)
 
-    by_domain: dict[str, list] = {}
-    for item in competencies:
-        by_domain.setdefault(item.domain_id, []).append(item)
+        by_domain: dict[str, list] = {}
+        for item in competencies:
+            by_domain.setdefault(item.domain_id, []).append(item)
 
-    report = []
-    with connect_acenglish(args.english_db) as acenglish_connection:
-        for domain_id, items in by_domain.items():
-            plugin_cls = DOMAIN_PLUGINS.get(domain_id)
-            if plugin_cls is None:
-                for item in items:
-                    report.append({"competency_id": item.competency_id, "note": f"未対応のdomain_id: {domain_id}"})
-                continue
-            plugin = plugin_cls(acenglish_connection)
-            templates = {t.competency_id: t for t in plugin.competencies()}
-            summaries = plugin.mastery_summary(
-                [templates[item.competency_id] for item in items if item.competency_id in templates]
-            )
-            for item in items:
-                summary = summaries.get(item.competency_id)
-                if summary is None:
-                    report.append({"competency_id": item.competency_id, "note": "Plugin未定義のCompetency"})
+        report = []
+        with connect_acenglish(args.english_db) as acenglish_connection:
+            for domain_id, items in by_domain.items():
+                plugin_cls = DOMAIN_PLUGINS.get(domain_id)
+                if plugin_cls is None:
+                    for item in items:
+                        report.append(
+                            {"competency_id": item.competency_id, "note": f"未対応のdomain_id: {domain_id}"}
+                        )
                     continue
-                template = templates[item.competency_id]
-                hint = plugin.resource_gap_hint(template, summary)
-                entry = summary.model_dump()
-                entry["title"] = item.title
-                entry["resource_gap_hint"] = hint.model_dump() if hint else None
-                report.append(entry)
+                plugin = plugin_cls(acenglish_connection)
+                templates = {t.competency_id: t for t in plugin.competencies()}
+                summaries = plugin.mastery_summary(
+                    [templates[item.competency_id] for item in items if item.competency_id in templates]
+                )
+                for item in items:
+                    summary = summaries.get(item.competency_id)
+                    if summary is None:
+                        report.append({"competency_id": item.competency_id, "note": "Plugin未定義のCompetency"})
+                        continue
+                    template = templates[item.competency_id]
+                    hint = plugin.resource_gap_hint(template, summary)
+                    entry = summary.model_dump()
+                    entry["title"] = item.title
+                    entry["resource_gap_hint"] = hint.model_dump() if hint else None
+                    if hint is not None and args.open_requirements:
+                        requirement_id = f"auto.{item.competency_id}"
+                        if rr.get_requirement(connection, requirement_id, required=False) is None:
+                            rr.open_requirement_from_gap_hint(connection, args.goal, requirement_id, hint)
+                        entry["requirement_id"] = requirement_id
+                    report.append(entry)
 
     print(json.dumps(report, ensure_ascii=False, indent=2))
+    return 0
+
+
+def _cmd_resource_register(args: argparse.Namespace) -> int:
+    with connect(args.db) as connection:
+        created = resource.register_resource(
+            connection, args.goal, args.id, args.title, args.kind,
+            location=args.location, authority=args.authority,
+        )
+    print(json.dumps(created.model_dump(), ensure_ascii=False, indent=2))
+    return 0
+
+
+def _cmd_resource_list(args: argparse.Namespace) -> int:
+    with connect(args.db) as connection:
+        resources = resource.list_resources(connection, args.goal, status=args.status)
+    print(json.dumps([r.model_dump() for r in resources], ensure_ascii=False, indent=2))
+    return 0
+
+
+def _cmd_resource_update_status(args: argparse.Namespace) -> int:
+    with connect(args.db) as connection:
+        updated = resource.update_resource_status(connection, args.id, args.status)
+    print(json.dumps(updated.model_dump(), ensure_ascii=False, indent=2))
+    return 0
+
+
+def _cmd_requirement_list(args: argparse.Namespace) -> int:
+    with connect(args.db) as connection:
+        requirements = rr.list_requirements(connection, args.goal, status=args.status)
+    print(json.dumps([r.model_dump() for r in requirements], ensure_ascii=False, indent=2))
+    return 0
+
+
+def _cmd_requirement_resolve(args: argparse.Namespace) -> int:
+    with connect(args.db) as connection:
+        updated = rr.update_requirement_status(connection, args.id, "resolved")
+    print(json.dumps(updated.model_dump(), ensure_ascii=False, indent=2))
+    return 0
+
+
+def _cmd_requirement_dismiss(args: argparse.Namespace) -> int:
+    with connect(args.db) as connection:
+        updated = rr.update_requirement_status(connection, args.id, "dismissed")
+    print(json.dumps(updated.model_dump(), ensure_ascii=False, indent=2))
     return 0
 
 
@@ -177,12 +241,66 @@ def main() -> int:
     )
     mastery.add_argument("--goal", required=True)
     mastery.add_argument("--english-db", type=Path, default=None, dest="english_db")
+    mastery.add_argument(
+        "--open-requirements", action="store_true",
+        help="不足が見つかった Competency を resource_requirement として起票する",
+    )
     mastery.set_defaults(func=_cmd_competency_mastery)
+
+    resource_parser = subparsers.add_parser("resource", help="教材台帳")
+    resource_subparsers = resource_parser.add_subparsers(dest="resource_command", required=True)
+
+    resource_register = resource_subparsers.add_parser("register", help="教材を台帳に登録する")
+    resource_register.add_argument("--goal", required=True)
+    resource_register.add_argument("--id", required=True, dest="id")
+    resource_register.add_argument("--title", required=True)
+    resource_register.add_argument("--kind", required=True, help="例: book/pdf/generated/app")
+    resource_register.add_argument("--location", help="Drive file_id 等")
+    resource_register.add_argument("--authority")
+    resource_register.set_defaults(func=_cmd_resource_register)
+
+    resource_list = resource_subparsers.add_parser("list", help="教材一覧")
+    resource_list.add_argument("--goal", required=True)
+    resource_list.add_argument("--status", choices=("candidate", "reviewed", "active", "deprecated", "archived"))
+    resource_list.set_defaults(func=_cmd_resource_list)
+
+    resource_update_status = resource_subparsers.add_parser("update-status", help="教材の状態を変える")
+    resource_update_status.add_argument("id")
+    resource_update_status.add_argument(
+        "status", choices=("candidate", "reviewed", "active", "deprecated", "archived")
+    )
+    resource_update_status.set_defaults(func=_cmd_resource_update_status)
+
+    requirement_parser = subparsers.add_parser("requirement", help="教材不足の診断")
+    requirement_subparsers = requirement_parser.add_subparsers(dest="requirement_command", required=True)
+
+    requirement_list = requirement_subparsers.add_parser("list", help="不足診断の一覧")
+    requirement_list.add_argument("--goal", required=True)
+    requirement_list.add_argument("--status", choices=("unresolved", "resolved", "dismissed"))
+    requirement_list.set_defaults(func=_cmd_requirement_list)
+
+    requirement_resolve = requirement_subparsers.add_parser("resolve", help="不足診断を解消済みにする")
+    requirement_resolve.add_argument("id")
+    requirement_resolve.set_defaults(func=_cmd_requirement_resolve)
+
+    requirement_dismiss = requirement_subparsers.add_parser("dismiss", help="不足診断を却下する")
+    requirement_dismiss.add_argument("id")
+    requirement_dismiss.set_defaults(func=_cmd_requirement_dismiss)
 
     args = parser.parse_args()
     try:
         return args.func(args)
-    except (goal.GoalNotFoundError, goal.DuplicateGoalError, goal.InvalidGoalStatusError) as error:
+    except (
+        goal.GoalNotFoundError,
+        goal.DuplicateGoalError,
+        goal.InvalidGoalStatusError,
+        resource.ResourceNotFoundError,
+        resource.DuplicateResourceError,
+        resource.InvalidResourceStatusError,
+        rr.ResourceRequirementNotFoundError,
+        rr.DuplicateResourceRequirementError,
+        rr.InvalidResourceRequirementError,
+    ) as error:
         print(str(error), file=sys.stderr)
         return 1
 
