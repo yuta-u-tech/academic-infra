@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import ipaddress
 import sqlite3
+import sys
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Iterator
@@ -24,7 +25,11 @@ from .db import connect
 from .model import due_items
 from .target import COURSES_YML_PATH
 
-WEB_DIR = Path(__file__).resolve().parent.parent.parent / "web"
+if getattr(sys, "frozen", False):
+    # PyInstaller sidecar (desktop/): データは _MEIPASS 直下に web/ として同梱される。
+    WEB_DIR = Path(sys._MEIPASS) / "web"  # type: ignore[attr-defined]
+else:
+    WEB_DIR = Path(__file__).resolve().parent.parent.parent / "web"
 
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 8791  # gjp web(8765) / pm-agent dashboard(4783) と衝突しない番号

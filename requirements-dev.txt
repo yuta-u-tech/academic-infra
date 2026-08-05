@@ -2,3 +2,5 @@
 pytest==8.3.3
 # tests/test_english_api.py の fastapi.testclient が要求する。
 httpx==0.28.1
+# desktop/ の Tauri sidecar (scripts/acenglish/sidecar.spec) をビルドするために使う。
+pyinstaller==6.11.1

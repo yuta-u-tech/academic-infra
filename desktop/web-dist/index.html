@@ -1,0 +1,785 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>English Drill</title>
+<style>
+/* ─────────────────────────────────────────────────────────────
+   variant: luminous — 「発光する深度 / マテリアル」
+   影ではなく光で階層を作る。光源は画面上端中央の1つだけで、
+   面の持ち上げ（上端の lip）と沈み込み（下端の内側 lip）は
+   すべてその1つの光と矛盾しないよう向きを決める。
+   トークンの出自は design_runs/2026-07-30-english-drill/genome.json。
+   ───────────────────────────────────────────────────────────── */
+:root {
+  /* 面。上に行くほど明るい＝光源が上にある、という一貫した規則で決める。 */
+  --void:    #07080B;   /* 底。カードの外側 */
+  --sunk:    #0A0D12;   /* 沈んだ面（passage / 入力欄） */
+  --raised:  #12161D;   /* 持ち上がった面（選択肢） */
+  --sheet:   #151A22;   /* カード上端の色。下端で --sunk 寄りへ落ちる */
+
+  /* 光。境界線は「線」ではなく「光の当たった稜線」として扱う。 */
+  --edge:    rgba(255,255,255,.070);  /* 面の輪郭 */
+  --edge-hi: rgba(255,255,255,.140);  /* hover 時の稜線 */
+  --lip:     rgba(255,255,255,.065);  /* 上端の光沢（持ち上がり） */
+  --lip-in:  rgba(255,255,255,.035);  /* 下端内側の光沢（沈み込み） */
+
+  --muted:   #8B949E;
+  --fg:      #E6EDF3;
+  --accent:  #4C8DFF;
+  --accent-soft: rgba(76,141,255,.14);
+  --accent-line: rgba(120,166,255,.55);
+  --accent-glow: rgba(76,141,255,.42);
+  /* 状態色。出題中は使わない（色が答えの手がかりになるのを防ぐ）。 */
+  --ok:      #3FB950;
+  --ng:      #F85149;
+
+  /* 階層は3段。段間 1.6倍以上（1.2倍差は「揃え損ね」に見える）。 */
+  --r1: 32px;   /* 問題文 */
+  --r2: 20px;   /* 選択肢・passage */
+  --r3: 12px;   /* 進捗・キーマップ */
+
+  --s1: 4px; --s2: 8px; --s3: 12px; --s4: 16px;
+  --s5: 24px; --s6: 32px; --s7: 48px; --s8: 64px; --s9: 96px;
+
+  --sans: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Hiragino Sans", sans-serif;
+  --mono: ui-monospace, "SF Mono", Menlo, "Courier New", monospace;
+
+  /* 角丸は1系列だけ。外→内で 16 / 12 / 10 / 6 と落とす。 */
+  --rad-card: 16px; --rad-well: 12px; --rad-tile: 10px; --rad-chip: 6px;
+
+  --w: 800px;   /* カード幅。verdict シートも同じ幅で揃える */
+}
+
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0; background: var(--void); color: var(--fg);
+  font-family: var(--sans); font-size: 16px; line-height: 1.7;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* 光源と質感。ひとつの ::before にまとめる。
+   ::after を使うと body の最終子として本文の上に重なるので、
+   main 側に z-index を足す羽目になり、main が積層文脈を作って
+   verdict シートが keybar の下へ潜る（実測で確認）。層は増やさない。
+   質感はドットと斜めの粒だけ。画像は使わない（オフライン起動のため）。 */
+body::before {
+  content: ""; position: fixed; inset: 0; pointer-events: none; z-index: 0;
+  background-image:
+    radial-gradient(58% 45% at 50% 0%, rgba(88,138,255,.085), transparent 68%),
+    radial-gradient(90% 30% at 50% 0%, rgba(255,255,255,.030), transparent 70%),
+    radial-gradient(rgba(255,255,255,.020) .5px, transparent .5px),
+    repeating-linear-gradient(58deg, rgba(255,255,255,.010) 0 1px, transparent 1px 4px);
+  background-size: auto, auto, 4px 4px, auto;
+}
+
+/* セッション進捗。溝（track）と、その中で光る帯。数字より先に量が伝わる。 */
+#rail {
+  position: fixed; inset: 0 0 auto 0; height: 2px; z-index: 10;
+  background: rgba(255,255,255,.05);
+}
+#progress {
+  position: fixed; inset: 0 auto auto 0; height: 2px; width: 0; z-index: 11;
+  background: linear-gradient(90deg, rgba(76,141,255,.28), var(--accent));
+  box-shadow: 0 0 10px rgba(76,141,255,.55), 0 0 2px rgba(76,141,255,.9);
+  transition: width .3s ease;
+}
+
+main {
+  position: relative;   /* z-index は付けない。付けると積層文脈ができる（上のコメント参照） */
+  max-width: var(--w); margin: 0 auto; padding: var(--s7) var(--s5) 120px;
+}
+
+/* ── rank3: 周辺情報。読ませない、見えていればいい。 ───────── */
+.meta {
+  font-family: var(--mono); font-size: var(--r3); color: var(--muted);
+  letter-spacing: .04em; line-height: 1.6;
+}
+.rail-bar { display: flex; align-items: center; gap: var(--s4); margin: 0 var(--s1) var(--s3); }
+.rail-bar .spacer { flex: 1; }
+.rail-bar b { color: var(--fg); font-weight: 500; }
+.clock { font-variant-numeric: tabular-nums; }
+.clock.over { color: var(--accent); }
+.dots { letter-spacing: .12em; }
+
+.chip {
+  display: inline-block; padding: 2px var(--s2); border-radius: var(--rad-chip);
+  color: var(--muted); background: linear-gradient(180deg, rgba(255,255,255,.045), rgba(255,255,255,.012));
+  box-shadow: 0 0 0 1px var(--edge), inset 0 1px 0 var(--lip);
+}
+kbd {
+  font-family: var(--mono); font-size: var(--r3); color: var(--fg);
+  padding: 1px 6px; border-radius: 5px; margin-right: 3px;
+  background: linear-gradient(180deg, rgba(255,255,255,.055), rgba(255,255,255,.015));
+  box-shadow: 0 0 0 1px var(--edge), inset 0 1px 0 var(--lip);
+}
+
+/* ── カード。持ち上がった主面。上端に光沢、上部に焦点の微発光。 ── */
+.card {
+  position: relative; border-radius: var(--rad-card); padding: var(--s6);
+  background:
+    linear-gradient(180deg, rgba(255,255,255,.026), rgba(255,255,255,0) 140px),
+    linear-gradient(180deg, var(--sheet), #0D1117);
+  box-shadow:
+    0 0 0 1px var(--edge),
+    inset 0 1px 0 rgba(255,255,255,.075),
+    0 32px 64px -34px rgba(0,0,0,.9);
+}
+/* 焦点の発光。カード上端＝視線の入口に1つだけ置く。 */
+.card::before {
+  content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
+  background: radial-gradient(110% 55% at 50% -6%, rgba(76,141,255,.10), transparent 62%);
+}
+.card > * { position: relative; }
+
+.eyebrow {
+  font-family: var(--mono); font-size: var(--r3); color: var(--muted);
+  letter-spacing: .10em; text-transform: none; margin: 0 0 var(--s3);
+}
+
+/* rank1: 主役。1画面に1つだけ。 */
+.stem {
+  font-size: var(--r1); line-height: 1.45; font-weight: 600;
+  letter-spacing: -.01em; margin: 0 0 var(--s5);
+}
+.stem.en { font-family: var(--mono); font-weight: 500; letter-spacing: 0; }
+/* 空所。アンダースコアをそのまま出すと「浮いた罫線」に見えて何を問われて
+   いるか読めない。光る溝として見せる。 */
+.stem .blank {
+  display: inline-block; min-width: 4.5ch; color: transparent; vertical-align: -3px;
+  border-bottom: 2px solid var(--accent);
+  /* box-shadow だと矩形に光が回って「空の四角い箱」に見えた（実測画像で確認）。
+     drop-shadow は形（下線）に沿うので、線そのものが光る。 */
+  filter: drop-shadow(0 2px 5px var(--accent-glow));
+}
+
+/* rank2: passage。沈んだ面。上端が暗く下端内側が光る＝へこんで見える。
+   長文でも選択肢に到達できるよう、面の中だけでスクロールさせる。 */
+.well {
+  position: relative; border-radius: var(--rad-well); padding: var(--s4) var(--s5);
+  margin: 0 0 var(--s4); background: var(--sunk);
+  box-shadow:
+    inset 0 1px 2px rgba(0,0,0,.55),
+    inset 0 -1px 0 var(--lip-in),
+    0 0 0 1px rgba(255,255,255,.035);
+}
+/* 面の中だけスクロールする本文。上限は px で決める。vh にすると
+   画面が高いほど本文が伸びて、選択肢4がいつまでも下端に届かない（実測）。
+   214px は 1440x900 での上限。ただし固定値だけだと画面が低いとき（13インチの
+   実効高さは 757px）に選択肢4が画面外へ出る（実測 bottom=840 > 757）。
+   ビューポートから残り（ヘッダ+設問+選択肢4枚+keybar ≈ 640px）を引いた分と
+   min を取り、低い画面では本文の方を縮める。
+   行の途中で切れるので、続きがあることも同時に伝わる。 */
+.passage {
+  font-family: var(--mono); font-size: var(--r2); line-height: 1.7;
+  margin: 0; max-width: 68ch; white-space: pre-wrap;
+  max-height: min(214px, calc(100vh - 640px)); overflow-y: auto;
+  overscroll-behavior: contain;
+}
+/* 続きがある時だけ、下端を沈ませて切れ目を示す。 */
+.well.is-clipped::after {
+  content: ""; position: absolute; inset: auto 0 0 0; height: 32px; pointer-events: none;
+  border-radius: 0 0 var(--rad-well) var(--rad-well);
+  background: linear-gradient(to top, var(--sunk), rgba(10,13,18,0));
+}
+.passage:focus-visible { outline: 2px solid var(--accent-line); outline-offset: var(--s3); border-radius: 4px; }
+.passage::-webkit-scrollbar { width: 6px; }
+.passage::-webkit-scrollbar-thumb { background: rgba(255,255,255,.10); border-radius: 3px; }
+
+/* rank2: 選択肢。持ち上がったタイル。選ばれた1枚だけが発光する。 */
+.choices { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--s2); }
+.choices button {
+  display: flex; align-items: flex-start; gap: var(--s4);
+  width: 100%; min-height: 44px; padding: var(--s3) var(--s4);
+  font: inherit; font-size: var(--r2); line-height: 1.5; text-align: left;
+  color: var(--fg); border: 0; border-radius: var(--rad-tile); cursor: pointer;
+  background: linear-gradient(180deg, rgba(255,255,255,.042), rgba(255,255,255,.008));
+  box-shadow: 0 0 0 1px var(--edge), inset 0 1px 0 var(--lip);
+  transition: box-shadow .14s ease, background .14s ease;
+}
+.choices button:hover { box-shadow: 0 0 0 1px var(--edge-hi), inset 0 1px 0 rgba(255,255,255,.10); }
+.choices button:focus-visible { outline: 2px solid var(--accent-line); outline-offset: 2px; }
+.choices button[aria-pressed="true"] {
+  background: linear-gradient(180deg, var(--accent-soft), rgba(76,141,255,.045));
+  box-shadow:
+    0 0 0 1px var(--accent-line),
+    inset 0 1px 0 rgba(160,193,255,.28),
+    0 8px 28px -10px var(--accent-glow);
+}
+.choices .key {
+  flex: none; width: 24px; height: 24px; margin-top: 2px;
+  display: grid; place-items: center; border-radius: var(--rad-chip);
+  font-family: var(--mono); font-size: var(--r3); color: var(--muted);
+  background: rgba(255,255,255,.035);
+  box-shadow: inset 0 0 0 1px var(--edge);
+}
+.choices button[aria-pressed="true"] .key {
+  color: #CFE0FF; background: rgba(76,141,255,.20);
+  box-shadow: inset 0 0 0 1px var(--accent-line), 0 0 12px -2px var(--accent-glow);
+}
+.choices .en { font-family: var(--mono); }
+/* 答え合わせ後だけ状態色を出す。 */
+.choices button.is-answer {
+  background: linear-gradient(180deg, rgba(63,185,80,.13), rgba(63,185,80,.04));
+  box-shadow: 0 0 0 1px rgba(63,185,80,.55), inset 0 1px 0 rgba(140,230,150,.22),
+              0 8px 28px -10px rgba(63,185,80,.40);
+}
+.choices button.is-answer .key {
+  color: #8FE39B; background: rgba(63,185,80,.18); box-shadow: inset 0 0 0 1px rgba(63,185,80,.55);
+}
+.choices button.is-chosen-wrong {
+  background: linear-gradient(180deg, rgba(248,81,73,.11), rgba(248,81,73,.03));
+  box-shadow: 0 0 0 1px rgba(248,81,73,.50), inset 0 1px 0 rgba(255,160,155,.18);
+}
+.choices button.is-chosen-wrong .key {
+  color: #FF9E98; background: rgba(248,81,73,.16); box-shadow: inset 0 0 0 1px rgba(248,81,73,.50);
+}
+.choices button:disabled { cursor: default; }
+
+/* ── 語彙タイピング ─────────────────────────────────────────
+   確定分・カーソル・残りゴーストを別に描く。
+   入力欄は沈んだ面にして「ここに打つ」を形で示す（罫線1本だと
+   伏せ字の点が宙に浮いて入力欄に見えなかった）。 */
+/* 幅は px で決める。ch はこの要素の font-size(16px) 基準になるので、
+   中身が 32px の等幅だと半分の幅しか確保できず伏せ字が折り返した（実測）。 */
+.type-well { max-width: 460px; }
+.type-line {
+  font-family: var(--mono); font-size: var(--r1); letter-spacing: .02em;
+  min-height: 46px; margin: 0; word-break: break-word; line-height: 1.3;
+}
+.type-line .slot { letter-spacing: .35em; color: #606B7A; }  /* 沈んだ面上で 3.6:1 */
+.type-line .done { color: var(--fg); }
+.type-line .ghost { color: var(--muted); }
+.type-line .caret {
+  display: inline-block; width: 2px; height: .95em; margin: 0 1px -.1em;
+  background: var(--accent); box-shadow: 0 0 10px var(--accent-glow);
+  animation: blink 1.1s step-end infinite;
+}
+@keyframes blink { 50% { opacity: 0; } }
+.type-well.miss { animation: shake .16s; }
+.type-well.miss .caret { background: var(--ng); box-shadow: 0 0 10px rgba(248,81,73,.5); }
+@keyframes shake {
+  0%,100% { transform: translateX(0); } 25% { transform: translateX(-3px); }
+  75% { transform: translateX(3px); }
+}
+#typeCatcher { position: absolute; opacity: 0; width: 1px; height: 1px; pointer-events: none; }
+
+/* ── キーマップ。下端に固定。面ではなく、底へ溶ける光の帯にする。 ── */
+.keybar {
+  position: fixed; inset: auto 0 0 0; z-index: 5;
+  background: linear-gradient(to top, var(--void) 62%, rgba(7,8,11,0));
+  padding: var(--s6) var(--s5) var(--s5);
+}
+.keybar > div { max-width: var(--w); margin: 0 auto; padding: 0 var(--s1); }
+
+/* ── 答え合わせ。下から持ち上がるシート。カードと同じ幅・同じ稜線。 ──
+   解説は中でスクロールさせ、手応えボタンは常に見える位置に固定する。 */
+.verdict {
+  position: fixed; inset: auto 0 0 0; z-index: 6;
+  padding: 0 var(--s5); pointer-events: none;
+}
+/* 解説がどれだけ長くても手応えボタンは必ず操作できる:
+   シート全体の高さを止め、上（解説）だけを伸縮＋スクロールさせ、
+   下（手応え）は flex:none で常に出す。 */
+.verdict .sheet {
+  position: relative; pointer-events: auto;
+  /* 幅はカードの実寸に合わせる。--w は main の外寸なので padding 2枚ぶん引く。
+     揃えないとシートの左右がカードより 24px ずつ外に出て、縦のラインが2本になる。 */
+  max-width: calc(var(--w) - var(--s5) * 2); margin: 0 auto;
+  max-height: 66vh; display: flex; flex-direction: column;
+  border-radius: var(--rad-card) var(--rad-card) 0 0;
+  background: linear-gradient(180deg, var(--sheet), #0B0F14);
+  box-shadow:
+    0 0 0 1px var(--edge),
+    inset 0 1px 0 rgba(255,255,255,.085),
+    0 -30px 70px -30px rgba(0,0,0,.95);
+}
+.verdict .sheet::before {
+  content: ""; position: absolute; inset: 0 0 auto 0; height: 160px; border-radius: inherit;
+  pointer-events: none;
+  background: radial-gradient(90% 100% at 50% 0%, rgba(76,141,255,.09), transparent 70%);
+}
+.verdict.is-ok .sheet::before { background: radial-gradient(90% 100% at 50% 0%, rgba(63,185,80,.10), transparent 70%); }
+.verdict.is-ng .sheet::before { background: radial-gradient(90% 100% at 50% 0%, rgba(248,81,73,.09), transparent 70%); }
+.vbody {
+  position: relative; padding: var(--s5) var(--s6) var(--s4);
+  flex: 1 1 auto; min-height: 0; overflow-y: auto;
+}
+.vbody::-webkit-scrollbar { width: 6px; }
+.vbody::-webkit-scrollbar-thumb { background: rgba(255,255,255,.10); border-radius: 3px; }
+.vfoot {
+  position: relative; flex: none; padding: var(--s4) var(--s6) var(--s5);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.055);
+  background: linear-gradient(180deg, rgba(255,255,255,.022), rgba(255,255,255,0));
+}
+body.grading main { padding-bottom: 62vh; }
+.verdict h2 {
+  font-size: var(--r2); margin: 0 0 var(--s3); font-weight: 600;
+  display: flex; align-items: center; gap: var(--s3);
+}
+.verdict h2.ok { color: var(--ok); } .verdict h2.ng { color: var(--ng); }
+.verdict h2 .lamp {
+  width: 8px; height: 8px; border-radius: 50%; background: currentColor;
+  box-shadow: 0 0 14px 2px currentColor;
+}
+.verdict .answer { font-family: var(--mono); font-size: var(--r2); margin: 0 0 var(--s4); }
+.verdict .why { color: var(--muted); margin: 0 0 var(--s4); max-width: 68ch; }
+.verdict .why b { color: var(--fg); font-weight: 500; }
+
+.grades { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--s2); }
+.grades button {
+  min-height: 44px; padding: var(--s2); font: inherit; font-size: 14px;
+  color: var(--fg); border: 0; border-radius: var(--rad-tile); cursor: pointer;
+  background: linear-gradient(180deg, rgba(255,255,255,.042), rgba(255,255,255,.008));
+  box-shadow: 0 0 0 1px var(--edge), inset 0 1px 0 var(--lip);
+  display: grid; gap: 2px; justify-items: center;
+  transition: box-shadow .14s ease, background .14s ease;
+}
+.grades button:hover { box-shadow: 0 0 0 1px var(--edge-hi), inset 0 1px 0 rgba(255,255,255,.10); }
+.grades button:focus-visible { outline: 2px solid var(--accent-line); outline-offset: 2px; }
+/* ↵ の既定値。1枚だけ稜線を明るくして「ここが既定」と示す。
+   accent の青を使うと、答え合わせの画面に 赤(不正解) + 青 が同時に立って
+   色相が2つ増える。既定の合図は明度だけで足りる。 */
+.grades button.is-default {
+  box-shadow: 0 0 0 1px rgba(255,255,255,.24), inset 0 1px 0 rgba(255,255,255,.13);
+}
+.grades small { font-family: var(--mono); font-size: var(--r3); color: var(--muted); }
+
+/* ── 開始・終了 ─────────────────────────────────────────── */
+.setup { display: grid; gap: var(--s5); max-width: 420px; }
+label { display: grid; gap: var(--s2); }
+select {
+  font: inherit; padding: var(--s3) var(--s4); min-height: 44px;
+  color: var(--fg); border: 0; border-radius: var(--rad-tile);
+  background: var(--sunk);
+  box-shadow: inset 0 1px 2px rgba(0,0,0,.5), inset 0 -1px 0 var(--lip-in), 0 0 0 1px var(--edge);
+}
+select:focus-visible { outline: 2px solid var(--accent-line); outline-offset: 2px; }
+.primary {
+  min-height: 44px; padding: 0 var(--s5); font: inherit; font-weight: 600;
+  color: #06080D; border: 0; border-radius: var(--rad-tile); cursor: pointer;
+  background: linear-gradient(180deg, #6FA4FF, var(--accent));
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.35), 0 8px 24px -8px var(--accent-glow);
+}
+.primary:hover { background: linear-gradient(180deg, #82B0FF, #5A97FF); }
+.primary:focus-visible { outline: 2px solid var(--accent-line); outline-offset: 3px; }
+.summary dl { display: grid; grid-template-columns: auto 1fr; gap: var(--s2) var(--s5); margin: 0 0 var(--s5); }
+.summary dt { font-family: var(--mono); font-size: var(--r3); color: var(--muted); align-self: center; }
+.summary dd { margin: 0; font-size: var(--r2); font-family: var(--mono); }
+
+@media (max-width: 600px) {
+  :root { --r1: 24px; --r2: 17px; }
+  main { padding: var(--s5) var(--s4) 120px; }
+  .card { padding: var(--s5); }
+  .verdict { padding: 0 var(--s4); }   /* main の左右 padding と合わせる */
+  .vbody, .vfoot { padding-left: var(--s5); padding-right: var(--s5); }
+  .grades { grid-template-columns: repeat(2, 1fr); }
+  .passage { max-height: 34vh; }
+}
+@media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+</style>
+</head>
+<body>
+<div id="rail"></div>
+<div id="progress"></div>
+<main id="app" aria-live="polite"></main>
+<footer class="keybar meta" id="keybar" hidden><div></div></footer>
+<input id="typeCatcher" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false"
+       aria-label="英語を入力">
+
+<script>
+"use strict";
+const $ = (id) => document.getElementById(id);
+const esc = (v) => String(v ?? "").replace(/[&<>"']/g,
+  (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+// ── サーバー ────────────────────────────────────────────────
+async function api(path, options) {
+  const response = await fetch(path, { headers: { "Content-Type": "application/json" }, ...options });
+  if (!response.ok) throw new Error(`${path}: ${response.status} ${await response.text()}`);
+  return response.json();
+}
+const post = (path, body) => api(path, { method: "POST", body: JSON.stringify(body) });
+
+// ── 語彙タイピング ──────────────────────────────────────────
+// 確定分と残りを別に描く。判定は自由入力＋1回提出。1文字ずつ弾く方式は
+// 総当たりで必ず正解にたどり着けるので「思い出せたか」を測れない。
+const typing = {
+  value: "", pattern: "", hint: null,
+  reset(pattern) { this.value = ""; this.pattern = pattern || ""; this.hint = null; },
+  rest() {
+    const source = this.hint || this.pattern;
+    return [...source].slice([...this.value].length).join("");
+  },
+};
+
+// ── 状態 ────────────────────────────────────────────────────
+const MISS_FLASH_MS = 160;
+const BUDGET_MS = { vocabulary: 6000, grammar: 10000, reading: 45000 };
+const GRADES = [
+  { value: 0, label: "もう一度", key: "1" },
+  { value: 1, label: "難しい",   key: "2" },
+  { value: 2, label: "普通",     key: "3" },
+  { value: 3, label: "簡単",     key: "4" },
+];
+const DEFAULT_GRADE = 2;
+
+const state = {
+  sessionId: null, queue: [], current: null, answered: [], correct: 0,
+  shownAt: 0, misses: 0, hintUsed: false, chosen: null,
+  budgetTimer: null, lastAttemptId: null, phase: "setup",
+};
+
+// ── 画面 ────────────────────────────────────────────────────
+function setProgress(done, total) {
+  $("progress").style.width = total ? `${Math.min(100, (done / (done + total)) * 100)}%` : "0";
+}
+
+function setKeybar(html) {
+  const bar = $("keybar");
+  bar.hidden = !html;
+  bar.firstElementChild.innerHTML = html || "";
+}
+
+async function renderSetup() {
+  state.phase = "setup";
+  const { courses } = await api("/api/courses");
+  $("app").innerHTML = `
+    <div class="rail-bar meta"><span>127.0.0.1</span><span class="spacer"></span>
+      <span class="chip">English Drill</span></div>
+    <section class="card">
+      <p class="eyebrow">session</p>
+      <h1 class="stem">今日の分をやる</h1>
+      <div class="setup">
+        <label><span class="meta">科目・素材</span>
+          <select id="course">${courses.map((c) =>
+            `<option value="${esc(c.course_id)}">${esc(c.course_name)}</option>`).join("")}</select></label>
+        <label><span class="meta">種別</span>
+          <select id="kinds">
+            <option value="">全部（語彙・読解・文法）</option>
+            <option value="vocab">語彙</option>
+            <option value="reading">読解</option>
+            <option value="grammar">文法</option>
+            <option value="reading,grammar">読解＋文法</option>
+          </select></label>
+        <div><button class="primary" id="start">開始</button>
+          <span class="meta" style="margin-left:var(--s3)">↵</span></div>
+      </div>
+    </section>`;
+  setKeybar("<kbd>↵</kbd> 開始");
+  $("start").onclick = () => start().catch(fail);
+  $("start").focus();
+}
+
+async function start() {
+  const { session_id } = await post("/api/sessions", { course_id: $("course").value });
+  Object.assign(state, { sessionId: session_id, answered: [], correct: 0 });
+  state.kinds = $("kinds").value;
+  state.courseId = $("course").value;
+  state.queue = await fetchQueue();
+  next();
+}
+
+async function fetchQueue() {
+  const params = new URLSearchParams({ course: state.courseId, limit: "20" });
+  if (state.kinds) params.set("kinds", state.kinds);
+  if (state.answered.length) params.set("exclude", state.answered.join(","));
+  const { items } = await api(`/api/queue?${params}`);
+  return items;
+}
+
+async function next() {
+  Object.assign(state, { misses: 0, hintUsed: false, chosen: null, lastAttemptId: null });
+  clearInterval(state.budgetTimer);
+
+  if (!state.queue.length) state.queue = await fetchQueue();
+  state.current = state.queue.shift() || null;
+  if (!state.current) return renderSummary();
+
+  renderQuestion(state.current);
+  state.phase = "question";
+  state.shownAt = performance.now();
+  startBudget(state.current.domain);
+  setProgress(state.answered.length, state.queue.length + 1);
+}
+
+function startBudget(domain) {
+  // 想定時間を超えても止めない。あとで speed_gap が付いた理由を納得できるようにする表示。
+  const budget = BUDGET_MS[domain] || 30000;
+  state.budgetTimer = setInterval(() => {
+    const clock = $("clock");
+    if (!clock) return clearInterval(state.budgetTimer);
+    const elapsed = performance.now() - state.shownAt;
+    const seconds = Math.floor(elapsed / 1000);
+    clock.textContent = `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
+    clock.classList.toggle("over", elapsed > budget);
+  }, 500);
+}
+
+// カード外の細い帯。進み具合・経過・難度・種別だけを置く。
+function railBar(item) {
+  const done = state.answered.length;
+  const rate = done ? `正答 <b>${Math.round((state.correct / done) * 100)}%</b>` : "";
+  const names = { vocab: "語彙", reading: "読解", grammar: "文法" };
+  return `<div class="rail-bar meta">
+      <span><b>${done + 1}</b> / ${done + state.queue.length + 1}</span>
+      <span>${rate}</span><span class="spacer"></span>
+      <span class="clock" id="clock">0:00</span>
+      <span class="dots">${"●".repeat(item.difficulty)}${"○".repeat(5 - item.difficulty)}</span>
+      <span class="chip">${esc(names[item.kind] || item.kind)}</span>
+    </div>`;
+}
+
+function choiceList(choices, mono) {
+  return `<ul class="choices">${choices.map((c, i) => `
+    <li><button data-choice="${i}"${mono ? ' class="en"' : ""} aria-pressed="false">
+      <span class="key">${i + 1}</span><span>${esc(c)}</span></button></li>`).join("")}</ul>`;
+}
+
+function renderQuestion(item) {
+  const p = item.payload;
+  const point = p.point || item.sub_skill;
+  let body, keys;
+
+  if (item.kind === "vocab") {
+    typing.reset(p.answer_pattern);
+    // 出題中は品詞まで。collocations は答え合わせ後にだけ出す。
+    const sub = p.part_of_speech ? `<p class="eyebrow" style="margin:calc(var(--s5) * -1) 0 var(--s4)">
+        ${esc(p.part_of_speech)}</p>` : "";
+    body = `<h1 class="stem">${esc(p.meaning)}</h1>${sub}
+      <div class="well type-well" id="typeWell"><p class="type-line" id="typeLine"></p></div>
+      <p class="meta">英語で入力</p>`;
+    keys = "<kbd>↵</kbd> 決定 　<kbd>Tab</kbd> ヒント 　<kbd>Esc</kbd> わからない";
+  } else if (item.kind === "grammar") {
+    body = `<h1 class="stem en">${esc(p.sentence).replace(/____/g,
+      '<span class="blank">____</span>')}</h1>
+      ${choiceList(p.choices, true)}`;
+    keys = "<kbd>1</kbd>–<kbd>4</kbd> 選択 　<kbd>↵</kbd> 決定";
+  } else {
+    // passage は面の中でスクロールさせる。ページを送らずに選択肢へ届く。
+    body = `<div class="well"><p class="passage" tabindex="0" role="group"
+        aria-label="本文">${esc(p.passage)}</p></div>
+      <h1 class="stem">${esc(p.question)}</h1>
+      ${choiceList(p.choices, true)}`;
+    keys = "<kbd>1</kbd>–<kbd>4</kbd> 選択 　<kbd>↵</kbd> 決定";
+  }
+
+  $("app").innerHTML = railBar(item)
+    + `<section class="card"><p class="eyebrow">${esc(point)}</p>${body}</section>`;
+  setKeybar(keys);
+
+  document.querySelectorAll("[data-choice]").forEach((button) => {
+    button.onclick = () => choose(Number(button.dataset.choice));
+  });
+  const passage = document.querySelector(".passage");
+  if (passage && passage.scrollHeight > passage.clientHeight + 1) {
+    passage.closest(".well").classList.add("is-clipped");
+  }
+  if (item.kind === "vocab") { paintTypeLine(); focusCatcher(); }
+}
+
+function focusCatcher() { $("typeCatcher").focus({ preventScroll: true }); }
+
+function paintTypeLine(shake) {
+  const line = $("typeLine");
+  if (!line) return;
+  line.innerHTML = `<span class="done">${esc(typing.value)}</span><span class="caret"></span>`
+    + `<span class="${typing.hint ? "ghost" : "slot"}">${esc(typing.rest())}</span>`;
+  if (shake) {
+    const well = $("typeWell");
+    well?.classList.add("miss");
+    setTimeout(() => well?.classList.remove("miss"), MISS_FLASH_MS);
+  }
+}
+
+async function revealHint() {
+  if (typing.hint) return;
+  const { hint } = await api(`/api/hint?item_id=${state.current.item_id}`);
+  typing.hint = hint;
+  state.hintUsed = true;
+  paintTypeLine();
+}
+
+function choose(index) {
+  state.chosen = index;
+  document.querySelectorAll("[data-choice]").forEach((b) =>
+    b.setAttribute("aria-pressed", String(Number(b.dataset.choice) === index)));
+}
+
+// ── 回答 ────────────────────────────────────────────────────
+async function submit(response) {
+  clearInterval(state.budgetTimer);
+  const result = await post("/api/answer", {
+    session_id: state.sessionId,
+    item_id: state.current.item_id,
+    response: String(response),
+    elapsed_ms: Math.round(performance.now() - state.shownAt),
+    hint_used: state.hintUsed,
+    retry_count: state.misses,
+  });
+  state.answered.push(state.current.item_id);
+  if (result.correct) state.correct += 1;
+  state.lastAttemptId = result.attempt_id;
+  renderVerdict(result);
+}
+
+function renderVerdict(result) {
+  state.phase = "verdict";
+  const p = state.current.payload;
+
+  if (state.current.kind !== "vocab" && p.choices) {
+    document.querySelectorAll("[data-choice]").forEach((button) => {
+      const i = Number(button.dataset.choice);
+      if (p.choices[i] === result.answer) button.classList.add("is-answer");
+      else if (i === state.chosen) button.classList.add("is-chosen-wrong");
+      button.disabled = true;
+    });
+  }
+
+  const cause = result.error_cause
+    ? `<p class="meta">誤答原因 <b>${esc(result.error_cause)}</b> · 次の一手 <b>${esc(result.next_action)}</b></p>`
+    : "";
+  const candidate = result.revision_candidate_id
+    ? `<p class="meta">同じ箇所での誤答が続いたので、<b>追記候補</b>を立てました
+       (#${result.revision_candidate_id})</p>` : "";
+
+  document.body.classList.add("grading");
+  $("app").insertAdjacentHTML("beforeend", `
+    <section class="verdict ${result.correct ? "is-ok" : "is-ng"}"><div class="sheet">
+      <div class="vbody">
+        <h2 class="${result.correct ? "ok" : "ng"}"><span class="lamp"></span>${
+          result.correct ? "正解" : "不正解"}</h2>
+        ${result.answer && (!result.correct || state.current.kind === "vocab")
+          ? `<p class="answer">${esc(result.answer)}</p>` : ""}
+        ${result.example ? `<p class="answer" style="color:var(--muted)">${esc(result.example)}</p>` : ""}
+        ${result.collocations?.length
+          ? `<p class="meta" style="margin:0 0 var(--s4)">${esc(result.collocations.join(" · "))}</p>` : ""}
+        ${result.explanation ? `<p class="why">${esc(result.explanation)}</p>` : ""}
+        ${cause}${candidate}
+      </div>
+      <div class="vfoot">
+        <p class="meta" style="margin:0 0 var(--s3)">次はいつ出す？ 　習熟度 <b>${esc(result.mastery)}</b></p>
+        <div class="grades">${GRADES.map((g) => `
+          <button data-grade="${g.value}"${g.value === DEFAULT_GRADE ? ' class="is-default"' : ""}
+            >${g.label}<small>${g.key}</small></button>`).join("")}</div>
+        <p class="meta" style="margin:var(--s3) 0 0">
+          <kbd>1</kbd>–<kbd>4</kbd> 手応え 　<kbd>↵</kbd> 普通で次へ</p>
+      </div>
+    </div></section>`);
+
+  // キー説明はシートの中に持たせる。下端の keybar と同じ帯に二重で出すと
+  // 同じ内容が2行並んで、どちらが今の操作か読めなくなる。
+  setKeybar("");
+  document.querySelectorAll("[data-grade]").forEach((button) => {
+    button.onclick = () => applyGrade(Number(button.dataset.grade));
+  });
+  (document.querySelector(".choices .is-answer") || document.querySelector(".stem"))
+    ?.scrollIntoView({ behavior: "smooth", block: "center" });
+}
+
+async function applyGrade(value) {
+  state.phase = "moving";
+  document.body.classList.remove("grading");
+  if (state.lastAttemptId !== null) {
+    await post("/api/grade", { attempt_id: state.lastAttemptId, grade: value });
+  }
+  state.phase = "question";
+  next().catch(fail);
+}
+
+async function renderSummary() {
+  state.phase = "summary";
+  setProgress(1, 0);
+  const done = state.answered.length;
+  const rate = done ? Math.round((state.correct / done) * 100) : 0;
+  if (state.sessionId) await post(`/api/sessions/${state.sessionId}/end`, {}).catch(() => {});
+  $("app").innerHTML = `
+    <div class="rail-bar meta"><span>セッション #${esc(state.sessionId)}</span>
+      <span class="spacer"></span><span class="chip">終了</span></div>
+    <section class="card">
+      <p class="eyebrow">summary</p>
+      <h1 class="stem">おつかれさま</h1>
+      <div class="summary">
+        <dl>
+          <dt>解答</dt><dd>${done} 問</dd>
+          <dt>正答</dt><dd>${rate}%</dd>
+        </dl>
+        <p class="meta">素材を足すなら
+          <b>english voa --limit 10</b> / <b>english fetch-toeic</b></p>
+        <p style="margin-top:var(--s6)"><button class="primary" id="again">もう一度</button></p>
+      </div>
+    </section>`;
+  setKeybar("<kbd>↵</kbd> もう一度");
+  $("again").onclick = () => renderSetup().catch(fail);
+  $("again").focus();
+}
+
+function fail(error) {
+  $("app").innerHTML = `<section class="card">
+    <p class="eyebrow">error</p>
+    <h1 class="stem">つながらない</h1>
+    <p class="meta">${esc(error.message)}</p></section>`;
+}
+
+// ── キーボード ──────────────────────────────────────────────
+document.addEventListener("keydown", (event) => {
+  if (event.metaKey || event.ctrlKey || event.altKey) return;
+
+  if (state.phase === "setup") {
+    if (event.key === "Enter") { event.preventDefault(); $("start")?.click(); }
+    return;
+  }
+  if (state.phase === "verdict") {
+    if (event.key === "Enter") { event.preventDefault(); applyGrade(DEFAULT_GRADE); return; }
+    const grade = GRADES.find((g) => g.key === event.key);
+    if (grade) { event.preventDefault(); applyGrade(grade.value); }
+    return;
+  }
+  if (state.phase === "summary") {
+    if (event.key === "Enter") { event.preventDefault(); $("again")?.click(); }
+    return;
+  }
+  if (state.phase !== "question" || !state.current) return;
+
+  if (state.current.kind === "vocab") {
+    if (event.key === "Escape") { event.preventDefault(); return void submit("").catch(fail); }
+    if (event.key === "Tab") { event.preventDefault(); return void revealHint().catch(fail); }
+    if (event.key === "Enter") {
+      event.preventDefault();
+      if (!typing.value.trim()) { paintTypeLine(true); return; }
+      return void submit(typing.value).catch(fail);
+    }
+    if (event.key === "Backspace") {
+      event.preventDefault();
+      typing.value = [...typing.value].slice(0, -1).join("");
+      paintTypeLine(); return;
+    }
+    if (event.key.length !== 1) return;
+    event.preventDefault();
+    typing.value += event.key;
+    paintTypeLine();
+    return;
+  }
+
+  if (/^[1-9]$/.test(event.key)) {
+    const index = Number(event.key) - 1;
+    if (document.querySelector(`[data-choice="${index}"]`)) { event.preventDefault(); choose(index); }
+    return;
+  }
+  if (event.key === "Enter" && state.chosen !== null) {
+    event.preventDefault(); submit(state.chosen).catch(fail);
+  }
+});
+
+// 語彙タイピング中はどこをクリックしてもキーを拾えるようにしておく。
+document.addEventListener("click", () => {
+  if (state.phase === "question" && state.current?.kind === "vocab") focusCatcher();
+});
+
+renderSetup().catch(fail);
+state.phase = "setup";
+</script>
+</body>
+</html>
