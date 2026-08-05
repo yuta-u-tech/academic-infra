@@ -369,6 +369,25 @@ select:focus-visible { outline: 2px solid var(--accent-line); outline-offset: 2p
 .summary dt { font-family: var(--mono); font-size: var(--r3); color: var(--muted); align-self: center; }
 .summary dd { margin: 0; font-size: var(--r2); font-family: var(--mono); }
 
+/* ── ダッシュボード ─────────────────────────────────────────
+   出題画面と同じ .card / .well トークンを流用。棒グラフは新しい
+   chartライブラリを足さず、幅・高さだけで表現する（オフライン制約）。 */
+.nav-link { border: 0; cursor: pointer; font: inherit; color: var(--muted); }
+.dash-grid { display: grid; gap: var(--s3); }
+.dash-row { display: flex; align-items: center; gap: var(--s4); }
+.dash-row .label { width: 4.5em; flex: none; }
+.bar-track {
+  flex: 1; height: 8px; border-radius: 4px; overflow: hidden; background: var(--sunk);
+  box-shadow: inset 0 1px 2px rgba(0,0,0,.5), 0 0 0 1px var(--edge);
+}
+.bar-fill { height: 100%; background: linear-gradient(90deg, rgba(76,141,255,.5), var(--accent)); }
+.bar-fill.is-weak { background: linear-gradient(90deg, rgba(248,81,73,.5), var(--ng)); }
+.dash-value { width: 3.5em; flex: none; text-align: right; font-family: var(--mono); font-size: var(--r3); color: var(--muted); }
+.trend { display: flex; align-items: flex-end; gap: 3px; height: 40px; }
+.trend .day { flex: 1; border-radius: 2px 2px 0 0; background: rgba(255,255,255,.08); min-height: 2px; }
+.trend .day.has-data { background: linear-gradient(180deg, rgba(76,141,255,.55), var(--accent)); }
+.toeic-score { font-family: var(--mono); font-size: var(--r1); font-weight: 600; }
+
 @media (max-width: 600px) {
   :root { --r1: 24px; --r2: 17px; }
   main { padding: var(--s5) var(--s4) 120px; }
@@ -429,7 +448,15 @@ const DEFAULT_GRADE = 2;
 const state = {
   sessionId: null, queue: [], current: null, answered: [], correct: 0,
   shownAt: 0, misses: 0, hintUsed: false, chosen: null,
-  budgetTimer: null, lastAttemptId: null, phase: "setup",
+  budgetTimer: null, lastAttemptId: null, phase: "dashboard", dashboardCourseId: null,
+};
+
+// ── ダッシュボード ──────────────────────────────────────────
+const DASHBOARD_DOMAINS = ["vocabulary", "grammar", "reading"];
+const DOMAIN_LABELS = { vocabulary: "語彙", grammar: "文法", reading: "読解" };
+const CAUSE_LABELS = {
+  knowledge_gap: "知識不足", material_gap: "資料の説明不足", production_gap: "産出不足",
+  vocabulary_gap: "語彙不足", parsing_gap: "構文把握不足", speed_gap: "処理速度不足",
 };
 
 // ── 画面 ────────────────────────────────────────────────────
@@ -443,11 +470,87 @@ function setKeybar(html) {
   bar.firstElementChild.innerHTML = html || "";
 }
 
+async function renderDashboard(courseId) {
+  state.phase = "dashboard";
+  const { courses } = await api("/api/courses");
+  if (!courses.length) return renderSetup();
+  const selected = courseId || state.dashboardCourseId || courses[0].course_id;
+  state.dashboardCourseId = selected;
+  const d = await api(`/api/dashboard?course_id=${encodeURIComponent(selected)}`);
+
+  const masteryByDomain = Object.fromEntries(d.mastery_by_domain.map((r) => [r.domain, r]));
+  const totalDue = d.due_counts.reduce((sum, r) => sum + r.due, 0);
+  const weakestLabel = d.weakest_domain ? (DOMAIN_LABELS[d.weakest_domain] || d.weakest_domain) : null;
+
+  const masteryRows = DASHBOARD_DOMAINS.map((domain) => {
+    const row = masteryByDomain[domain];
+    const pct = row ? Math.round(row.mastery * 100) : 0;
+    return `<div class="dash-row">
+        <span class="meta label">${DOMAIN_LABELS[domain]}</span>
+        <span class="bar-track"><span class="bar-fill${domain === d.weakest_domain ? " is-weak" : ""}"
+          style="width:${pct}%"></span></span>
+        <span class="dash-value">${row ? `${pct}%` : "―"}</span>
+      </div>`;
+  }).join("");
+
+  const trendBars = d.trend.map((day) => {
+    const height = day.attempts ? Math.max(12, Math.min(40, day.attempts * 6)) : 3;
+    return `<span class="day${day.attempts ? " has-data" : ""}" style="height:${height}px"
+      title="${esc(day.date)}: ${day.correct}/${day.attempts}"></span>`;
+  }).join("");
+
+  const causeChips = d.error_causes.length
+    ? d.error_causes.slice(0, 3).map((c) =>
+        `<span class="chip">${esc(CAUSE_LABELS[c.cause] || c.cause)} <b>${c.count}</b></span>`).join(" ")
+    : `<span class="meta">まだ誤答データがありません</span>`;
+  const candidateChip = d.open_candidates
+    ? ` <span class="chip">資料改善候補 <b>${d.open_candidates}</b></span>` : "";
+
+  const toeic = d.toeic_reading_estimate ? `
+      <p class="meta" style="margin:var(--s5) 0 var(--s2)">TOEIC Reading 目安</p>
+      <p class="toeic-score">${d.toeic_reading_estimate.score}<span class="meta"> / 495</span></p>
+      <p class="meta">${esc(d.toeic_reading_estimate.note)}</p>` : "";
+
+  $("app").innerHTML = `
+    <div class="rail-bar meta">
+      <label>科目
+        <select id="dashCourse" style="margin-left:var(--s2)">${courses.map((c) =>
+          `<option value="${esc(c.course_id)}"${c.course_id === selected ? " selected" : ""}>
+            ${esc(c.course_name)}</option>`).join("")}</select></label>
+      <span class="spacer"></span><span class="chip">ダッシュボード</span></div>
+    <section class="card">
+      <p class="eyebrow">progress</p>
+      <h1 class="stem">${d.streak_days > 0 ? `${d.streak_days}日連続で学習中` : "今日から始めよう"}</h1>
+      <div class="dash-grid">${masteryRows}</div>
+
+      <p class="meta" style="margin:var(--s5) 0 var(--s2)">直近14日</p>
+      <div class="trend">${trendBars}</div>
+
+      <p class="meta" style="margin:var(--s5) 0 var(--s2)">今日のタスク</p>
+      <p style="margin:0">${totalDue > 0
+        ? `復習・新規あわせて <b>${totalDue}</b> 問`
+        : "今日出せる問題はありません"}${weakestLabel
+        ? `　<span class="meta">特に手薄: <b>${esc(weakestLabel)}</b></span>` : ""}</p>
+
+      <p class="meta" style="margin:var(--s5) 0 var(--s2)">誤答傾向</p>
+      <p style="margin:0">${causeChips}${candidateChip}</p>
+      ${toeic}
+
+      <p style="margin-top:var(--s6)"><button class="primary" id="toStudy">今日の分をやる</button>
+        <span class="meta" style="margin-left:var(--s3)">↵</span></p>
+    </section>`;
+  setKeybar("<kbd>↵</kbd> 今日の分をやる");
+  $("dashCourse").onchange = () => renderDashboard($("dashCourse").value).catch(fail);
+  $("toStudy").onclick = () => renderSetup().catch(fail);
+  $("toStudy").focus();
+}
+
 async function renderSetup() {
   state.phase = "setup";
   const { courses } = await api("/api/courses");
   $("app").innerHTML = `
-    <div class="rail-bar meta"><span class="spacer"></span>
+    <div class="rail-bar meta"><button class="chip nav-link" id="toDash">← ダッシュボード</button>
+      <span class="spacer"></span>
       <span class="chip">English Drill</span></div>
     <section class="card">
       <p class="eyebrow">session</p>
@@ -469,6 +572,7 @@ async function renderSetup() {
       </div>
     </section>`;
   setKeybar("<kbd>↵</kbd> 開始");
+  $("toDash").onclick = () => renderDashboard().catch(fail);
   $("start").onclick = () => start().catch(fail);
   $("start").focus();
 }
@@ -696,7 +800,8 @@ async function renderSummary() {
   const rate = done ? Math.round((state.correct / done) * 100) : 0;
   if (state.sessionId) await post(`/api/sessions/${state.sessionId}/end`, {}).catch(() => {});
   $("app").innerHTML = `
-    <div class="rail-bar meta"><span>セッション #${esc(state.sessionId)}</span>
+    <div class="rail-bar meta"><button class="chip nav-link" id="toDash">← ダッシュボード</button>
+      <span>セッション #${esc(state.sessionId)}</span>
       <span class="spacer"></span><span class="chip">終了</span></div>
     <section class="card">
       <p class="eyebrow">summary</p>
@@ -712,6 +817,7 @@ async function renderSummary() {
       </div>
     </section>`;
   setKeybar("<kbd>↵</kbd> もう一度");
+  $("toDash").onclick = () => renderDashboard().catch(fail);
   $("again").onclick = () => renderSetup().catch(fail);
   $("again").focus();
 }
@@ -727,6 +833,10 @@ function fail(error) {
 document.addEventListener("keydown", (event) => {
   if (event.metaKey || event.ctrlKey || event.altKey) return;
 
+  if (state.phase === "dashboard") {
+    if (event.key === "Enter") { event.preventDefault(); $("toStudy")?.click(); }
+    return;
+  }
   if (state.phase === "setup") {
     if (event.key === "Enter") { event.preventDefault(); $("start")?.click(); }
     return;
@@ -778,8 +888,8 @@ document.addEventListener("click", () => {
   if (state.phase === "question" && state.current?.kind === "vocab") focusCatcher();
 });
 
-renderSetup().catch(fail);
-state.phase = "setup";
+renderDashboard().catch(fail);
+state.phase = "dashboard";
 </script>
 </body>
 </html>

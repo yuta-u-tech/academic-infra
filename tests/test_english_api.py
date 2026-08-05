@@ -190,3 +190,25 @@ def test_grading_after_the_answer_moves_only_the_interval(client):
 
 def test_an_out_of_range_grade_is_refused(client):
     assert client.post("/api/grade", json={"attempt_id": 1, "grade": 9}).status_code == 422
+
+
+def test_dashboard_reflects_answered_items(client):
+    session_id = client.post("/api/sessions", json={"course_id": "dsa"}).json()["session_id"]
+    vocab = next(i for i in client.get("/api/queue?course=dsa").json()["items"]
+                 if i["kind"] == "vocab")
+    client.post("/api/answer", json={
+        "session_id": session_id, "item_id": vocab["item_id"],
+        "response": "linked list", "elapsed_ms": 1500, "self_confidence": 1.0,
+    })
+
+    body = client.get("/api/dashboard?course_id=dsa").json()
+    assert body["course_id"] == "dsa"
+    assert any(row["domain"] == "vocabulary" and row["mastery"] > 0
+               for row in body["mastery_by_domain"])
+    assert body["streak_days"] == 1
+    # dsa は course_id != "english" なのでTOEIC目安は出さない
+    assert body["toeic_reading_estimate"] is None
+
+
+def test_dashboard_requires_a_course_id(client):
+    assert client.get("/api/dashboard").status_code == 422

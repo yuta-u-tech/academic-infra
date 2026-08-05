@@ -20,7 +20,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import promote, study
+from . import dashboard, promote, study
 from .db import connect
 from .model import due_items
 from .target import COURSES_YML_PATH
@@ -220,6 +220,11 @@ def create_app(db_path: Path | None = None) -> FastAPI:
     def candidates(course: str | None = None) -> dict:
         with db() as connection:
             return {"candidates": promote.open_candidates(connection, course)}
+
+    @app.get("/api/dashboard")
+    def get_dashboard(course_id: str) -> dict:
+        with db() as connection:
+            return dashboard.build_dashboard(connection, course_id)
 
     @app.get("/")
     def index() -> FileResponse:
