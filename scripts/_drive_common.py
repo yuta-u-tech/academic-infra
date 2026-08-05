@@ -11,12 +11,19 @@ Drive OAuthは update_drive.py と同じ資格情報（GDRIVE_OAUTH_*, 環境変
 from __future__ import annotations
 
 import os
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 
 import yaml
 
-COURSES_YML_PATH = Path(__file__).resolve().parent.parent / "courses.yml"
+if getattr(sys, "frozen", False):
+    # PyInstaller sidecar (desktop/): courses.yml は _MEIPASS 直下に同梱される
+    # （scripts/acenglish/sidecar.spec 参照）。__file__ 起点の相対パスは
+    # 展開先の一時ディレクトリの外を指してしまうため使えない。
+    COURSES_YML_PATH = Path(sys._MEIPASS) / "courses.yml"  # type: ignore[attr-defined]
+else:
+    COURSES_YML_PATH = Path(__file__).resolve().parent.parent / "courses.yml"
 _LOCAL_SECRETS_FALLBACK = Path.home() / ".lecture-capture" / "config" / "drive-secrets.env"
 _SCOPES = ("https://www.googleapis.com/auth/drive",)
 _TOKEN_URI = "https://oauth2.googleapis.com/token"

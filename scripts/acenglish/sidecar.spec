@@ -14,7 +14,12 @@ repo_root = Path(SPECPATH).resolve().parent.parent
 a = Analysis(
     [str(repo_root / "scripts" / "acenglish_sidecar.py")],
     pathex=[str(repo_root / "scripts")],
-    datas=[(str(repo_root / "desktop" / "web-dist"), "web")],
+    datas=[
+        (str(repo_root / "desktop" / "web-dist"), "web"),
+        # courses.yml: 実行時に /api/courses が読む。_drive_common.COURSES_YML_PATH の
+        # frozen 分岐(sys._MEIPASS直下)と対応させる。
+        (str(repo_root / "courses.yml"), "."),
+    ],
     hiddenimports=["uvicorn.logging", "uvicorn.loops.auto", "uvicorn.protocols.http.auto"],
     hookspath=[],
     runtime_hooks=[],
