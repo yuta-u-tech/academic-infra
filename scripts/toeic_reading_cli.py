@@ -26,7 +26,7 @@ from acenglish.db import connect  # noqa: E402
 from acenglish.fetch import import_toeic_part5  # noqa: E402
 from acenglish.items import GrammarItem  # noqa: E402
 from pydantic import ValidationError  # noqa: E402
-from toeic_reading.render import build_pdf, render_tex  # noqa: E402
+from toeic_reading.render import build_pdf, render_md, render_tex  # noqa: E402
 
 DEFAULT_DRIVE_FOLDER_NAME = "TOEIC/reading/part5"
 
@@ -49,7 +49,13 @@ def _cmd_worksheet(args: argparse.Namespace) -> int:
     tex_path = args.out / "worksheet.tex"
     tex_path.write_text(render_tex(title, items), encoding="utf-8")
     pdf_path = build_pdf(tex_path)
-    print(json.dumps({"pdf": str(pdf_path), "count": len(items)}, ensure_ascii=False, indent=2))
+    # ChatGPTにfree-formで解かせる用。PDFと同じ内容をMarkdownでも並べておく
+    # （Driveへは publish が一緒にアップロードする）。
+    md_path = args.out / "worksheet.md"
+    md_path.write_text(render_md(title, items), encoding="utf-8")
+    print(json.dumps(
+        {"pdf": str(pdf_path), "md": str(md_path), "count": len(items)}, ensure_ascii=False, indent=2
+    ))
     return 0
 
 
@@ -72,8 +78,23 @@ def _cmd_publish(args: argparse.Namespace) -> int:
     folder_names = [part for part in args.folder_name.split("/") if part]
     drive_path = "/".join([*folder_names, drive_name])
 
+    # ChatGPTが読むMarkdownはPDFと同じ場所に混ぜず、reading配下の兄弟フォルダ「MDs」へ
+    # まとめる（例: TOEIC/reading/part5 → TOEIC/reading/MDs）。partが増えても集約先は1つ。
+    md_path = args.pdf.with_suffix(".md")
+    md_folder_names = [*folder_names[:-1], "MDs"] if len(folder_names) > 1 else ["MDs"]
+    md_drive_name = f"{today}.md"
+    md_drive_path = "/".join([*md_folder_names, md_drive_name]) if md_path.exists() else None
+
     if args.dry_run:
-        print(json.dumps({"dry_run": True, "drive_path": drive_path, "local": str(args.pdf)}, ensure_ascii=False, indent=2))
+        print(json.dumps(
+            {
+                "dry_run": True,
+                "drive_path": drive_path,
+                "local": str(args.pdf),
+                "md_drive_path": md_drive_path,
+                "md_local": str(md_path) if md_path.exists() else None,
+            },
+            ensure_ascii=False, indent=2))
         return 0
 
     credentials = _drive_common.resolve_credentials()
@@ -86,8 +107,23 @@ def _cmd_publish(args: argparse.Namespace) -> int:
     for name in folder_names:
         folder_id = _drive_common.ensure_folder(service, folder_id, name)
     file_id = _drive_common.upload_file(service, folder_id, args.pdf, "application/pdf", name=drive_name)
+
+    md_file_id = None
+    if md_path.exists():
+        md_folder_id = parent_id
+        for name in md_folder_names:
+            md_folder_id = _drive_common.ensure_folder(service, md_folder_id, name)
+        md_file_id = _drive_common.upload_file(service, md_folder_id, md_path, "text/markdown", name=md_drive_name)
+
     print(json.dumps(
-        {"drive_path": drive_path, "file_id": file_id, "url": f"https://drive.google.com/file/d/{file_id}/view"},
+        {
+            "drive_path": drive_path,
+            "file_id": file_id,
+            "url": f"https://drive.google.com/file/d/{file_id}/view",
+            "md_drive_path": md_drive_path,
+            "md_file_id": md_file_id,
+            "md_url": f"https://drive.google.com/file/d/{md_file_id}/view" if md_file_id else None,
+        },
         ensure_ascii=False, indent=2))
     return 0
 

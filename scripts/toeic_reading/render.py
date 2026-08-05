@@ -15,7 +15,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from academic_audio.worksheet import build_pdf, escape  # noqa: E402
 from acenglish.items import GrammarItem  # noqa: E402
 
-__all__ = ["build_pdf", "render_tex"]
+__all__ = ["build_pdf", "render_md", "render_tex"]
 
 _PREAMBLE = r"""\documentclass[a4paper,11pt]{ltjsarticle}
 \usepackage{luatexja}
@@ -81,4 +81,39 @@ def render_tex(title: str, items: list[GrammarItem]) -> str:
     lines.append(r"\end{description}")
 
     lines.append(r"\end{document}")
+    return "\n".join(lines) + "\n"
+
+
+def render_md(title: str, items: list[GrammarItem]) -> str:
+    """ChatGPTにfree-formで解かせるためのMarkdown版。
+
+    render_tex()と同じ「設問→解答解説→パターン凡例」の3段構成を、`---` 区切りで
+    1ファイルに収める（PDFの「設問ページ→解答ページ」という2部構成と同じ考え方）。
+    ChatGPT/ユーザーには「まず設問セクションだけ読んで進める」よう伝える前提で、
+    答えを別ファイルへ分離するような新しい隠蔽の仕組みは作らない。
+    """
+    lines = [f"# {title}", "", "## Part 5 — 空所補充", "",
+              "文の空所に入れるのに最も適切な語句を (A)〜(D) から1つ選びなさい。", ""]
+
+    for index, item in enumerate(items, start=1):
+        lines.append(f"{index}. {item.sentence}")
+        for label, choice in zip(_LABELS, item.choices):
+            lines.append(f"   - ({label}) {choice}")
+        lines.append("")
+
+    lines.extend(["---", "", "## 解答と解説", ""])
+    for index, item in enumerate(items, start=1):
+        label = _LABELS[item.answer_index] if item.answer_index < len(_LABELS) else "?"
+        lines.append(f"{index}. **正解: {label}**（{item.point}・パターン{item.pattern}）")
+        lines.append("")
+        lines.append(f"   {item.explanation}")
+        lines.append("")
+        lines.append(f"   [パターン{item.pattern}の理由] {item.pattern_note}")
+        lines.append("")
+
+    lines.extend(["---", "", "## パターンについて", ""])
+    for label, description in _PATTERN_LEGEND:
+        lines.append(f"- **{label}**: {description}")
+    lines.append("")
+
     return "\n".join(lines) + "\n"
