@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""TOEIC Reading CLI（現状 Part 5 のみ）。
+"""TOEIC Reading CLI（Part 5・Part 7）。
 
 `academic_audio_cli.py listening ...` と同じ形の日次更新フローを、音声を持たない
-文法問題（空所補充）向けに用意したもの。科目リポジトリの内容には従属しない
+読解系（Part5空所補充・Part7読解）向けに用意したもの。科目リポジトリの内容には従属しない
 （TOEICはどの科目の話者でもない、英語運用そのものの練習のため）。
 
     python3 scripts/toeic_reading_cli.py worksheet --items items.json --out .toeic-reading/sets/20260804-part5
@@ -10,6 +10,11 @@
 
     # 同じ items.json を acenglish の学習ループ（attempt/skill_state）へ取り込む
     python3 scripts/toeic_reading_cli.py ingest --items items.json --set-id 20260804
+
+    # Part7（読解）。items.json は passages グルーピング形（english/prompts/reading-part7.md参照）
+    python3 scripts/toeic_reading_cli.py worksheet-part7 --items items.json --out .toeic-reading/sets/20260805-part7
+    python3 scripts/toeic_reading_cli.py ingest-part7 --items items.json --set-id 20260805
+    python3 scripts/toeic_reading_cli.py publish --pdf .toeic-reading/sets/20260805-part7/worksheet.pdf --folder-name TOEIC/reading/part7
 """
 
 from __future__ import annotations
@@ -23,10 +28,11 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from acenglish.db import connect  # noqa: E402
-from acenglish.fetch import import_toeic_part5  # noqa: E402
+from acenglish.fetch import import_toeic_part5, import_toeic_part7  # noqa: E402
 from acenglish.items import GrammarItem  # noqa: E402
+from acenglish.sources.toeic_part7 import load_part7_items  # noqa: E402
 from pydantic import ValidationError  # noqa: E402
-from toeic_reading.render import build_pdf, render_md, render_tex  # noqa: E402
+from toeic_reading.render import build_pdf, render_md, render_reading_md, render_reading_tex, render_tex  # noqa: E402
 
 DEFAULT_DRIVE_FOLDER_NAME = "TOEIC/reading/part5"
 
@@ -64,6 +70,37 @@ def _cmd_ingest(args: argparse.Namespace) -> int:
     with connect(args.db) as connection:
         imported = import_toeic_part5(connection, args.set_id, items)
     print(json.dumps({"set_id": args.set_id, "count": len(items), "imported": imported}, ensure_ascii=False, indent=2))
+    return 0
+
+
+def _cmd_worksheet_part7(args: argparse.Namespace) -> int:
+    title, passages = load_part7_items(args.items)
+    args.out.mkdir(parents=True, exist_ok=True)
+    question_count = sum(len(p.questions) for p in passages)
+    tex_path = args.out / "worksheet.tex"
+    tex_path.write_text(render_reading_tex(title, passages), encoding="utf-8")
+    pdf_path = build_pdf(tex_path)
+    md_path = args.out / "worksheet.md"
+    md_path.write_text(render_reading_md(title, passages), encoding="utf-8")
+    print(json.dumps(
+        {
+            "pdf": str(pdf_path),
+            "md": str(md_path),
+            "passages": len(passages),
+            "questions": question_count,
+        },
+        ensure_ascii=False, indent=2))
+    return 0
+
+
+def _cmd_ingest_part7(args: argparse.Namespace) -> int:
+    _title, passages = load_part7_items(args.items)
+    question_count = sum(len(p.questions) for p in passages)
+    with connect(args.db) as connection:
+        imported = import_toeic_part7(connection, args.set_id, passages)
+    print(json.dumps(
+        {"set_id": args.set_id, "count": question_count, "imported": imported},
+        ensure_ascii=False, indent=2))
     return 0
 
 
@@ -144,6 +181,17 @@ def build_parser() -> argparse.ArgumentParser:
     ingest.add_argument("--set-id", required=True, help="このセットの識別子（review_idに使う）")
     ingest.add_argument("--db", type=Path, default=None, help="既定: ~/.academic-english/english.db")
     ingest.set_defaults(func=_cmd_ingest)
+
+    worksheet_part7 = sub.add_parser("worksheet-part7", help="items.json（passages形）から Part7 問題冊子PDFを組む")
+    worksheet_part7.add_argument("--items", type=Path, required=True, help="passages グルーピング形の items.json")
+    worksheet_part7.add_argument("--out", type=Path, required=True, help="出力先ディレクトリ")
+    worksheet_part7.set_defaults(func=_cmd_worksheet_part7)
+
+    ingest_part7 = sub.add_parser("ingest-part7", help="items.json（passages形）を acenglish の学習ループへ取り込む")
+    ingest_part7.add_argument("--items", type=Path, required=True, help="passages グルーピング形の items.json")
+    ingest_part7.add_argument("--set-id", required=True, help="このセットの識別子（review_idに使う）")
+    ingest_part7.add_argument("--db", type=Path, default=None, help="既定: ~/.academic-english/english.db")
+    ingest_part7.set_defaults(func=_cmd_ingest_part7)
 
     publish = sub.add_parser("publish", help="問題冊子PDFを Drive へ上げる")
     publish.add_argument("--pdf", type=Path, required=True)

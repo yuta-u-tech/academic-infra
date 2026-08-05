@@ -14,8 +14,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from academic_audio.worksheet import build_pdf, escape  # noqa: E402
 from acenglish.items import GrammarItem  # noqa: E402
+from acenglish.sources.toeic_part7 import Part7Passage  # noqa: E402
 
-__all__ = ["build_pdf", "render_md", "render_tex"]
+__all__ = ["build_pdf", "render_md", "render_reading_md", "render_reading_tex", "render_tex"]
 
 _PREAMBLE = r"""\documentclass[a4paper,11pt]{ltjsarticle}
 \usepackage{luatexja}
@@ -115,5 +116,96 @@ def render_md(title: str, items: list[GrammarItem]) -> str:
     for label, description in _PATTERN_LEGEND:
         lines.append(f"- **{label}**: {description}")
     lines.append("")
+
+    return "\n".join(lines) + "\n"
+
+
+def _reading_numbering(passages: list[Part7Passage]) -> list[tuple[int, Part7Passage, list[int]]]:
+    """パッセージごとに、そこに属する設問の通し番号を割り当てる。
+
+    実際のPart7と同じく設問は文書全体で通し番号にする（パッセージごとに1から
+    振り直さない）一方、本文はパッセージにつき1回だけ表示する。
+    """
+    numbered = []
+    running = 1
+    for passage in passages:
+        indices = list(range(running, running + len(passage.questions)))
+        numbered.append((running, passage, indices))
+        running += len(passage.questions)
+    return numbered
+
+
+def render_reading_tex(title: str, passages: list[Part7Passage]) -> str:
+    numbered = _reading_numbering(passages)
+    lines = [
+        _PREAMBLE,
+        r"\title{" + escape(title) + "}",
+        r"\date{}",
+        r"\begin{document}",
+        r"\maketitle",
+        r"\section*{Part 7 — 読解}",
+        "",
+        "文書を読み、各設問について最も適切な答えを (A)〜(D) から1つ選びなさい。",
+        "",
+    ]
+
+    for _, passage, indices in numbered:
+        lines.append(r"\par\noindent " + escape(passage.passage).replace("\n", r"\par "))
+        # 設問番号はパッセージごとに1から振り直さず文書全体の通し番号にするので、
+        # enumerate自身の\arabic*カウンタは使わず\itemに明示ラベルを渡す。
+        lines.append(r"\begin{enumerate}[label={}]")
+        for number, question in zip(indices, passage.questions):
+            lines.append(r"  \item[\textbf{" + str(number) + r".}] " + escape(question.question))
+            lines.append(r"    \begin{enumerate}[label=(\Alph*)]")
+            for choice in question.choices:
+                lines.append(r"      \item " + escape(choice))
+            lines.append(r"    \end{enumerate}")
+        lines.append(r"\end{enumerate}")
+        lines.append(r"\clearpage")
+
+    lines.extend([r"\section*{解答と解説}", ""])
+    for _, passage, indices in numbered:
+        for number, question in zip(indices, passage.questions):
+            label = _LABELS[question.answer_index] if question.answer_index < len(_LABELS) else "?"
+            lines.append(
+                r"\par\noindent \textbf{" + str(number) + r". 正解: " + escape(label) + r"}"
+            )
+            lines.append(r"\par " + escape(question.explanation))
+            lines.append("")
+
+    lines.append(r"\end{document}")
+    return "\n".join(lines) + "\n"
+
+
+def render_reading_md(title: str, passages: list[Part7Passage]) -> str:
+    """ChatGPTにfree-formで解かせるためのMarkdown版（render_md()のPart7版）。
+
+    本文はパッセージにつき1回だけ表示し、配下の設問は通し番号でまとめる。
+    答えはrender_md()と同じく `---` で区切った別セクションに置き、設問セクションには
+    漏らさない。
+    """
+    numbered = _reading_numbering(passages)
+    lines = [f"# {title}", "", "## Part 7 — 読解", "",
+              "文書を読み、各設問について最も適切な答えを (A)〜(D) から1つ選びなさい。", ""]
+
+    for passage_number, (_, passage, indices) in enumerate(numbered, start=1):
+        lines.append(f"### パッセージ {passage_number}（{passage.passage_type}）")
+        lines.append("")
+        lines.append(passage.passage)
+        lines.append("")
+        for number, question in zip(indices, passage.questions):
+            lines.append(f"{number}. {question.question}")
+            for label, choice in zip(_LABELS, question.choices):
+                lines.append(f"   - ({label}) {choice}")
+            lines.append("")
+
+    lines.extend(["---", "", "## 解答と解説", ""])
+    for _, passage, indices in numbered:
+        for number, question in zip(indices, passage.questions):
+            label = _LABELS[question.answer_index] if question.answer_index < len(_LABELS) else "?"
+            lines.append(f"{number}. **正解: {label}**")
+            lines.append("")
+            lines.append(f"   {question.explanation}")
+            lines.append("")
 
     return "\n".join(lines) + "\n"

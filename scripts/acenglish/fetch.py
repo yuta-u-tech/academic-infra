@@ -11,7 +11,8 @@ import sqlite3
 from .generate import ingest, upsert_material
 from .items import GrammarItem
 from .sources import ExternalMaterial
-from .sources import studyforge, ted, toeic_part5, voa
+from .sources import studyforge, ted, toeic_part5, toeic_part7, voa
+from .sources.toeic_part7 import Part7Passage
 
 
 def import_toeic_deck(connection: sqlite3.Connection, deck: str, limit: int | None = None) -> int:
@@ -62,6 +63,31 @@ def import_toeic_part5(connection: sqlite3.Connection, set_id: str, items: list[
         ingest(
             connection,
             toeic_part5.build_result(material, item, f"TOEIC Part5 セット {set_id} からの取り込み"),
+        )
+        imported += 1
+    return imported
+
+
+def import_toeic_part7(connection: sqlite3.Connection, set_id: str, passages: list[Part7Passage]) -> int:
+    """TOEIC Part7（読解）のセットを学習ループへ取り込む。
+
+    `import_toeic_part5` と同じ理由・同じ冪等性の作り方（`kind='reading'`で存在チェック）。
+    passage内の設問はそれぞれ別のreview_idを持つ（`toeic_part7.iter_materials`参照）ので、
+    1passageの一部の設問だけ既存で残りが新規、という状態も自然に扱える。
+    """
+    imported = 0
+    for material, item in toeic_part7.iter_materials(set_id, passages):
+        upsert_material(connection, material)
+        existing = connection.execute(
+            "SELECT 1 FROM generated_item WHERE review_id = ? AND kind = 'reading'"
+            " AND retired_at IS NULL LIMIT 1",
+            (material.review_id,),
+        ).fetchone()
+        if existing:
+            continue
+        ingest(
+            connection,
+            toeic_part7.build_result(material, item, f"TOEIC Part7 セット {set_id} からの取り込み"),
         )
         imported += 1
     return imported
