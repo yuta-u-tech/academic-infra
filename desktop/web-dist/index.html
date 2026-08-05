@@ -60,6 +60,13 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+/* macOS overlay title bar (tauri.conf: titleBarStyle=Overlay, hiddenTitle).
+   There's no native title strip — the traffic lights float directly over our
+   content, so we reserve a plain drag strip for them (dragging is wired via
+   the data-tauri-drag-region attribute, not CSS) and pad the top of `main`
+   so the first card clears the traffic lights instead of sitting under them. */
+#titlebar { position: fixed; inset: 0 0 auto 0; height: 28px; z-index: 20; }
+
 /* 光源と質感。ひとつの ::before にまとめる。
    ::after を使うと body の最終子として本文の上に重なるので、
    main 側に z-index を足す羽目になり、main が積層文脈を作って
@@ -382,6 +389,7 @@ select:focus-visible { outline: 2px solid var(--accent-line); outline-offset: 2p
 </style>
 </head>
 <body>
+<div id="titlebar" data-tauri-drag-region></div>
 <div id="rail"></div>
 <div id="progress"></div>
 <main id="app" aria-live="polite"></main>
@@ -447,7 +455,7 @@ async function renderSetup() {
   state.phase = "setup";
   const { courses } = await api("/api/courses");
   $("app").innerHTML = `
-    <div class="rail-bar meta"><span>127.0.0.1</span><span class="spacer"></span>
+    <div class="rail-bar meta"><span class="spacer"></span>
       <span class="chip">English Drill</span></div>
     <section class="card">
       <p class="eyebrow">session</p>

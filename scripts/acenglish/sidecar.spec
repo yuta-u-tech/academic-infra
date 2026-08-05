@@ -8,10 +8,13 @@ from pathlib import Path
 block_cipher = None
 repo_root = Path(SPECPATH).resolve().parent.parent
 
+# The sidecar's only consumer is the Tauri desktop shell, so it serves the
+# desktop-specific UI (desktop/web-dist/), not the browser-flow web/index.html
+# that scripts/english still opens directly via a venv-run acenglish_cli.py.
 a = Analysis(
     [str(repo_root / "scripts" / "acenglish_sidecar.py")],
     pathex=[str(repo_root / "scripts")],
-    datas=[(str(repo_root / "web"), "web")],
+    datas=[(str(repo_root / "desktop" / "web-dist"), "web")],
     hiddenimports=["uvicorn.logging", "uvicorn.loops.auto", "uvicorn.protocols.http.auto"],
     hookspath=[],
     runtime_hooks=[],
