@@ -104,6 +104,45 @@ def _cmd_ingest_part7(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_weak_points(args: argparse.Namespace) -> int:
+    """直近の誤答（Part5）を point/pattern 付きで並べる。集計・分類はしない。
+
+    「同じpointが何回出た」を数えても意味がない（pointは毎回違う文で新しく書かれるため、
+    厳密には repeat しない）。代わりに誤答の生データ（どの文法項目・どのパターンで
+    間違えたか）をそのまま並べて返すので、次にどのpoint/pattern/語彙ペアを重点的に
+    再出題するかは Claude が読んで判断する。
+    """
+    with connect(args.db) as connection:
+        rows = connection.execute(
+            """
+            SELECT a.review_id, a.created_at, a.error_cause, g.payload
+            FROM attempt a
+            JOIN generated_item g ON a.review_id = g.review_id
+            WHERE a.correct = 0 AND a.review_id LIKE 'toeic.part5.%'
+            ORDER BY a.created_at DESC
+            LIMIT ?
+            """,
+            (args.limit,),
+        ).fetchall()
+
+    results = []
+    for row in rows:
+        payload = json.loads(row["payload"])
+        results.append({
+            "review_id": row["review_id"],
+            "created_at": row["created_at"],
+            "error_cause": row["error_cause"],
+            "sentence": payload.get("sentence"),
+            "choices": payload.get("choices"),
+            "answer_index": payload.get("answer_index"),
+            "point": payload.get("point"),
+            "pattern": payload.get("pattern"),
+            "pattern_note": payload.get("pattern_note"),
+        })
+    print(json.dumps({"count": len(results), "wrong_attempts": results}, ensure_ascii=False, indent=2))
+    return 0
+
+
 def _cmd_publish(args: argparse.Namespace) -> int:
     import _drive_common
 
@@ -192,6 +231,11 @@ def build_parser() -> argparse.ArgumentParser:
     ingest_part7.add_argument("--set-id", required=True, help="このセットの識別子（review_idに使う）")
     ingest_part7.add_argument("--db", type=Path, default=None, help="既定: ~/.academic-english/english.db")
     ingest_part7.set_defaults(func=_cmd_ingest_part7)
+
+    weak_points = sub.add_parser("weak-points", help="Part5の直近の誤答を point/pattern 付きで並べる（集計はしない）")
+    weak_points.add_argument("--limit", type=int, default=30, help="取得件数の上限（既定30）")
+    weak_points.add_argument("--db", type=Path, default=None, help="既定: ~/.academic-english/english.db")
+    weak_points.set_defaults(func=_cmd_weak_points)
 
     publish = sub.add_parser("publish", help="問題冊子PDFを Drive へ上げる")
     publish.add_argument("--pdf", type=Path, required=True)
