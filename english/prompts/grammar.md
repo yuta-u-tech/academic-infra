@@ -48,6 +48,24 @@ TOEIC900点は「Part5の正答率8割を超えている」帯にあたる（`90
   「900点の分かれ目であるパターンC（語法・コロケーション）を厚めに配分する」ことだと結論。
   → 以後は実際の構成比に近い配分（A寄り7割・B3割の実態から、Cを意図的に厚くした
   A:B:C ≒ 10:9:11、1日30問）に変更する。
+- 2026-08-05: 「作ってと指示された時に、生成→PDF組版→学習ループ取り込み→Drive投稿まで
+  確認なしで一気通貫実行する」方針に確定（cronでの定時実行ではない）。毎回同じ語彙・
+  コロケーションが重複しないよう「使用済み語彙・コロケーションログ」を新設し、生成の
+  たびに追記する運用に変更。
+
+### 使用済み語彙・コロケーションログ（パターンB/C、重複回避用）
+
+**新しいセットを作るたびに、このリストに無い組を優先し、使ったものをここに追記する。**
+
+- パターンB（似ているが別の語）: `affect`/`effect`, `raise`(他動詞)/`rise`(自動詞),
+  `assure`/`ensure`/`insure`, `economic`/`economical`, `complimentary`/`complementary`,
+  `principal`/`principle`,
+  `considerable`/`considerate`, `eligible`/`legible`, `respective`/`respectful`,
+  `adapt`/`adopt`, `assess`/`access`, `advice`/`advise`, `personal`/`personnel`
+- パターンC（コロケーション）: `raise concerns`, `meet the deadline`, `place an order`,
+  `conduct a survey`, `reach a consensus`, `submit an application`, `issue a refund`,
+  `extend an invitation`, `address a complaint`, `renew a contract`, `postpone`（文脈適合）,
+  `raise funds`, `draw attention`
 
 ## sentence
 
@@ -73,22 +91,20 @@ TOEIC900点は「Part5の正答率8割を超えている」帯にあたる（`90
       sentenceの節で述べた通り、文全体を読まないと形が決まらない長さ・複雑さにする。
   - **パターンB（似ているが別の語）**: 「形が同じでも意味・品詞が違う語」「スペルや音が
     近い別の語」を混ぜ、意味を読まないと絞れない形にする。
-    - 意味の混同: `complimentary`（無料の）vs `complementary`（補完的な） /
-      `principal`（主要な）vs `principle`（原則） /
-      `considerable`（かなりの）vs `considerate`（思いやりのある） /
-      `eligible`（資格がある）vs `legible`（読める） /
-      `raise`（他動詞）vs `rise`（自動詞）
-    - `affect`/`effect` は使用済みのためしばらく避ける。
+    - 新しい組を選ぶときは、下の「使用済み語彙・コロケーションログ」に無いものを優先する。
     - 語幹まで似た低頻度語（990点向け、例: `inversion/intrusion/aversion/invasion`）は
       出しすぎない。ビジネス語彙の範囲に収める。
   - **パターンC（コロケーション知識）**: 文法的にはどれも成立しうるが、その語と実際に
     結びつく語（動詞+名詞、動詞+前置詞、形容詞+名詞 等）の知識だけで正誤が決まる形にする。
-    例: `raise concerns`（○）に対し意味は近いが結びつきとしては不自然な語を誤答にする、
-    `meet the deadline`（○）に対し `timeline`/`schedule` のような類義語を誤答にする。
-    `explanation` には**なぜその組み合わせが自然/不自然か**を、文法規則ではなく
-    「実際にそう使われるから」という形で書く（規則で導けない、というのがこのパターンの
-    本質のため）。**900点との相関が最も強いパターンなので、実際の構成比（10〜20%）より
-    意図的に厚めに配分する。**
+    誤答は「意味は近いが結びつきとしては不自然な語」にする（例: `raise funds` に対し
+    `lift/elevate/hoist` のような物理的に「持ち上げる」意味の語を誤答にする）。
+    **正解が2つ成立しないよう、誤答は同じ意味分野でも明確に結びつかない語を選ぶ**
+    （「reach/achieve consensus」のようにどちらも正しい類義語コロケーションになる
+    組み合わせは避ける）。`explanation` には**なぜその組み合わせが自然/不自然か**を、
+    文法規則ではなく「実際にそう使われるから」という形で書く。**900点との相関が最も
+    強いパターンなので、実際の構成比（10〜20%）より意図的に厚めに配分する。**
+    新しいコロケーションを選ぶときは、下の「使用済み語彙・コロケーションログ」に
+    無いものを優先する。
 
 ## point / pattern / pattern_note
 
