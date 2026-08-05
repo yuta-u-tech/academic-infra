@@ -82,6 +82,8 @@ def grammar_item(**overrides) -> dict:
         "answer_index": 2,
         "explanation": "動詞 was completed を修飾するので副詞の比較級。",
         "point": "副詞と形容詞の区別（比較級）",
+        "pattern": "A",
+        "pattern_note": "同じ語(quick)の語形違いのみで構成しているため。",
     }
     item.update(overrides)
     return item

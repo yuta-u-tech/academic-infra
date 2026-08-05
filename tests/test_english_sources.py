@@ -101,6 +101,8 @@ def _grammar_item(point: str) -> GrammarItem:
         answer_index=2,
         explanation="過去の出来事なので過去形。",
         point=point,
+        pattern="A",
+        pattern_note="同じ語(submit)の語形違いのみで構成しているため。",
     )
 
 

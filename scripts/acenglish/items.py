@@ -89,6 +89,13 @@ class GrammarItem(_Strict):
     answer_index: int = Field(ge=0)
     explanation: str = Field(min_length=1, max_length=2000)
     point: str = Field(min_length=1, max_length=120, description="問われている文法項目")
+    pattern: Literal["A", "B", "C"] = Field(
+        description="誤答選択肢の作り方（english/prompts/grammar.md参照）: "
+        "A=同じ語の別の形 / B=似ているが別の語 / C=コロケーション知識"
+    )
+    pattern_note: str = Field(
+        min_length=1, max_length=300, description="このpatternに分類した理由"
+    )
 
     @model_validator(mode="after")
     def _blank_and_answer_are_consistent(self) -> "GrammarItem":

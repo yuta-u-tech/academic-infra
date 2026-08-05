@@ -108,6 +108,23 @@
           "minLength": 1,
           "title": "Point",
           "type": "string"
+        },
+        "pattern": {
+          "description": "誤答選択肢の作り方（english/prompts/grammar.md参照）: A=同じ語の別の形 / B=似ているが別の語 / C=コロケーション知識",
+          "enum": [
+            "A",
+            "B",
+            "C"
+          ],
+          "title": "Pattern",
+          "type": "string"
+        },
+        "pattern_note": {
+          "description": "このpatternに分類した理由",
+          "maxLength": 300,
+          "minLength": 1,
+          "title": "Pattern Note",
+          "type": "string"
         }
       },
       "required": [
@@ -115,7 +132,9 @@
         "choices",
         "answer_index",
         "explanation",
-        "point"
+        "point",
+        "pattern",
+        "pattern_note"
       ],
       "title": "GrammarItem",
       "type": "object"

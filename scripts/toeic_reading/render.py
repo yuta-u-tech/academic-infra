@@ -59,8 +59,12 @@ def render_tex(title: str, items: list[GrammarItem]) -> str:
     lines.append(r"\begin{enumerate}[label=\textbf{\arabic*.}]")
     for item in items:
         label = _LABELS[item.answer_index] if item.answer_index < len(_LABELS) else "?"
-        lines.append(r"  \item \textbf{正解: " + escape(label) + r"（" + escape(item.point) + r"）}")
+        lines.append(
+            r"  \item \textbf{正解: " + escape(label) + r"（" + escape(item.point)
+            + r"・パターン" + escape(item.pattern) + r"）}"
+        )
         lines.append(r"    \par\medskip\noindent " + escape(item.explanation))
+        lines.append(r"    \par\smallskip\noindent " + escape(f"[パターン{item.pattern}の理由] {item.pattern_note}"))
     lines.append(r"\end{enumerate}")
     lines.append(r"\end{document}")
     return "\n".join(lines) + "\n"
