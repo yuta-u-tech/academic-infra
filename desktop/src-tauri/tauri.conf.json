@@ -21,6 +21,9 @@
       "icons/128x128.png",
       "icons/128x128@2x.png",
       "icons/icon.png"
-    ]
+    ],
+    "macOS": {
+      "exceptionDomain": "127.0.0.1"
+    }
   }
 }
