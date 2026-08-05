@@ -28,7 +28,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from _data_repo import DataRepoError, commit_and_push, data_repo_path  # noqa: E402
-from acenglish import fetch, generate, notes, promote  # noqa: E402
+from acenglish import fetch, generate, notes, promote, regenerate  # noqa: E402
 from acenglish.api import DEFAULT_HOST, DEFAULT_PORT, NonLoopbackBindError  # noqa: E402
 from acenglish.db import backup, connect, database_path  # noqa: E402
 from acenglish.items import write_json_schemas  # noqa: E402
@@ -92,6 +92,23 @@ def _cmd_request(args: argparse.Namespace) -> int:
     print(f"生成依頼: {path}")
     if retired:
         print(f"退役: 古い版の未検証生成物 {retired} 件")
+    return 0
+
+
+def _cmd_next_request(args: argparse.Namespace) -> int:
+    """evidence(mastery/誤答傾向)から対象を自動で決めて生成依頼を出す。
+
+    `request` コマンドと違い --review-id を要求しない。手薄な domain を
+    skill_state から選び、その中で最も mastery が低い review_id を対象にする。
+    """
+    with connect(args.db) as connection:
+        try:
+            review_id, kind = regenerate.pick_next_target(connection, args.course)
+        except (regenerate.NoEvidenceError, regenerate.NoRegenerableTargetError) as error:
+            raise SystemExit(str(error)) from error
+        target = _resolve_any(args, review_id, args.course)
+    path = generate.write_request(target, [kind], args.out, args.count)
+    print(f"生成依頼(evidence反映): {path}  対象={review_id}  kind={kind}")
     return 0
 
 
@@ -226,6 +243,15 @@ def main() -> int:
     request.add_argument("--out", type=Path, required=True)
     request.add_argument("--repo-root", type=Path)
     request.set_defaults(func=_cmd_request)
+
+    next_request = subparsers.add_parser(
+        "next-request", help="evidenceから対象を自動選択して生成依頼JSONを書き出す"
+    )
+    next_request.add_argument("--course", required=True)
+    next_request.add_argument("--count", type=int, default=5)
+    next_request.add_argument("--out", type=Path, required=True)
+    next_request.add_argument("--repo-root", type=Path)
+    next_request.set_defaults(func=_cmd_next_request)
 
     ingest = subparsers.add_parser("ingest", help="生成結果を検証して取り込む")
     ingest.add_argument("--file", type=Path, required=True)
