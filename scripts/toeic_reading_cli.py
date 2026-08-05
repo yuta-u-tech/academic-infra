@@ -33,7 +33,7 @@ DEFAULT_DRIVE_FOLDER_NAME = "TOEIC/reading/part5"
 
 def _load_items(path: Path) -> tuple[str, list[GrammarItem]]:
     payload = json.loads(path.read_text(encoding="utf-8"))
-    title = payload.get("title") or f"TOEIC Part 5 — {datetime.now(timezone.utc):%Y-%m-%d}"
+    title = payload.get("title") or f"Part5 {datetime.now(timezone.utc):%Y-%m-%d}"
     try:
         items = [GrammarItem.model_validate(entry) for entry in payload["items"]]
     except ValidationError as error:

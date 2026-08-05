@@ -30,6 +30,13 @@ _PREAMBLE = r"""\documentclass[a4paper,11pt]{ltjsarticle}
 
 _LABELS = ["A", "B", "C", "D", "E"]
 
+# english/prompts/grammar.md の分類定義と一致させる。
+_PATTERN_LEGEND = [
+    ("パターンA", "同じ語の別の形（品詞・時制・態など）。形を正しく選べるかを問う。"),
+    ("パターンB", "似ているが別の語（スペルや音が近い、意味の異なる語）。語彙の意味を問う。"),
+    ("パターンC", "コロケーション知識。文法だけでは絞れず、その語と実際に結びつく語の組み合わせを問う。"),
+]
+
 
 def render_tex(title: str, items: list[GrammarItem]) -> str:
     lines = [
@@ -66,5 +73,12 @@ def render_tex(title: str, items: list[GrammarItem]) -> str:
         lines.append(r"    \par\medskip\noindent " + escape(item.explanation))
         lines.append(r"    \par\smallskip\noindent " + escape(f"[パターン{item.pattern}の理由] {item.pattern_note}"))
     lines.append(r"\end{enumerate}")
+
+    lines.extend(["", r"\clearpage", r"\section*{パターンについて}", ""])
+    lines.append(r"\begin{description}")
+    for label, description in _PATTERN_LEGEND:
+        lines.append(r"  \item[" + escape(label) + r"] " + escape(description))
+    lines.append(r"\end{description}")
+
     lines.append(r"\end{document}")
     return "\n".join(lines) + "\n"
