@@ -66,19 +66,16 @@ fn main() {
                 eprintln!("acenglish-server did not become healthy in time");
             }
 
-            // Overlay title bar: no native title text/bar strip, just the traffic
-            // lights floating over our own dark UI. The web UI reserves top space
-            // for them via a `data-tauri-drag-region` strip (see web-dist/index.html).
-            let builder =
-                WebviewWindowBuilder::new(app, "main", WebviewUrl::External(APP_URL.parse().unwrap()))
-                    .title("Academic English")
-                    .inner_size(960.0, 720.0)
-                    .min_inner_size(720.0, 560.0);
-            #[cfg(target_os = "macos")]
-            let builder = builder
-                .title_bar_style(tauri::TitleBarStyle::Overlay)
-                .hidden_title(true);
-            builder.build()?;
+            // Standard native title bar. An overlay/hidden-title bar needs a
+            // hand-rolled JS drag region (core:window:allow-start-dragging +
+            // data-tauri-drag-region) that turned out unreliable to get right
+            // without being able to interactively test window dragging in this
+            // environment; the native bar drags for free and can't regress.
+            WebviewWindowBuilder::new(app, "main", WebviewUrl::External(APP_URL.parse().unwrap()))
+                .title("Academic English")
+                .inner_size(960.0, 720.0)
+                .min_inner_size(720.0, 560.0)
+                .build()?;
 
             Ok(())
         })
