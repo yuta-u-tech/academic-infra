@@ -20,7 +20,7 @@ from pathlib import Path
 DEFAULT_HOME_ENV = "ACADEMIC_ENGLISH_HOME"
 _DEFAULT_HOME = Path.home() / ".academic-english"
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 
 _MIGRATIONS: dict[int, tuple[str, ...]] = {
     1: (
@@ -152,6 +152,23 @@ _MIGRATIONS: dict[int, tuple[str, ...]] = {
     # 引き直しは「もう一度進める」ではなく「同じ地点から計算し直す」でなければ
     # 間隔が二重に伸びるので、回答前の SM-2 状態を控えておく。
     3: ("ALTER TABLE attempt ADD COLUMN queue_state_before TEXT",),
+    # v4: items.py の GrammarItem に pattern/pattern_note を必須化した(d69a999)のが
+    # 2026-08-05 09:36 JST。それより前に ingest 済みの grammar payload にはこの2フィールドが
+    # 無く、読み出し時の model_validate_json が ValidationError になり /api/queue が
+    # 500 になっていた（attempt/review_queue から item_id で参照されているため行の削除は
+    # できない）。移行前データと分かるようにpattern_noteへ明記した上でバックフィルする。
+    4: (
+        """
+        UPDATE generated_item
+        SET payload = json_set(
+            payload,
+            '$.pattern', 'C',
+            '$.pattern_note', '(データ移行: v4適用前に生成されたためpattern未分類)'
+        )
+        WHERE kind = 'grammar'
+          AND json_extract(payload, '$.pattern') IS NULL
+        """,
+    ),
 }
 
 
