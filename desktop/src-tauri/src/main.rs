@@ -79,6 +79,15 @@ fn main() {
 
             Ok(())
         })
+        // Single-window utility app: closing the window should quit the app
+        // outright, not leave a windowless process sitting in the dock the
+        // way multi-document Mac apps do. Without this, the red close button
+        // just hides the window and the sidecar keeps running invisibly.
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::CloseRequested { .. } = event {
+                window.app_handle().exit(0);
+            }
+        })
         .build(tauri::generate_context!())
         .expect("error while building acenglish-desktop")
         .run(|app_handle, event| {
