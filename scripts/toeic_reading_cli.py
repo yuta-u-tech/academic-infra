@@ -79,10 +79,12 @@ def _cmd_publish(args: argparse.Namespace) -> int:
     drive_path = "/".join([*folder_names, drive_name])
 
     # ChatGPTが読むMarkdownはPDFと同じ場所に混ぜず、reading配下の兄弟フォルダ「MDs」へ
-    # まとめる（例: TOEIC/reading/part5 → TOEIC/reading/MDs）。partが増えても集約先は1つ。
+    # まとめる（例: TOEIC/reading/part5 → TOEIC/reading/MDs）。partが増えても集約先は1つに
+    # なるので、ファイル名の方に <日付>-<part>.md でpartを残す（例: 2026-08-05-part5.md）。
     md_path = args.pdf.with_suffix(".md")
     md_folder_names = [*folder_names[:-1], "MDs"] if len(folder_names) > 1 else ["MDs"]
-    md_drive_name = f"{today}.md"
+    part_label = folder_names[-1] if folder_names else None
+    md_drive_name = f"{today}-{part_label}.md" if part_label else f"{today}.md"
     md_drive_path = "/".join([*md_folder_names, md_drive_name]) if md_path.exists() else None
 
     if args.dry_run:
