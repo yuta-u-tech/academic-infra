@@ -43,8 +43,9 @@ from acinfra_core import competency, goal, resource  # noqa: E402
 from acinfra_core import resource_requirement as rr  # noqa: E402
 from acinfra_core.db import connect  # noqa: E402
 from acinfra_core.plugins.toeic import ToeicPlugin  # noqa: E402
+from acinfra_core.plugins.toukei import ToukeiPlugin  # noqa: E402
 
-DOMAIN_PLUGINS = {"toeic": ToeicPlugin}
+DOMAIN_PLUGINS = {"toeic": ToeicPlugin, "toukei": ToukeiPlugin}
 
 
 def _cmd_goal_create(args: argparse.Namespace) -> int:
