@@ -16,9 +16,8 @@ TOEICのacenglishと違い、SM-2間隔反復やLaTeX冊子・Drive publishは�
     python3 scripts/toukei_cli.py status
 
     # 同じ優先順位（未回答→誤答が多い順）で選んだ問題をPDFに組む。
-    # 2026-08-06: 出典（statisticsschool.com）の解説品質に問題があったため、119問全てを
-    # Codexでゼロから生成し直した経緯があり、既定では構造化フィールドから直接LaTeXを組む
-    # （出典.texへの依存はない。旧・出典スライス経路はsource_numberを持つ行にのみ残っている）。
+    # Drive上の他教材（TOEIC Part5/7・リスニング冊子）と同じhouse style（ltjsarticle・
+    # geometry margin=25mm・色無し・「設問」→「解答と解説」の2部構成）で組版する。
     python3 scripts/toukei_cli.py worksheet --competency toukei.probability_distribution --count 15 --out .toukei-worksheets/20260806
 
     # Driveへアップロード
@@ -36,14 +35,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from toukei_study.db import connect  # noqa: E402
-from toukei_study.render import GENERATED_PREAMBLE  # noqa: E402
 from toukei_study.render import build_pdf as render_build_pdf  # noqa: E402
-from toukei_study.render import (  # noqa: E402
-    build_generated_block,
-    build_worksheet_tex,
-    extract_preamble,
-    extract_raw_blocks,
-)
+from toukei_study.render import render_generated_tex  # noqa: E402
 from toukei_study.study import ingest_problems, next_batch, record_attempt, status  # noqa: E402
 
 COMPETENCY_IDS = (
@@ -59,10 +52,6 @@ COMPETENCY_TITLES = {
     "toukei.multivariate_analysis": "多変量解析法",
     "toukei.applications": "種々の応用",
 }
-
-DEFAULT_SOURCE_TEX = (
-    Path.home() / "Desktop" / "Statistical_Society_Certificate_pre_1" / "problems_statistics_applied.tex"
-)
 
 DEFAULT_DRIVE_FOLDER_NAME = "統計検定準1級"
 
@@ -121,34 +110,17 @@ def _cmd_worksheet(args: argparse.Namespace) -> int:
         print("出題できる問題がありません。先に ingest してください。", file=sys.stderr)
         return 1
 
-    # source_numberを持つ問題（出典.texから切り出す旧経路）とCodex生成分（構造化フィールドから
-    # 直接組む既定経路）が混在しうるので、両方サポートする。
-    needs_source = any(p.source_number is not None for p in selected)
-    blocks: list[str] = []
-    if needs_source and args.tex.exists():
-        blocks_by_number = extract_raw_blocks(args.tex)
-    else:
-        blocks_by_number = {}
-
-    for index, problem in enumerate(selected, start=1):
-        if problem.source_number is not None and problem.source_number in blocks_by_number:
-            blocks.append(blocks_by_number[problem.source_number])
-        else:
-            blocks.append(
-                build_generated_block(index, problem.question, problem.choices, problem.answer_index, problem.explanation)
-            )
-
-    preamble = extract_preamble(args.tex) if (needs_source and args.tex.exists()) else GENERATED_PREAMBLE
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     title = f"{COMPETENCY_TITLES.get(args.competency, args.competency)} {today}"
-    tex_content = build_worksheet_tex(preamble, title, blocks)
+    # Drive上の他教材（TOEIC Part5/7・リスニング冊子）と同じhouse styleで組む。
+    tex_content = render_generated_tex(title, selected)
 
     args.out.mkdir(parents=True, exist_ok=True)
     tex_path = args.out / "worksheet.tex"
     tex_path.write_text(tex_content, encoding="utf-8")
     pdf_path = render_build_pdf(tex_path)
     print(json.dumps(
-        {"pdf": str(pdf_path), "count": len(blocks), "competency": args.competency}, ensure_ascii=False, indent=2
+        {"pdf": str(pdf_path), "count": len(selected), "competency": args.competency}, ensure_ascii=False, indent=2
     ))
     return 0
 
@@ -210,12 +182,11 @@ def main() -> int:
     status_parser.set_defaults(func=_cmd_status)
 
     worksheet = subparsers.add_parser(
-        "worksheet", help="出典.texから毎回切り出し直して問題冊子PDFを組む"
+        "worksheet", help="他のDrive教材と同じhouse styleで問題冊子PDFを組む"
     )
     worksheet.add_argument("--competency", required=True, choices=COMPETENCY_IDS)
     worksheet.add_argument("--count", type=int, default=15)
     worksheet.add_argument("--out", type=Path, required=True)
-    worksheet.add_argument("--tex", type=Path, default=DEFAULT_SOURCE_TEX)
     worksheet.set_defaults(func=_cmd_worksheet)
 
     publish = subparsers.add_parser("publish", help="問題冊子PDFをDriveへ上げる")
