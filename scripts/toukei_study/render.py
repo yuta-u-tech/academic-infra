@@ -1,9 +1,11 @@
-"""毎回、出典.texから該当問題を切り出し直してPDFを組み直す。
+"""問題のPDF組版。
 
-`toukei_import_toketarou.py` が取り込むテキスト（quiz用にLaTeXコマンドを平文化した
-ものをDBへ保存）とは別に、こちらは出典 `.tex` の生のLaTeXブロック（`\\ptitle`〜
-`\\end{explainbox}`）をそのまま切り出して束ね直す。数式・tcolorboxのレイアウトは
-出典の元々の定義（プリアンブル）に頼るので、平文化による崩れが起きない。
+2026-08-06に出典（statisticsschool.com）由来の119問は解説の質に問題があり、Codexに
+ゼロから生成し直させた（`toukei_import_toketarou.py`は出典.texからの再取り込み用に
+残すが既定では使わない）。Codex生成分は`source_number`を持たないため、構造化フィールド
+（question/choices/answer_index/explanation）から直接LaTeXブロックを組む
+`build_generated_block()`が既定の経路になる。`extract_raw_blocks()`は出典.texを
+再利用したくなった場合のために残してある。
 """
 
 from __future__ import annotations
@@ -16,9 +18,77 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from academic_audio.worksheet import build_pdf  # noqa: E402
 
-__all__ = ["build_pdf", "build_worksheet_tex", "extract_preamble", "extract_raw_blocks"]
+__all__ = [
+    "GENERATED_PREAMBLE",
+    "build_generated_block",
+    "build_pdf",
+    "build_worksheet_tex",
+    "extract_preamble",
+    "extract_raw_blocks",
+]
 
 _PTITLE_RE = re.compile(r"\\ptitle\{(\d+)\}\{[^}]*\}\{\d+\}")
+
+_LABELS = ["A", "B", "C", "D", "E"]
+
+# 出典.tex（problems_statistics_applied.tex）のtcolorbox定義を踏襲した自己完結プリアンブル。
+# 数式はCodex生成分がそのまま有効なLaTeXとして出力する前提なのでエスケープしない。
+GENERATED_PREAMBLE = r"""\documentclass[a4paper,10pt]{ltjsarticle}
+\usepackage[margin=17mm]{geometry}
+\usepackage{luatexja}
+\usepackage{amsmath,amssymb,mathtools}
+\usepackage{enumitem,multicol}
+\usepackage[most]{tcolorbox}
+\usepackage{xcolor}
+
+\definecolor{mainblue}{HTML}{1F4E79}
+\definecolor{softblue}{HTML}{EEF5FB}
+\definecolor{softgreen}{HTML}{F0F7F2}
+\definecolor{linegray}{HTML}{D7DEE8}
+
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{0.4em}
+\setlist{itemsep=0.15em,topsep=0.2em}
+
+\newtcolorbox{problemcard}{%
+  breakable,enhanced,colback=white,colframe=mainblue,
+  boxrule=0.7pt,arc=1.5mm,left=2mm,right=2mm,top=1mm,bottom=1mm}
+\newtcolorbox{answerbox}{%
+  breakable,enhanced,colback=softgreen,colframe=green!40!black,
+  boxrule=0.5pt,arc=1.5mm,left=2mm,right=2mm,top=0.8mm,bottom=0.8mm}
+\newtcolorbox{explainbox}{%
+  breakable,enhanced,colback=softblue,colframe=linegray,
+  boxrule=0.5pt,arc=1.5mm,left=2mm,right=2mm,top=1mm,bottom=1mm}
+"""
+
+
+def build_generated_block(number: int, question: str, choices: list[str], answer_index: int, explanation: str) -> str:
+    """Codex生成分の構造化フィールドから、出典と同じ見た目のLaTeXブロックを組む。"""
+    label = _LABELS[answer_index] if answer_index < len(_LABELS) else "?"
+    lines = [
+        r"\subsection*{問題~" + str(number) + "}",
+        r"\begin{problemcard}",
+        r"\textbf{問題文}\par",
+        question,
+        "",
+        r"\medskip\textbf{選択肢}\par",
+        r"\begin{multicols}{2}",
+        r"\begin{enumerate}[label=\Alph*.]",
+    ]
+    lines.extend(r"\item " + choice for choice in choices)
+    lines.extend([
+        r"\end{enumerate}",
+        r"\end{multicols}",
+        r"\end{problemcard}",
+        r"\begin{answerbox}",
+        r"\textbf{正答}\quad " + label + ". " + choices[answer_index],
+        r"\end{answerbox}",
+        r"\begin{explainbox}",
+        r"\textbf{解説}\par",
+        explanation,
+        r"\end{explainbox}",
+    ])
+    return "\n".join(lines)
 
 
 def extract_preamble(tex_path: Path) -> str:

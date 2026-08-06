@@ -15,8 +15,10 @@ TOEICのacenglishと違い、SM-2間隔反復やLaTeX冊子・Drive publishは�
     # 習熟度の確認（Core の `competency mastery` からも同じ値が見える）
     python3 scripts/toukei_cli.py status
 
-    # 同じ優先順位（未回答→誤答が多い順）で選んだ問題を、出典.texから毎回切り出し直して
-    # PDFに組む（平文化キャッシュではなく生のLaTeXを使うので数式が崩れない）
+    # 同じ優先順位（未回答→誤答が多い順）で選んだ問題をPDFに組む。
+    # 2026-08-06: 出典（statisticsschool.com）の解説品質に問題があったため、119問全てを
+    # Codexでゼロから生成し直した経緯があり、既定では構造化フィールドから直接LaTeXを組む
+    # （出典.texへの依存はない。旧・出典スライス経路はsource_numberを持つ行にのみ残っている）。
     python3 scripts/toukei_cli.py worksheet --competency toukei.probability_distribution --count 15 --out .toukei-worksheets/20260806
 
     # Driveへアップロード
@@ -34,8 +36,14 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from toukei_study.db import connect  # noqa: E402
+from toukei_study.render import GENERATED_PREAMBLE  # noqa: E402
 from toukei_study.render import build_pdf as render_build_pdf  # noqa: E402
-from toukei_study.render import build_worksheet_tex, extract_preamble, extract_raw_blocks  # noqa: E402
+from toukei_study.render import (  # noqa: E402
+    build_generated_block,
+    build_worksheet_tex,
+    extract_preamble,
+    extract_raw_blocks,
+)
 from toukei_study.study import ingest_problems, next_batch, record_attempt, status  # noqa: E402
 
 COMPETENCY_IDS = (
@@ -107,20 +115,30 @@ def _cmd_status(args: argparse.Namespace) -> int:
 
 
 def _cmd_worksheet(args: argparse.Namespace) -> int:
-    if not args.tex.exists():
-        raise FileNotFoundError(f"{args.tex} がありません。--tex で出典.texの場所を指定してください。")
-
     with connect(args.db) as connection:
-        candidates = next_batch(connection, args.competency, args.count * 2)  # 出典に無い問題を弾く分の余裕
-    selected = [p for p in candidates if p.source_number is not None][: args.count]
+        selected = next_batch(connection, args.competency, args.count)
     if not selected:
-        print("出典.texと紐づく問題がありません（手動生成分は再切り出しできません）。", file=sys.stderr)
+        print("出題できる問題がありません。先に ingest してください。", file=sys.stderr)
         return 1
 
-    preamble = extract_preamble(args.tex)
-    blocks_by_number = extract_raw_blocks(args.tex)
-    blocks = [blocks_by_number[p.source_number] for p in selected if p.source_number in blocks_by_number]
+    # source_numberを持つ問題（出典.texから切り出す旧経路）とCodex生成分（構造化フィールドから
+    # 直接組む既定経路）が混在しうるので、両方サポートする。
+    needs_source = any(p.source_number is not None for p in selected)
+    blocks: list[str] = []
+    if needs_source and args.tex.exists():
+        blocks_by_number = extract_raw_blocks(args.tex)
+    else:
+        blocks_by_number = {}
 
+    for index, problem in enumerate(selected, start=1):
+        if problem.source_number is not None and problem.source_number in blocks_by_number:
+            blocks.append(blocks_by_number[problem.source_number])
+        else:
+            blocks.append(
+                build_generated_block(index, problem.question, problem.choices, problem.answer_index, problem.explanation)
+            )
+
+    preamble = extract_preamble(args.tex) if (needs_source and args.tex.exists()) else GENERATED_PREAMBLE
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     title = f"{COMPETENCY_TITLES.get(args.competency, args.competency)} {today}"
     tex_content = build_worksheet_tex(preamble, title, blocks)
