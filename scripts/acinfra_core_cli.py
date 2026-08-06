@@ -44,8 +44,12 @@ from acinfra_core import resource_requirement as rr  # noqa: E402
 from acinfra_core.db import connect  # noqa: E402
 from acinfra_core.plugins.toeic import ToeicPlugin  # noqa: E402
 from acinfra_core.plugins.toukei import ToukeiPlugin  # noqa: E402
+from toukei_study.db import connect as connect_toukei  # noqa: E402
 
 DOMAIN_PLUGINS = {"toeic": ToeicPlugin, "toukei": ToukeiPlugin}
+# Domain Pluginごとに個人データDBが違う（acenglishのenglish.db / toukei_studyのtoukei.db）ので、
+# `--english-db` 一本ではなくdomain_idからconnect関数を引く。
+DOMAIN_CONNECTORS = {"toeic": connect_acenglish, "toukei": connect_toukei}
 
 
 def _cmd_goal_create(args: argparse.Namespace) -> int:
@@ -88,8 +92,10 @@ def _cmd_goal_update_status(args: argparse.Namespace) -> int:
 
 def _cmd_competency_register(args: argparse.Namespace) -> int:
     plugin_cls = DOMAIN_PLUGINS[args.domain]
-    with connect_acenglish(args.english_db) as acenglish_connection:
-        plugin = plugin_cls(acenglish_connection)
+    connector = DOMAIN_CONNECTORS[args.domain]
+    domain_db = args.english_db if args.domain == "toeic" else args.domain_db
+    with connector(domain_db) as domain_connection:
+        plugin = plugin_cls(domain_connection)
         with connect(args.db) as connection:
             registered = competency.register_domain_competencies(connection, args.goal, plugin)
     print(json.dumps([c.model_dump() for c in registered], ensure_ascii=False, indent=2))
@@ -112,16 +118,18 @@ def _cmd_competency_mastery(args: argparse.Namespace) -> int:
             by_domain.setdefault(item.domain_id, []).append(item)
 
         report = []
-        with connect_acenglish(args.english_db) as acenglish_connection:
-            for domain_id, items in by_domain.items():
-                plugin_cls = DOMAIN_PLUGINS.get(domain_id)
-                if plugin_cls is None:
-                    for item in items:
-                        report.append(
-                            {"competency_id": item.competency_id, "note": f"未対応のdomain_id: {domain_id}"}
-                        )
-                    continue
-                plugin = plugin_cls(acenglish_connection)
+        for domain_id, items in by_domain.items():
+            plugin_cls = DOMAIN_PLUGINS.get(domain_id)
+            connector = DOMAIN_CONNECTORS.get(domain_id)
+            if plugin_cls is None or connector is None:
+                for item in items:
+                    report.append(
+                        {"competency_id": item.competency_id, "note": f"未対応のdomain_id: {domain_id}"}
+                    )
+                continue
+            domain_db = args.english_db if domain_id == "toeic" else args.domain_db
+            with connector(domain_db) as domain_connection:
+                plugin = plugin_cls(domain_connection)
                 templates = {t.competency_id: t for t in plugin.competencies()}
                 summaries = plugin.mastery_summary(
                     [templates[item.competency_id] for item in items if item.competency_id in templates]
@@ -231,6 +239,10 @@ def main() -> int:
     register.add_argument("--goal", required=True)
     register.add_argument("--domain", required=True, choices=tuple(DOMAIN_PLUGINS))
     register.add_argument("--english-db", type=Path, default=None, dest="english_db")
+    register.add_argument(
+        "--domain-db", type=Path, default=None, dest="domain_db",
+        help="toeic以外のDomain Plugin用DBパス（既定はplugin側のデフォルト）",
+    )
     register.set_defaults(func=_cmd_competency_register)
 
     competency_list = competency_subparsers.add_parser("list", help="Goal に登録された Competency 一覧")
@@ -242,6 +254,10 @@ def main() -> int:
     )
     mastery.add_argument("--goal", required=True)
     mastery.add_argument("--english-db", type=Path, default=None, dest="english_db")
+    mastery.add_argument(
+        "--domain-db", type=Path, default=None, dest="domain_db",
+        help="toeic以外のDomain Plugin用DBパス（既定はplugin側のデフォルト）",
+    )
     mastery.add_argument(
         "--open-requirements", action="store_true",
         help="不足が見つかった Competency を resource_requirement として起票する",
