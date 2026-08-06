@@ -26,7 +26,9 @@ _SCHEMA = (
         answer_index  INTEGER NOT NULL,
         explanation   TEXT NOT NULL,
         set_id        TEXT NOT NULL,
-        created_at    TEXT NOT NULL
+        created_at    TEXT NOT NULL,
+        source_file   TEXT,
+        source_number INTEGER
     )
     """,
     "CREATE INDEX IF NOT EXISTS idx_problem_competency ON problem (competency_id)",
@@ -77,5 +79,16 @@ def connect(path: Path | None = None) -> sqlite3.Connection:
     connection.row_factory = sqlite3.Row
     for statement in _SCHEMA:
         connection.execute(statement)
+    _migrate_problem_columns(connection)
     connection.commit()
     return connection
+
+
+def _migrate_problem_columns(connection: sqlite3.Connection) -> None:
+    """`CREATE TABLE IF NOT EXISTS`は既存テーブルに新しい列を足してくれないため、
+    source_file/source_numberを後から追加した際の個人DBを手動で追いかける。"""
+    existing = {row["name"] for row in connection.execute("PRAGMA table_info(problem)")}
+    if "source_file" not in existing:
+        connection.execute("ALTER TABLE problem ADD COLUMN source_file TEXT")
+    if "source_number" not in existing:
+        connection.execute("ALTER TABLE problem ADD COLUMN source_number INTEGER")

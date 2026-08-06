@@ -136,6 +136,10 @@ def parse_problems(tex_path: Path) -> list[dict]:
                 "explanation": explanation or "(解説なし)",
                 "source_title": header.group(2),
                 "level": header.group(3),
+                "source_file": str(tex_path),
+                # \ptitle{N}のNはセクション内で1〜20に振り直され全体ではユニークでないため、
+                # 出現順のグローバル連番を使う（render.extract_raw_blocksと同じ採番規則）。
+                "source_number": index + 1,
             }
         )
     return problems

@@ -14,6 +14,13 @@ TOEICのacenglishと違い、SM-2間隔反復やLaTeX冊子・Drive publishは�
 
     # 習熟度の確認（Core の `competency mastery` からも同じ値が見える）
     python3 scripts/toukei_cli.py status
+
+    # 同じ優先順位（未回答→誤答が多い順）で選んだ問題を、出典.texから毎回切り出し直して
+    # PDFに組む（平文化キャッシュではなく生のLaTeXを使うので数式が崩れない）
+    python3 scripts/toukei_cli.py worksheet --competency toukei.probability_distribution --count 15 --out .toukei-worksheets/20260806
+
+    # Driveへアップロード
+    python3 scripts/toukei_cli.py publish --pdf .toukei-worksheets/20260806/worksheet.pdf
 """
 
 from __future__ import annotations
@@ -21,11 +28,14 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from toukei_study.db import connect  # noqa: E402
+from toukei_study.render import build_pdf as render_build_pdf  # noqa: E402
+from toukei_study.render import build_worksheet_tex, extract_preamble, extract_raw_blocks  # noqa: E402
 from toukei_study.study import ingest_problems, next_batch, record_attempt, status  # noqa: E402
 
 COMPETENCY_IDS = (
@@ -34,6 +44,19 @@ COMPETENCY_IDS = (
     "toukei.multivariate_analysis",
     "toukei.applications",
 )
+
+COMPETENCY_TITLES = {
+    "toukei.probability_distribution": "確率と確率分布",
+    "toukei.statistical_inference": "統計的推測",
+    "toukei.multivariate_analysis": "多変量解析法",
+    "toukei.applications": "種々の応用",
+}
+
+DEFAULT_SOURCE_TEX = (
+    Path.home() / "Desktop" / "Statistical_Society_Certificate_pre_1" / "problems_statistics_applied.tex"
+)
+
+DEFAULT_DRIVE_FOLDER_NAME = "統計検定準1級"
 
 
 def _cmd_ingest(args: argparse.Namespace) -> int:
@@ -83,6 +106,72 @@ def _cmd_status(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_worksheet(args: argparse.Namespace) -> int:
+    if not args.tex.exists():
+        raise FileNotFoundError(f"{args.tex} がありません。--tex で出典.texの場所を指定してください。")
+
+    with connect(args.db) as connection:
+        candidates = next_batch(connection, args.competency, args.count * 2)  # 出典に無い問題を弾く分の余裕
+    selected = [p for p in candidates if p.source_number is not None][: args.count]
+    if not selected:
+        print("出典.texと紐づく問題がありません（手動生成分は再切り出しできません）。", file=sys.stderr)
+        return 1
+
+    preamble = extract_preamble(args.tex)
+    blocks_by_number = extract_raw_blocks(args.tex)
+    blocks = [blocks_by_number[p.source_number] for p in selected if p.source_number in blocks_by_number]
+
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    title = f"{COMPETENCY_TITLES.get(args.competency, args.competency)} {today}"
+    tex_content = build_worksheet_tex(preamble, title, blocks)
+
+    args.out.mkdir(parents=True, exist_ok=True)
+    tex_path = args.out / "worksheet.tex"
+    tex_path.write_text(tex_content, encoding="utf-8")
+    pdf_path = render_build_pdf(tex_path)
+    print(json.dumps(
+        {"pdf": str(pdf_path), "count": len(blocks), "competency": args.competency}, ensure_ascii=False, indent=2
+    ))
+    return 0
+
+
+def _cmd_publish(args: argparse.Namespace) -> int:
+    import _drive_common
+
+    if not args.pdf.exists():
+        raise FileNotFoundError(f"{args.pdf} がありません。先に worksheet を実行してください。")
+
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    drive_name = args.name or f"{today}.pdf"
+    folder_names = [part for part in args.folder_name.split("/") if part]
+    drive_path = "/".join([*folder_names, drive_name])
+
+    if args.dry_run:
+        print(json.dumps({"dry_run": True, "drive_path": drive_path, "local": str(args.pdf)},
+                          ensure_ascii=False, indent=2))
+        return 0
+
+    credentials = _drive_common.resolve_credentials()
+    parent_id = args.parent_id or credentials.get("GDRIVE_PARENT_FOLDER_ID", "")
+    if not parent_id:
+        raise ValueError("--parent-id か GDRIVE_PARENT_FOLDER_ID が必要です。")
+
+    service = _drive_common.build_service(credentials)
+    folder_id = parent_id
+    for name in folder_names:
+        folder_id = _drive_common.ensure_folder(service, folder_id, name)
+    file_id = _drive_common.upload_file(service, folder_id, args.pdf, "application/pdf", name=drive_name)
+
+    print(json.dumps(
+        {
+            "drive_path": drive_path,
+            "file_id": file_id,
+            "url": f"https://drive.google.com/file/d/{file_id}/view",
+        },
+        ensure_ascii=False, indent=2))
+    return 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--db", type=Path, default=None, help="SQLiteのパス（既定: ~/.academic-toukei/toukei.db）")
@@ -101,6 +190,23 @@ def main() -> int:
 
     status_parser = subparsers.add_parser("status", help="Competency別の習熟度を見る")
     status_parser.set_defaults(func=_cmd_status)
+
+    worksheet = subparsers.add_parser(
+        "worksheet", help="出典.texから毎回切り出し直して問題冊子PDFを組む"
+    )
+    worksheet.add_argument("--competency", required=True, choices=COMPETENCY_IDS)
+    worksheet.add_argument("--count", type=int, default=15)
+    worksheet.add_argument("--out", type=Path, required=True)
+    worksheet.add_argument("--tex", type=Path, default=DEFAULT_SOURCE_TEX)
+    worksheet.set_defaults(func=_cmd_worksheet)
+
+    publish = subparsers.add_parser("publish", help="問題冊子PDFをDriveへ上げる")
+    publish.add_argument("--pdf", type=Path, required=True)
+    publish.add_argument("--folder-name", default=DEFAULT_DRIVE_FOLDER_NAME, help="Drive上のフォルダパス（/区切り）")
+    publish.add_argument("--name", help="Drive上のファイル名（既定: <当日の日付>.pdf）")
+    publish.add_argument("--parent-id", help="既定は GDRIVE_PARENT_FOLDER_ID")
+    publish.add_argument("--dry-run", action="store_true")
+    publish.set_defaults(func=_cmd_publish)
 
     args = parser.parse_args()
     return args.func(args)

@@ -20,6 +20,8 @@ class Problem:
     choices: list[str]
     answer_index: int
     explanation: str
+    source_file: str | None = None
+    source_number: int | None = None
 
 
 def ingest_problems(connection: sqlite3.Connection, set_id: str, competency_id: str, items: list[dict]) -> int:
@@ -27,8 +29,10 @@ def ingest_problems(connection: sqlite3.Connection, set_id: str, competency_id: 
     inserted = 0
     for item in items:
         connection.execute(
-            "INSERT INTO problem (competency_id, question, choices, answer_index, explanation, set_id, created_at)"
-            " VALUES (?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO problem"
+            " (competency_id, question, choices, answer_index, explanation, set_id, created_at,"
+            "  source_file, source_number)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 competency_id,
                 item["question"],
@@ -37,6 +41,8 @@ def ingest_problems(connection: sqlite3.Connection, set_id: str, competency_id: 
                 item["explanation"],
                 set_id,
                 now,
+                item.get("source_file"),
+                item.get("source_number"),
             ),
         )
         inserted += 1
@@ -51,6 +57,7 @@ def next_batch(connection: sqlite3.Connection, competency_id: str | None, count:
     rows = connection.execute(
         f"""
         SELECT p.id, p.competency_id, p.question, p.choices, p.answer_index, p.explanation,
+               p.source_file, p.source_number,
                COUNT(a.id) AS attempts,
                COALESCE(SUM(1 - a.correct), 0) AS misses
         FROM problem p
@@ -70,6 +77,8 @@ def next_batch(connection: sqlite3.Connection, competency_id: str | None, count:
             choices=json.loads(row["choices"]),
             answer_index=row["answer_index"],
             explanation=row["explanation"],
+            source_file=row["source_file"],
+            source_number=row["source_number"],
         )
         for row in rows
     ]
