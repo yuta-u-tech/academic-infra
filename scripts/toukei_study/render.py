@@ -38,7 +38,8 @@ HOUSE_PREAMBLE = _TOEIC_HOUSE_PREAMBLE + "\\usepackage{amsmath}\n"
 _PTITLE_RE = re.compile(r"\\ptitle\{(\d+)\}\{[^}]*\}\{\d+\}")
 _LABELS = ["A", "B", "C", "D", "E"]
 
-_MATH_SPLIT_RE = re.compile(r"(\$[^$]*\$)")
+# $...$（インライン）と \[...\]（ディスプレイ数式）の両方を保護区間として扱う。
+_MATH_SPLIT_RE = re.compile(r"(\$[^$]*\$|\\\[.*?\\\])", re.DOTALL)
 
 _LATEX_ESCAPES = {
     "\\": r"\textbackslash{}",
@@ -53,8 +54,18 @@ _LATEX_ESCAPES = {
 }
 
 
+_DOUBLE_BACKSLASH_BRACKET_RE = re.compile(r"\\\\(?=[\[\]])")
+
+
+def _fix_over_escaped_display_math(text: str) -> str:
+    """CodexがJSON中で `\\[`/`\\]` を過剰エスケープして `\\\\[`/`\\\\]`（バックスラッシュ2つ）
+    にしてしまうことがある（2026-08-06に実際に発生）。`\\[`を開始させるための単純な正規化。"""
+    return _DOUBLE_BACKSLASH_BRACKET_RE.sub(r"\\", text)
+
+
 def escape_outside_math(text: str) -> str:
     """`$...$`区間はそのままLaTeX数式として残し、それ以外の地の文だけをエスケープする。"""
+    text = _fix_over_escaped_display_math(text)
     parts = _MATH_SPLIT_RE.split(text)
     escaped = []
     for index, part in enumerate(parts):
