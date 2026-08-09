@@ -74,6 +74,40 @@ class ReadingItem(_Strict):
             return False
 
 
+class ListeningItem(_Strict):
+    """TOEICリスニング（Part2/3/4）の選択式設問。
+
+    音声そのものはこのDBに複製しない（正本は academic-english-data / YouTube）。
+    ここには出題文・選択肢・正解・解説だけを持つ（`passage` はリスニングには無いので
+    ReadingItem とは分けて別のkindにする）。
+    """
+
+    kind: Literal["listening"] = "listening"
+    domain: Literal["listening"] = "listening"
+    sub_skill: Literal["part2", "part3", "part4"] = "part2"
+    question: str = Field(min_length=1, max_length=1000)
+    choices: list[str] = Field(min_length=2, max_length=6)
+    answer_index: int = Field(ge=0)
+    explanation: str = Field(min_length=1, max_length=2000)
+
+    @model_validator(mode="after")
+    def _answer_in_range(self) -> "ListeningItem":
+        if self.answer_index >= len(self.choices):
+            raise ValueError(
+                f"answer_index={self.answer_index} は choices({len(self.choices)}件)の範囲外です。"
+            )
+        return self
+
+    def prompt(self) -> str:
+        return self.question
+
+    def check(self, response: str) -> bool:
+        try:
+            return int(response) == self.answer_index
+        except (TypeError, ValueError):
+            return False
+
+
 class GrammarItem(_Strict):
     """空所補充の文法問題（TOEIC Part 5 の形）。
 
@@ -117,7 +151,9 @@ class GrammarItem(_Strict):
             return False
 
 
-Item = Annotated[Union[VocabItem, ReadingItem, GrammarItem], Field(discriminator="kind")]
+Item = Annotated[
+    Union[VocabItem, ReadingItem, GrammarItem, ListeningItem], Field(discriminator="kind")
+]
 
 
 class GeneratedItem(_Strict):

@@ -25,6 +25,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from _data_repo import DataRepoError, commit_and_push, data_repo_path  # noqa: E402
+from acenglish.db import connect  # noqa: E402
+from acenglish.fetch import import_toeic_listening, import_toeic_listening_passage  # noqa: E402
 from academic_audio.engines import (  # noqa: E402
     MultiSpeakerPiperEngine,
     PiperEngine,
@@ -468,6 +470,31 @@ def _cmd_listening_ingest(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_listening_ingest_db(args: argparse.Namespace) -> int:
+    """listening ingest 済みの result.json を学習ループ（english.db）へ取り込む。
+
+    `toeic_reading_cli.py ingest`/`ingest-part7` のリスニング版。既存の `listening ingest`
+    は台本・解答・冊子を組むだけで、それ単体では english.db への反映が無かった
+    （2026-08-09時点のギャップ）。set-id は review_id に使うので、Form作成
+    （`toeic_forms_cli.py create`）で使った review_id と必ず一致させること。
+    """
+    listening_format = load_format(args.format)
+    part = listening_format.id.removeprefix("toeic-")
+    with connect(args.db) as connection:
+        if listening_format.grouping == "passage":
+            item_set = load_passage_result(args.file, listening_format)
+            imported = import_toeic_listening_passage(connection, args.set_id, item_set, part)
+        else:
+            item_set = load_result(args.file, listening_format)
+            imported = import_toeic_listening(connection, args.set_id, item_set, part)
+    print(
+        json.dumps(
+            {"set_id": args.set_id, "part": part, "imported": imported}, ensure_ascii=False, indent=2
+        )
+    )
+    return 0
+
+
 def _read_attached_urls(set_dir: Path) -> dict[str, str]:
     urls_path = set_dir / "urls.json"
     if not urls_path.exists():
@@ -695,6 +722,15 @@ def main() -> int:
         "--form-url", help="既に toeic_forms_cli.py create で回答フォームを作成済みの場合、冊子にURLを載せる"
     )
     listening_ingest.set_defaults(func=_cmd_listening_ingest)
+
+    listening_ingest_db = listening_sub.add_parser(
+        "ingest-db", help="result.json を学習ループ(english.db)へ取り込む"
+    )
+    listening_ingest_db.add_argument("--file", type=Path, required=True, help="result.json（listening ingestの出力）")
+    listening_ingest_db.add_argument("--format", required=True)
+    listening_ingest_db.add_argument("--set-id", required=True, help="このセットの識別子（review_idに使う）")
+    listening_ingest_db.add_argument("--db", type=Path, help="既定: ~/.academic-english/english.db")
+    listening_ingest_db.set_defaults(func=_cmd_listening_ingest_db)
 
     listening_attach_url = listening_sub.add_parser(
         "attach-youtube-url", help="youtube publish で得たURLを冊子に載せて作り直す"

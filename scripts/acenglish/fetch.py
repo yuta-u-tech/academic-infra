@@ -8,10 +8,12 @@ from __future__ import annotations
 
 import sqlite3
 
+from academic_audio.items import ListeningSet, PassageSet
+
 from .generate import ingest, upsert_material
 from .items import GrammarItem
 from .sources import ExternalMaterial
-from .sources import studyforge, ted, toeic_part5, toeic_part7, voa
+from .sources import studyforge, ted, toeic_listening, toeic_part5, toeic_part7, voa
 from .sources.toeic_part7 import Part7Passage
 
 
@@ -88,6 +90,60 @@ def import_toeic_part7(connection: sqlite3.Connection, set_id: str, passages: li
         ingest(
             connection,
             toeic_part7.build_result(material, item, f"TOEIC Part7 セット {set_id} からの取り込み"),
+        )
+        imported += 1
+    return imported
+
+
+def import_toeic_listening(
+    connection: sqlite3.Connection, set_id: str, listening_set: ListeningSet, part: str
+) -> int:
+    """TOEICリスニング（Part2、grouping: item）のセットを学習ループへ取り込む。
+
+    `import_toeic_part5` と同じ理由・同じ冪等性の作り方（`kind='listening'`で存在チェック）。
+    """
+    imported = 0
+    for material, item in toeic_listening.iter_materials(set_id, listening_set, part):
+        upsert_material(connection, material)
+        existing = connection.execute(
+            "SELECT 1 FROM generated_item WHERE review_id = ? AND kind = 'listening'"
+            " AND retired_at IS NULL LIMIT 1",
+            (material.review_id,),
+        ).fetchone()
+        if existing:
+            continue
+        ingest(
+            connection,
+            toeic_listening.build_result(
+                material, item, f"TOEICリスニング({part}) セット {set_id} からの取り込み"
+            ),
+        )
+        imported += 1
+    return imported
+
+
+def import_toeic_listening_passage(
+    connection: sqlite3.Connection, set_id: str, passage_set: PassageSet, part: str
+) -> int:
+    """TOEICリスニング（Part3/4、grouping: passage）のセットを学習ループへ取り込む。
+
+    `import_toeic_part7` と同じ理由・同じ冪等性の作り方（`kind='listening'`で存在チェック）。
+    """
+    imported = 0
+    for material, item in toeic_listening.iter_materials_passage(set_id, passage_set, part):
+        upsert_material(connection, material)
+        existing = connection.execute(
+            "SELECT 1 FROM generated_item WHERE review_id = ? AND kind = 'listening'"
+            " AND retired_at IS NULL LIMIT 1",
+            (material.review_id,),
+        ).fetchone()
+        if existing:
+            continue
+        ingest(
+            connection,
+            toeic_listening.build_result(
+                material, item, f"TOEICリスニング({part}) セット {set_id} からの取り込み"
+            ),
         )
         imported += 1
     return imported

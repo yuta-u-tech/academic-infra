@@ -17,10 +17,15 @@ from typing import Any
 
 from .db import now_iso
 from .diagnose import ErrorCause, classify, escalate, next_action, open_revision_candidate
-from .items import GrammarItem, ReadingItem, VocabItem
+from .items import GrammarItem, ListeningItem, ReadingItem, VocabItem
 from .model import AttemptSignals, schedule_review, update_skill_state
 
-_ITEM_TYPES = {"vocab": VocabItem, "reading": ReadingItem, "grammar": GrammarItem}
+_ITEM_TYPES = {
+    "vocab": VocabItem,
+    "reading": ReadingItem,
+    "grammar": GrammarItem,
+    "listening": ListeningItem,
+}
 # 出題時に隠すフィールド。答えと解説が UI に流れると、正誤の記録が意味をなくなる。
 _HIDDEN_FIELDS = {
     # example と collocations は見出し語をそのまま含む（"preside over a meeting"）。
@@ -29,6 +34,7 @@ _HIDDEN_FIELDS = {
     "vocab": ("word", "example", "collocations"),
     "reading": ("answer_index", "explanation"),
     "grammar": ("answer_index", "explanation"),
+    "listening": ("answer_index", "explanation"),
 }
 # 外部素材（TOEIC/VOA/TED）には直すべき科目資料が無いので、還元先はノートになる。
 _NOTE_SOURCES = {"toeic", "voa", "ted"}
@@ -64,7 +70,7 @@ def end_session(connection: sqlite3.Connection, session_id: int) -> None:
     connection.commit()
 
 
-def load_item(connection: sqlite3.Connection, item_id: int) -> tuple[dict, VocabItem | ReadingItem]:
+def load_item(connection: sqlite3.Connection, item_id: int) -> tuple[dict, VocabItem | ReadingItem | GrammarItem | ListeningItem]:
     row = connection.execute("SELECT * FROM generated_item WHERE id = ?", (item_id,)).fetchone()
     if row is None:
         raise LookupError(f"generated_item {item_id} がありません。")
@@ -254,7 +260,7 @@ def grade(connection: sqlite3.Connection, attempt_id: int, value: int) -> dict:
 def _open_candidate(
     connection: sqlite3.Connection,
     row: dict,
-    item: VocabItem | ReadingItem | GrammarItem,
+    item: VocabItem | ReadingItem | GrammarItem | ListeningItem,
     skill_state: dict,
 ) -> int:
     """繰り返し間違えた箇所について、追記候補を1件立てる。
