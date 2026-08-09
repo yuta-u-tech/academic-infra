@@ -12,26 +12,22 @@ createItem リクエストで itemId を明示指定できるため）。翌朝�
 from __future__ import annotations
 
 import hashlib
-import re
 
 from .items import SELF_GRADE_OPTIONS, ChoiceFormItem, FreeFormItem
-
-_ID_SANITIZE_RE = re.compile(r"[^a-zA-Z0-9]+")
 
 
 def _make_item_id(review_id: str, suffix: str = "") -> str:
     """review_id から Forms の itemId を決定的に作る。
 
-    review_id は `.` を含む（例: toeic.listening.part2.20260809.0001）ため、
-    Forms が要求する識別子として扱いやすい形に正規化する。長さ超過や衝突を
-    避けるため、末尾にreview_id全体の短いハッシュを付ける。
+    Forms API の itemId は「8桁の16進数で、値が 0x7FFFFFFF 以下（符号付き32bit整数の
+    範囲内）」でないと `Invalid ID` で reject される（ハイフンを含む文字列や、
+    0x80000000 以上になる16進数は通らないことを実APIで確認した）。そのため
+    review_id（+suffix）のSHA1ダイジェストの先頭4バイトを符号なし32bit整数として読み、
+    最上位ビットを落として8桁16進数に変換する。
     """
-    slug = _ID_SANITIZE_RE.sub("-", review_id).strip("-")[:40]
-    digest = hashlib.sha1(review_id.encode("utf-8")).hexdigest()[:8]
-    parts = [slug, digest]
-    if suffix:
-        parts.append(suffix)
-    return "-".join(parts)
+    digest = hashlib.sha1(f"{review_id}:{suffix}".encode("utf-8")).digest()
+    value = int.from_bytes(digest[:4], "big") & 0x7FFFFFFF
+    return f"{value:08x}"
 
 
 def build_choice_quiz_requests(

@@ -6,6 +6,7 @@ dist/
 .academic-audio/
 .toeic-reading/
 .toeic-vocab/
+.toeic-forms/
 design_runs/**/*.preview.html
 desktop/node_modules/
 desktop/src-tauri/target/

@@ -37,7 +37,7 @@ from acenglish import study  # noqa: E402
 from acenglish.db import connect  # noqa: E402
 from pydantic import ValidationError  # noqa: E402
 from toeic_forms.builder import build_choice_quiz_requests, build_free_response_requests  # noqa: E402
-from toeic_forms.client import apply_requests, create_form, edit_url, list_responses, responder_url, restrict_access  # noqa: E402
+from toeic_forms.client import apply_requests, create_form, edit_url, list_responses, restrict_access  # noqa: E402
 from toeic_forms.items import ChoiceFormItem, FreeFormItem  # noqa: E402
 from toeic_forms.reflect import extract_answers  # noqa: E402
 
@@ -65,7 +65,7 @@ def _cmd_create(args: argparse.Namespace) -> int:
     forms_credentials = _forms_common.resolve_credentials()
     forms_service = _forms_common.build_service(forms_credentials)
 
-    form_id = create_form(forms_service, args.title)
+    form_id, responder_uri = create_form(forms_service, args.title)
     apply_requests(forms_service, form_id, requests)
 
     if args.allowed_email:
@@ -79,7 +79,7 @@ def _cmd_create(args: argparse.Namespace) -> int:
         json.dumps(
             {
                 "form_id": form_id,
-                "responder_url": responder_url(form_id),
+                "responder_url": responder_uri,
                 "edit_url": edit_url(form_id),
                 "type": args.type,
                 "items": item_map,
@@ -90,7 +90,7 @@ def _cmd_create(args: argparse.Namespace) -> int:
         + "\n",
         encoding="utf-8",
     )
-    print(f"Form作成: {responder_url(form_id)}")
+    print(f"Form作成: {responder_uri}")
     print(f"form_map: {out_path}")
     return 0
 

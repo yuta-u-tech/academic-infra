@@ -42,6 +42,12 @@ Forms に差し替えるのが最小変更。
   （本人の自己申告そのものが正誤）ため、`answer()` の
   `correct = item.check(response)` という前提に乗らず、未実装のまま残した。
   対応するには `answer()` に `correct` の外部指定を許す経路を足す必要がある。
+- **許可アカウント（2026-08-09 決定）**: `--allowed-email` に渡す既定の許可リストは
+  `1207sato.yuki@gmail.com` と `inutarouhiroto0222@gmail.com` の2件。
+  既存の「Academic Materials」Driveフォルダ（`GDRIVE_PARENT_FOLDER_ID`）の共有先3件
+  （上記2件 + `erika_129@iCloud.com`）のうち、本人確認の上でこの2件に絞ることが決まった
+  （`erika_129@iCloud.com` は含めない）。Drive共有と完全に同一のリストではない点に注意
+  （Formsは別の招待制リストとして個別管理する）。
 
 ## フェーズ計画
 
@@ -58,6 +64,5 @@ Forms に差し替えるのが最小変更。
 5. **Phase 4（残作業・次回以降）**:
    - 記述式（自己採点）の記録は未実装（上記の `answer()` 拡張が必要）。
    - 間隔反復スケジューラと既存の `weak-points`（直近誤答の抽出）ロジックの統合は未着手。
-   - `authorize_forms.py` によるOAuth同意（本人のブラウザ操作が必須）・
-     知人の許可Googleアカウント一覧の決定は、コードでは代行できない残作業。
-   - 実運用での動作確認（実際に1件Formを作って回答→`record`まで通す）はまだ行っていない。
+   - 実運用での動作確認（実際に1件Formを作って回答→`record`まで通す）: 進行中
+     （2026-08-09、OAuth同意・許可アカウント決定は完了）。
