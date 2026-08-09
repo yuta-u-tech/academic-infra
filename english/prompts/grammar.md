@@ -76,6 +76,12 @@ TOEIC900点は「Part5の正答率8割を超えている」帯にあたる（`90
   集中していることが判明。ユーザーから「通常30問＋苦手重点20問」の2段構成にする提案があり、
   採用。誤答データの取得元として `toeic_reading_cli.py weak-points` を新設した
   （集計はせず生データを返すだけ。判断はClaude側）。
+- 2026-08-09: 解答提出をGoogle Formsに切り替え（`toeic_forms_cli.py`）。設問データ生成
+  →Form作成→TeX（冊子先頭に`\href{}`でFormリンクを1回だけ埋め込み）→PDF→Drive公開、
+  という順で一気通貫実行する運用に変更（詳細は`docs/2026-08-09-toeic-forms-integration.md`）。
+  この日の20260805分の`weak-points`（8件、`目的を表す不定詞`/`仮定法現在`/`adapt-adopt`/
+  `place an order`/`issue a refund`/`extend an invitation`/`renew a contract`/`raise-rise`）
+  を苦手重点20問に反映した初回セット。
 
 ### 使用済み語彙・コロケーションログ（パターンB/C、重複回避用）
 
@@ -85,10 +91,17 @@ TOEIC900点は「Part5の正答率8割を超えている」帯にあたる（`90
   `assure`/`ensure`/`insure`, `economic`/`economical`, `complimentary`/`complementary`,
   `principal`/`principle`,
   `considerable`/`considerate`, `eligible`/`legible`, `respective`/`respectful`,
-  `adapt`/`adopt`, `assess`/`access`, `advice`/`advise`, `personal`/`personnel`
+  `adapt`/`adopt`, `assess`/`access`, `advice`/`advise`, `personal`/`personnel`,
+  `continuous`/`continual`, `industrial`/`industrious`, `comprehensive`/`comprehensible`,
+  `confidential`/`confident`, `successive`/`successful`, `efficient`/`sufficient`,
+  `exhaustive`/`exhausted`, `stationery`/`stationary`, `credible`/`creditable`,
+  `respective`/`respectable`/`respectful`/`respected`（2026-08-09追加）
 - パターンC（コロケーション）: `raise concerns`, `meet the deadline`, `place an order`,
   `conduct a survey`, `reach a consensus`, `submit an application`, `issue a refund`,
   `extend an invitation`, `address a complaint`, `renew a contract`, `postpone`（文脈適合）,
+  `implement a policy`, `terminate a contract`, `forfeit a deposit`, `allocate a budget`,
+  `process a complaint`, `exceed expectations`, `reach an agreement`, `grant an extension`
+  （2026-08-09追加）,
   `raise funds`, `draw attention`
 
 ## sentence
