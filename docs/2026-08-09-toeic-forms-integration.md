@@ -71,8 +71,20 @@ Forms に差し替えるのが最小変更。
    `toeic_reading_cli.py shuffle --items items.json` で設問順序を機械的にシャッフルする
    工程を追加し、ingest/Form作成/worksheet生成のいずれよりも前に必須実行する運用にした
    （`review_id`はシャッフル後の並び順で決まるため、shuffleが最初）。
-7. **Phase 5（残作業・次回以降）**:
+7. **Part7のForms対応（2026-08-09）**: Part5と同じ流れを`SKILL.md`のPart7節にも追加。
+   Part7はpassageに複数設問がぶら下がる構造なので、Form変換時は「本文＋設問文」を
+   1問ごとに自己完結させる（Formsには本文を1回だけ表示する機能が無いため）。
+8. **リスニング(Part2/3/4)の学習ループ接続（2026-08-09）**: リスニングはそもそも
+   `english.db`への取り込み経路自体が無かった（Form連携以前からのギャップ）。
+   `acenglish.items.ListeningItem`・`acenglish.sources.toeic_listening`・
+   `acenglish.fetch.import_toeic_listening`/`import_toeic_listening_passage`・
+   `academic_audio_cli.py listening ingest-db` を新設し、Part5/Part7と同じ形で
+   Forms連携＋学習ループ反映を実装した。`study.record_form_response()`はkind非依存の
+   設計だったため、record側の変更は不要だった。
+9. **Phase 6（残作業・次回以降）**:
    - 記述式（自己採点）の記録は未実装（`answer()` の `correct` 外部指定への拡張が必要）。
    - 間隔反復スケジューラと既存の `weak-points`（直近誤答の抽出）ロジックの統合は未着手。
    - 翌朝バッチの自動化（cron等）はしていない。「答え終わった」等の発話をトリガーに
      `toeic_forms_cli.py record` を都度実行する運用（他のTOEIC教材と同じ制約）。
+   - リスニングの実運用での動作確認（実際にFormを作って回答→`record`まで通す）はまだ
+     行っていない（Part5は2026-08-09に実運用確認済み）。
