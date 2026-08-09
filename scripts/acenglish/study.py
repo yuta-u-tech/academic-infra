@@ -159,6 +159,47 @@ def answer(
     )
 
 
+def find_item_id_by_review_id(connection: sqlite3.Connection, review_id: str) -> int | None:
+    """review_id から generated_item.id を引く。
+
+    answer() / load_item() は item_id（自動採番の内部ID）を前提にしているが、
+    Google Forms 経由の回答は review_id しか知らない（toeic_forms.builder が
+    review_id を鍵にForm設問を組み立てているため）。同じ review_id で複数回
+    ingest し直されていても構わないよう、最新（retired_at IS NULL）の1件を返す。
+    """
+    row = connection.execute(
+        "SELECT id FROM generated_item WHERE review_id = ? AND retired_at IS NULL"
+        " ORDER BY created_at DESC LIMIT 1",
+        (review_id,),
+    ).fetchone()
+    return int(row["id"]) if row is not None else None
+
+
+def record_form_response(
+    connection: sqlite3.Connection,
+    session_id: int,
+    review_id: str,
+    response: str,
+    elapsed_ms: int = 0,
+) -> AnswerOutcome:
+    """Google Forms 経由（選択式）の回答を1件記録する。
+
+    ローカルUI（acenglish serve）のセッションの外から、翌朝バッチが呼ぶ想定。
+    採点・誤答分類・復習スケジューリングは answer() とまったく同じロジックを通す
+    （経路によって閉ループの中身がずれると学習履歴の意味が変わってしまうため）。
+
+    記述式（自己採点）の回答はここでは扱わない — 自己採点の結果は item.check() が
+    比較できる「正解」を持たない（本人の申告そのものが正誤）ため、answer() の
+    correct = item.check(response) という前提に乗らない。記述式をここに含めるには
+    answer() 側に correct の上書き経路を別途足す必要があり、現状は未対応
+    （docs/2026-08-09-toeic-forms-integration.md 参照）。
+    """
+    item_id = find_item_id_by_review_id(connection, review_id)
+    if item_id is None:
+        raise LookupError(f"review_id={review_id} に対応する generated_item が見つかりません。")
+    return answer(connection, session_id, item_id, response, elapsed_ms)
+
+
 # 答えを見たあとに本人が付ける手応え。Anki の4段階と同じ粒度。
 GRADE_CONFIDENCE = {0: 0.0, 1: 0.34, 2: 0.67, 3: 1.0}
 

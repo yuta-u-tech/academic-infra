@@ -36,8 +36,13 @@ def _make_item_id(review_id: str, suffix: str = "") -> str:
 
 def build_choice_quiz_requests(
     items: list[ChoiceFormItem],
-) -> tuple[list[dict], dict[str, dict[str, str]]]:
-    """選択式(quiz mode)の batchUpdate リクエストと review_id→itemId 対応表を返す。"""
+) -> tuple[list[dict], dict[str, dict]]:
+    """選択式(quiz mode)の batchUpdate リクエストと review_id→itemId 対応表を返す。
+
+    対応表には choices もそのまま含める。Forms API の回答は選択肢の**テキスト値**で
+    返るため（インデックスは返らない）、翌朝バッチが english.db の `answer_index` 形式
+    （"0"/"1"/...）へ変換するのに choices.index(submitted_value) が必要になる。
+    """
     requests: list[dict] = [
         {
             "updateSettings": {
@@ -46,11 +51,11 @@ def build_choice_quiz_requests(
             }
         }
     ]
-    item_map: dict[str, dict[str, str]] = {}
+    item_map: dict[str, dict] = {}
 
     for index, item in enumerate(items):
         item_id = _make_item_id(item.review_id)
-        item_map[item.review_id] = {"question_item_id": item_id}
+        item_map[item.review_id] = {"question_item_id": item_id, "choices": list(item.choices)}
         requests.append(
             {
                 "createItem": {
@@ -85,7 +90,7 @@ def build_choice_quiz_requests(
 
 def build_free_response_requests(
     items: list[FreeFormItem],
-) -> tuple[list[dict], dict[str, dict[str, str]]]:
+) -> tuple[list[dict], dict[str, dict]]:
     """記述式(自己採点)の batchUpdate リクエストと review_id→itemId 対応表を返す。
 
     1問につき3アイテム（自由記述の設問 → 模範解答/解説の表示専用アイテム →

@@ -52,7 +52,8 @@ def test_build_choice_quiz_requests_sets_isquiz_first():
         }
     }
     assert len(requests) == 2
-    assert "toeic.listening.part2.20260809.0001" in item_map
+    mapped = item_map["toeic.listening.part2.20260809.0001"]
+    assert mapped["choices"] == ["9 AM", "10 AM", "11 AM"]
 
 
 def test_build_choice_quiz_requests_grading_uses_correct_choice_value():

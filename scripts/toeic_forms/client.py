@@ -22,6 +22,24 @@ def apply_requests(forms_service, form_id: str, requests: list[dict]) -> None:
     forms_service.forms().batchUpdate(formId=form_id, body={"requests": requests}).execute()
 
 
+def list_responses(forms_service, form_id: str) -> list[dict]:
+    """Formへの回答を全件取る（ページングを吸収する）。"""
+    responses: list[dict] = []
+    page_token = None
+    while True:
+        result = (
+            forms_service.forms()
+            .responses()
+            .list(formId=form_id, pageToken=page_token)
+            .execute()
+        )
+        responses.extend(result.get("responses", []))
+        page_token = result.get("nextPageToken")
+        if not page_token:
+            break
+    return responses
+
+
 def responder_url(form_id: str) -> str:
     return f"https://docs.google.com/forms/d/e/{form_id}/viewform"
 
