@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import random
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -47,6 +48,28 @@ def _load_items(path: Path) -> tuple[str, list[GrammarItem]]:
     if not items:
         raise SystemExit("items が空です。")
     return title, items
+
+
+def _cmd_shuffle(args: argparse.Namespace) -> int:
+    """items.json 内の設問順序を機械的にシャッフルする。
+
+    「通常30問＋苦手重点20問」は書く順序上どうしても前半/後半に分かれるが、
+    出題順がそのまま前半＝通常・後半＝苦手重点だと分かってしまう
+    （復習であることが構成から見えてしまう）。worksheet/ingest/Form作成の
+    前に必ずこのコマンドで順序を崩す。review_id は順序に基づいて
+    割り当てられるため、ingestより前に実行すること。
+    """
+    payload = json.loads(args.items.read_text(encoding="utf-8"))
+    items = payload.get("items")
+    if not items:
+        raise SystemExit("items が空か、'items' キーがありません。")
+    random.shuffle(items)
+    payload["items"] = items
+
+    out_path = args.out or args.items
+    out_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    print(json.dumps({"shuffled": len(items), "out": str(out_path)}, ensure_ascii=False, indent=2))
+    return 0
 
 
 def _cmd_worksheet(args: argparse.Namespace) -> int:
@@ -209,6 +232,13 @@ def _cmd_publish(args: argparse.Namespace) -> int:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = parser.add_subparsers(dest="command", required=True)
+
+    shuffle = sub.add_parser(
+        "shuffle", help="items.json の設問順序を機械的にシャッフルする（30+20構成を混ぜる用、ingestより前に実行）"
+    )
+    shuffle.add_argument("--items", type=Path, required=True)
+    shuffle.add_argument("--out", type=Path, help="既定: --items を上書き")
+    shuffle.set_defaults(func=_cmd_shuffle)
 
     worksheet = sub.add_parser("worksheet", help="items.json から問題冊子PDFを組む")
     worksheet.add_argument("--items", type=Path, required=True, help="GrammarItem 形式の items.json")

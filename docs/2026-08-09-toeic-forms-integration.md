@@ -61,8 +61,18 @@ Forms に差し替えるのが最小変更。
 4. **Phase 3（翌朝バッチ・選択式のみ）**: 完了。`scripts/toeic_forms_cli.py record` が
    `forms.responses().list()` を読み、`form_map.json` で `review_id` に逆引きし、
    `study.record_form_response()` で `attempt`/`skill_state` を更新する。
-5. **Phase 4（残作業・次回以降）**:
-   - 記述式（自己採点）の記録は未実装（上記の `answer()` 拡張が必要）。
+5. **実運用での動作確認**: 完了（2026-08-09）。テスト用の1問Formで
+   Form作成→回答→`record`→`english.db`反映まで通し、実APIでしか分からない不具合
+   （itemIdの形式制約・responder_urlの誤った組み立て・itemIdとquestionIdが別物である点）
+   を3件発見・修正。続けて実際の2026-08-09分のPart5セット（50問）で本番運用を実施
+   （Form作成→PDF公開→回答回収→`record`まで完走、39/50正解）。
+6. **`shuffle` コマンドの追加（2026-08-09、ユーザー指摘）**: 「通常30問＋苦手重点20問」を
+   前半/後半のまま出題すると、出題順から復習問題だと分かってしまう。
+   `toeic_reading_cli.py shuffle --items items.json` で設問順序を機械的にシャッフルする
+   工程を追加し、ingest/Form作成/worksheet生成のいずれよりも前に必須実行する運用にした
+   （`review_id`はシャッフル後の並び順で決まるため、shuffleが最初）。
+7. **Phase 5（残作業・次回以降）**:
+   - 記述式（自己採点）の記録は未実装（`answer()` の `correct` 外部指定への拡張が必要）。
    - 間隔反復スケジューラと既存の `weak-points`（直近誤答の抽出）ロジックの統合は未着手。
-   - 実運用での動作確認（実際に1件Formを作って回答→`record`まで通す）: 進行中
-     （2026-08-09、OAuth同意・許可アカウント決定は完了）。
+   - 翌朝バッチの自動化（cron等）はしていない。「答え終わった」等の発話をトリガーに
+     `toeic_forms_cli.py record` を都度実行する運用（他のTOEIC教材と同じ制約）。
