@@ -37,7 +37,14 @@ from acenglish import study  # noqa: E402
 from acenglish.db import connect  # noqa: E402
 from pydantic import ValidationError  # noqa: E402
 from toeic_forms.builder import build_choice_quiz_requests, build_free_response_requests  # noqa: E402
-from toeic_forms.client import apply_requests, create_form, edit_url, list_responses, restrict_access  # noqa: E402
+from toeic_forms.client import (  # noqa: E402
+    apply_requests,
+    create_form,
+    edit_url,
+    list_responses,
+    resolve_question_ids,
+    restrict_access,
+)
 from toeic_forms.items import ChoiceFormItem, FreeFormItem  # noqa: E402
 from toeic_forms.reflect import extract_answers  # noqa: E402
 
@@ -67,6 +74,18 @@ def _cmd_create(args: argparse.Namespace) -> int:
 
     form_id, responder_uri = create_form(forms_service, args.title)
     apply_requests(forms_service, form_id, requests)
+
+    # createItem で指定した itemId は responses.list() の回答キーにならない
+    # （Forms が別に questionId を発行する）ため、作成後に実際の questionId へ
+    # 差し替えてから form_map.json に保存する（実APIで確認した挙動）。
+    referenced_item_ids = {mapping["question_item_id"] for mapping in item_map.values()}
+    if args.type == "free":
+        referenced_item_ids |= {mapping["self_grade_item_id"] for mapping in item_map.values()}
+    question_ids = resolve_question_ids(forms_service, form_id, referenced_item_ids)
+    for mapping in item_map.values():
+        mapping["question_item_id"] = question_ids[mapping["question_item_id"]]
+        if "self_grade_item_id" in mapping:
+            mapping["self_grade_item_id"] = question_ids[mapping["self_grade_item_id"]]
 
     if args.allowed_email:
         drive_credentials = _drive_common.resolve_credentials()

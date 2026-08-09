@@ -25,6 +25,25 @@ def apply_requests(forms_service, form_id: str, requests: list[dict]) -> None:
     forms_service.forms().batchUpdate(formId=form_id, body={"requests": requests}).execute()
 
 
+def resolve_question_ids(forms_service, form_id: str, item_ids: set[str]) -> dict[str, str]:
+    """createItem で指定した itemId → 実際の questionId を引く。
+
+    Forms API は itemId とは別に questionId を内部で発行し、responses.list() の
+    回答は questionId をキーに返す（itemId では引けない）。実APIで確認済み。
+    forms.get() で全アイテムを読み、質問アイテムだけ questionId を拾う。
+    """
+    form = forms_service.forms().get(formId=form_id).execute()
+    mapping: dict[str, str] = {}
+    for item in form.get("items", []):
+        item_id = item.get("itemId")
+        if item_id not in item_ids:
+            continue
+        question_id = item.get("questionItem", {}).get("question", {}).get("questionId")
+        if question_id:
+            mapping[item_id] = question_id
+    return mapping
+
+
 def list_responses(forms_service, form_id: str) -> list[dict]:
     """Formへの回答を全件取る（ページングを吸収する）。"""
     responses: list[dict] = []
