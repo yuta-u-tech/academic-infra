@@ -53,7 +53,7 @@ def _cmd_worksheet(args: argparse.Namespace) -> int:
     title, items = _load_items(args.items)
     args.out.mkdir(parents=True, exist_ok=True)
     tex_path = args.out / "worksheet.tex"
-    tex_path.write_text(render_tex(title, items), encoding="utf-8")
+    tex_path.write_text(render_tex(title, items, form_url=args.form_url), encoding="utf-8")
     pdf_path = build_pdf(tex_path)
     # ChatGPTにfree-formで解かせる用。PDFと同じ内容をMarkdownでも並べておく
     # （Driveへは publish が一緒にアップロードする）。
@@ -78,7 +78,7 @@ def _cmd_worksheet_part7(args: argparse.Namespace) -> int:
     args.out.mkdir(parents=True, exist_ok=True)
     question_count = sum(len(p.questions) for p in passages)
     tex_path = args.out / "worksheet.tex"
-    tex_path.write_text(render_reading_tex(title, passages), encoding="utf-8")
+    tex_path.write_text(render_reading_tex(title, passages, form_url=args.form_url), encoding="utf-8")
     pdf_path = build_pdf(tex_path)
     md_path = args.out / "worksheet.md"
     md_path.write_text(render_reading_md(title, passages), encoding="utf-8")
@@ -213,6 +213,9 @@ def build_parser() -> argparse.ArgumentParser:
     worksheet = sub.add_parser("worksheet", help="items.json から問題冊子PDFを組む")
     worksheet.add_argument("--items", type=Path, required=True, help="GrammarItem 形式の items.json")
     worksheet.add_argument("--out", type=Path, required=True, help="出力先ディレクトリ")
+    worksheet.add_argument(
+        "--form-url", help="toeic_forms_cli.py create で作成済みの回答フォームURL（先にForm作成が必須）"
+    )
     worksheet.set_defaults(func=_cmd_worksheet)
 
     ingest = sub.add_parser("ingest", help="items.json を acenglish の学習ループへ取り込む")
@@ -224,6 +227,9 @@ def build_parser() -> argparse.ArgumentParser:
     worksheet_part7 = sub.add_parser("worksheet-part7", help="items.json（passages形）から Part7 問題冊子PDFを組む")
     worksheet_part7.add_argument("--items", type=Path, required=True, help="passages グルーピング形の items.json")
     worksheet_part7.add_argument("--out", type=Path, required=True, help="出力先ディレクトリ")
+    worksheet_part7.add_argument(
+        "--form-url", help="toeic_forms_cli.py create で作成済みの回答フォームURL（先にForm作成が必須）"
+    )
     worksheet_part7.set_defaults(func=_cmd_worksheet_part7)
 
     ingest_part7 = sub.add_parser("ingest-part7", help="items.json（passages形）を acenglish の学習ループへ取り込む")

@@ -171,6 +171,13 @@ def test_passage_worksheet_hides_the_transcript_from_the_question_page(tmp_path:
     assert "A scheduling conflict" in questions
 
 
+def test_passage_worksheet_includes_the_form_url_when_given(tmp_path: Path, part3: ListeningFormat) -> None:
+    passage_set = load_passage_result(_write(tmp_path, _part3_result()), part3)
+    tex = render_passage_tex(passage_set, part3, form_url="https://docs.google.com/forms/d/e/xyz/viewform")
+
+    assert r"\href{https://docs.google.com/forms/d/e/xyz/viewform}{回答フォームはこちら}" in tex
+
+
 # --- engines.py: 話者ごとの Piper モデル切り替え -----------------------------------------
 
 

@@ -170,6 +170,20 @@ def test_worksheet_omits_the_youtube_line_when_no_url(tmp_path: Path, toeic: Lis
     assert r"\url{" not in tex
 
 
+def test_worksheet_includes_the_form_url_when_given(tmp_path: Path, toeic: ListeningFormat) -> None:
+    tex = render_tex(
+        load_result(_write(tmp_path, _result()), toeic), toeic, form_url="https://docs.google.com/forms/d/e/xyz/viewform"
+    )
+
+    assert r"\href{https://docs.google.com/forms/d/e/xyz/viewform}{回答フォームはこちら}" in tex
+
+
+def test_worksheet_omits_the_form_line_when_no_form_url(tmp_path: Path, toeic: ListeningFormat) -> None:
+    tex = render_tex(load_result(_write(tmp_path, _result()), toeic), toeic)
+
+    assert "回答フォーム" not in tex
+
+
 def test_timeline_accumulates_pause_and_groups_chapters() -> None:
     script = DialogueScript(
         title="t", source_id="s", source_commit="c",

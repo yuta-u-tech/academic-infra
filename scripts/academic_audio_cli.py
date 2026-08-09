@@ -407,12 +407,12 @@ def _cmd_listening_ingest(args: argparse.Namespace) -> int:
         item_set = load_passage_result(args.file, listening_format)
         script = passage_to_script(item_set, listening_format)
         answers_payload = passage_to_answers(item_set)
-        tex = render_passage_tex(item_set, listening_format, youtube_url=args.youtube_url)
+        tex = render_passage_tex(item_set, listening_format, youtube_url=args.youtube_url, form_url=args.form_url)
     else:
         item_set = load_result(args.file, listening_format)
         script = to_script(item_set, listening_format)
         answers_payload = to_answers(item_set)
-        tex = render_tex(item_set, listening_format, youtube_url=args.youtube_url)
+        tex = render_tex(item_set, listening_format, youtube_url=args.youtube_url, form_url=args.form_url)
 
     # TOEIC 形式は教材(source_id)の分野と無関係な題材を選ぶので、フォルダ名/Driveの
     # ファイル名に科目名を出さない（出すと「論理回路の問題」に見えて紛らわしい）。
@@ -436,6 +436,13 @@ def _cmd_listening_ingest(args: argparse.Namespace) -> int:
     answers_path.write_text(json.dumps(answers_payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     tex_path = out_dir / "worksheet.tex"
     tex_path.write_text(tex, encoding="utf-8")
+    if args.youtube_url or args.form_url:
+        urls = {}
+        if args.youtube_url:
+            urls["youtube_url"] = args.youtube_url
+        if args.form_url:
+            urls["form_url"] = args.form_url
+        _write_attached_urls(out_dir, urls)
 
     result = {
         "items": len(item_set.items),
@@ -461,6 +468,37 @@ def _cmd_listening_ingest(args: argparse.Namespace) -> int:
     return 0
 
 
+def _read_attached_urls(set_dir: Path) -> dict[str, str]:
+    urls_path = set_dir / "urls.json"
+    if not urls_path.exists():
+        return {}
+    return json.loads(urls_path.read_text(encoding="utf-8"))
+
+
+def _write_attached_urls(set_dir: Path, urls: dict[str, str]) -> None:
+    (set_dir / "urls.json").write_text(json.dumps(urls, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+
+def _rerender_worksheet_with_urls(set_dir: Path, listening_format, urls: dict[str, str]) -> str:
+    """youtube_url と form_url は別々のタイミングで判明するため、両方を urls.json に
+    永続化してから常に両方を渡して再描画する。片方だけ渡すと、後から attach した方が
+    先に付いていたもう片方のURLを消してしまう。
+    """
+    result_path = set_dir / "result.json"
+    if not result_path.exists():
+        raise FileNotFoundError(f"{result_path} がありません。listening ingest の出力先を指定してください。")
+
+    if listening_format.grouping == "passage":
+        item_set = load_passage_result(result_path, listening_format)
+        return render_passage_tex(
+            item_set, listening_format, youtube_url=urls.get("youtube_url"), form_url=urls.get("form_url")
+        )
+    item_set = load_result(result_path, listening_format)
+    return render_tex(
+        item_set, listening_format, youtube_url=urls.get("youtube_url"), form_url=urls.get("form_url")
+    )
+
+
 def _cmd_listening_attach_youtube_url(args: argparse.Namespace) -> int:
     """listening ingest 済みの set-dir に、あとから分かる YouTube URL を差し込んで worksheet を作り直す。
 
@@ -468,16 +506,10 @@ def _cmd_listening_attach_youtube_url(args: argparse.Namespace) -> int:
     先にできている。result.json（元の作問結果）から作り直す。
     """
     listening_format = load_format(args.format)
-    result_path = args.set_dir / "result.json"
-    if not result_path.exists():
-        raise FileNotFoundError(f"{result_path} がありません。listening ingest の出力先を指定してください。")
-
-    if listening_format.grouping == "passage":
-        item_set = load_passage_result(result_path, listening_format)
-        tex = render_passage_tex(item_set, listening_format, youtube_url=args.youtube_url)
-    else:
-        item_set = load_result(result_path, listening_format)
-        tex = render_tex(item_set, listening_format, youtube_url=args.youtube_url)
+    urls = _read_attached_urls(args.set_dir)
+    urls["youtube_url"] = args.youtube_url
+    tex = _rerender_worksheet_with_urls(args.set_dir, listening_format, urls)
+    _write_attached_urls(args.set_dir, urls)
 
     tex_path = args.set_dir / "worksheet.tex"
     tex_path.write_text(tex, encoding="utf-8")
@@ -488,6 +520,35 @@ def _cmd_listening_attach_youtube_url(args: argparse.Namespace) -> int:
     if args.push:
         try:
             pushed = commit_and_push(data_repo_path(), [tex_path], f"listening: attach youtube url ({args.set_dir.name})")
+        except DataRepoError as error:
+            print(f"push できませんでした: {error}", file=sys.stderr)
+            return 1
+        result["pushed"] = pushed
+    print(json.dumps(result, ensure_ascii=False, indent=2))
+    return 0
+
+
+def _cmd_listening_attach_form_url(args: argparse.Namespace) -> int:
+    """listening ingest 済みの set-dir に、Google Form の回答URLを差し込んで worksheet を作り直す。
+
+    `scripts/toeic_forms_cli.py create` で作った Form の responder_url を渡す想定
+    （順序: 問題データ生成 → Form作成 → ここでTeXに埋め込み、を厳守）。
+    """
+    listening_format = load_format(args.format)
+    urls = _read_attached_urls(args.set_dir)
+    urls["form_url"] = args.form_url
+    tex = _rerender_worksheet_with_urls(args.set_dir, listening_format, urls)
+    _write_attached_urls(args.set_dir, urls)
+
+    tex_path = args.set_dir / "worksheet.tex"
+    tex_path.write_text(tex, encoding="utf-8")
+
+    result = {"worksheet_tex": str(tex_path)}
+    if not args.no_pdf:
+        result["worksheet_pdf"] = str(build_pdf(tex_path))
+    if args.push:
+        try:
+            pushed = commit_and_push(data_repo_path(), [tex_path], f"listening: attach form url ({args.set_dir.name})")
         except DataRepoError as error:
             print(f"push できませんでした: {error}", file=sys.stderr)
             return 1
@@ -630,6 +691,9 @@ def main() -> int:
     listening_ingest.add_argument("--no-pdf", action="store_true", help="TeX まで出して組版しない")
     listening_ingest.add_argument("--push", action="store_true", help="出力を academic-english-data へ commit + push する")
     listening_ingest.add_argument("--youtube-url", help="既に YouTube へ投稿済みの場合、冊子にURLを載せる")
+    listening_ingest.add_argument(
+        "--form-url", help="既に toeic_forms_cli.py create で回答フォームを作成済みの場合、冊子にURLを載せる"
+    )
     listening_ingest.set_defaults(func=_cmd_listening_ingest)
 
     listening_attach_url = listening_sub.add_parser(
@@ -641,6 +705,18 @@ def main() -> int:
     listening_attach_url.add_argument("--no-pdf", action="store_true")
     listening_attach_url.add_argument("--push", action="store_true", help="更新した worksheet.tex を academic-english-data へ commit + push する")
     listening_attach_url.set_defaults(func=_cmd_listening_attach_youtube_url)
+
+    listening_attach_form_url = listening_sub.add_parser(
+        "attach-form-url", help="toeic_forms_cli.py create で得た回答フォームURLを冊子に載せて作り直す"
+    )
+    listening_attach_form_url.add_argument("--set-dir", type=Path, required=True, help="listening ingest の出力先")
+    listening_attach_form_url.add_argument("--format", required=True)
+    listening_attach_form_url.add_argument("--form-url", required=True)
+    listening_attach_form_url.add_argument("--no-pdf", action="store_true")
+    listening_attach_form_url.add_argument(
+        "--push", action="store_true", help="更新した worksheet.tex を academic-english-data へ commit + push する"
+    )
+    listening_attach_form_url.set_defaults(func=_cmd_listening_attach_form_url)
 
     listening_publish = listening_sub.add_parser("publish", help="問題冊子PDFを Drive の科目フォルダへ上げる")
     listening_publish.add_argument("--set-dir", type=Path, required=True, help="listening ingest の出力先")

@@ -39,7 +39,15 @@ _PATTERN_LEGEND = [
 ]
 
 
-def render_tex(title: str, items: list[GrammarItem]) -> str:
+def _form_line(form_url: str | None) -> list[str]:
+    if not form_url:
+        return []
+    # 1つのFormにこの冊子の全設問をまとめて登録するので（1問1リンクではない）、
+    # 冊子の先頭に1回だけ出す。
+    return [r"\par\noindent\textbf{回答フォーム（自動採点）:} \href{" + form_url + r"}{回答フォームはこちら}", ""]
+
+
+def render_tex(title: str, items: list[GrammarItem], form_url: str | None = None) -> str:
     lines = [
         _PREAMBLE,
         r"\title{" + escape(title) + "}",
@@ -48,6 +56,7 @@ def render_tex(title: str, items: list[GrammarItem]) -> str:
         r"\maketitle",
         r"\section*{Part 5 — 空所補充}",
         "",
+        *_form_line(form_url),
         "文の空所に入れるのに最も適切な語句を (A)〜(D) から1つ選びなさい。",
         "",
     ]
@@ -135,7 +144,7 @@ def _reading_numbering(passages: list[Part7Passage]) -> list[tuple[int, Part7Pas
     return numbered
 
 
-def render_reading_tex(title: str, passages: list[Part7Passage]) -> str:
+def render_reading_tex(title: str, passages: list[Part7Passage], form_url: str | None = None) -> str:
     numbered = _reading_numbering(passages)
     lines = [
         _PREAMBLE,
@@ -145,6 +154,7 @@ def render_reading_tex(title: str, passages: list[Part7Passage]) -> str:
         r"\maketitle",
         r"\section*{Part 7 — 読解}",
         "",
+        *_form_line(form_url),
         "文書を読み、各設問について最も適切な答えを (A)〜(D) から1つ選びなさい。",
         "",
     ]

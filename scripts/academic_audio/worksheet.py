@@ -53,7 +53,20 @@ def _youtube_line(youtube_url: str | None) -> list[str]:
     return [r"\par\noindent\textbf{音声（YouTube・限定公開）:} \url{" + youtube_url + "}", ""]
 
 
-def render_tex(listening_set: ListeningSet, listening_format: ListeningFormat, youtube_url: str | None = None) -> str:
+def _form_line(form_url: str | None) -> list[str]:
+    if not form_url:
+        return []
+    # 1つのFormに冊子内の全設問をまとめて登録するので（1問1リンクではない）、
+    # 冊子の先頭に1回だけ出す。hyperref は既にpreambleで読み込み済み。
+    return [r"\par\noindent\textbf{回答フォーム（自動採点）:} \href{" + form_url + r"}{回答フォームはこちら}", ""]
+
+
+def render_tex(
+    listening_set: ListeningSet,
+    listening_format: ListeningFormat,
+    youtube_url: str | None = None,
+    form_url: str | None = None,
+) -> str:
     """Two sections: the questions to solve, then the answer key."""
     lines = [
         _PREAMBLE,
@@ -64,6 +77,7 @@ def render_tex(listening_set: ListeningSet, listening_format: ListeningFormat, y
         r"\section*{" + escape(listening_format.name) + "}",
         "",
         *_youtube_line(youtube_url),
+        *_form_line(form_url),
         _instructions(listening_format),
         "",
     ]
@@ -111,7 +125,10 @@ def _instructions(listening_format: ListeningFormat) -> str:
 
 
 def render_passage_tex(
-    passage_set: PassageSet, listening_format: ListeningFormat, youtube_url: str | None = None
+    passage_set: PassageSet,
+    listening_format: ListeningFormat,
+    youtube_url: str | None = None,
+    form_url: str | None = None,
 ) -> str:
     """grouping: passage 用（TOEIC Part 3/4）。
 
@@ -127,6 +144,7 @@ def render_passage_tex(
         r"\section*{" + escape(listening_format.name) + "}",
         "",
         *_youtube_line(youtube_url),
+        *_form_line(form_url),
         _passage_instructions(listening_format),
         "",
     ]
