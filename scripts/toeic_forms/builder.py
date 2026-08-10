@@ -38,6 +38,12 @@ def build_choice_quiz_requests(
     対応表には choices もそのまま含める。Forms API の回答は選択肢の**テキスト値**で
     返るため（インデックスは返らない）、翌朝バッチが english.db の `answer_index` 形式
     （"0"/"1"/...）へ変換するのに choices.index(submitted_value) が必要になる。
+
+    対応表には answer_index も含める（2026-08-10追加）。Part5/Part7/リスニングは
+    generated_item側にも同じanswer_indexが保存されており item.check() で採点できるが、
+    語彙テスト（toeic_vocab_cli）は選択肢が出題のたびにランダムに組み直されるため
+    generated_item（VocabItem）自身は正解を持たない。record側はこのform_map内の
+    answer_indexを正とし、item.check()に頼らず採点する。
     """
     requests: list[dict] = [
         {
@@ -51,7 +57,11 @@ def build_choice_quiz_requests(
 
     for index, item in enumerate(items):
         item_id = _make_item_id(item.review_id)
-        item_map[item.review_id] = {"question_item_id": item_id, "choices": list(item.choices)}
+        item_map[item.review_id] = {
+            "question_item_id": item_id,
+            "choices": list(item.choices),
+            "answer_index": item.answer_index,
+        }
         requests.append(
             {
                 "createItem": {

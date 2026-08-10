@@ -88,10 +88,16 @@ def answer(
     hint_used: bool = False,
     retry_count: int = 0,
     cause_override: str | None = None,
+    correct_override: bool | None = None,
 ) -> AnswerOutcome:
-    """回答を1件記録し、閉ループを最後まで回す。"""
+    """回答を1件記録し、閉ループを最後まで回す。
+
+    correct_override を渡すと item.check(response) を使わず、その真偽値をそのまま
+    正誤として扱う。語彙テスト（VocabItem）のように、正解が item 自身ではなく
+    出題のたびに変わる選択肢セット（Forms の form_map 側）にしか存在しないケースで使う。
+    """
     row, item = load_item(connection, item_id)
-    correct = item.check(response)
+    correct = item.check(response) if correct_override is None else correct_override
 
     signals = AttemptSignals(
         domain=item.domain,
@@ -187,6 +193,7 @@ def record_form_response(
     review_id: str,
     response: str,
     elapsed_ms: int = 0,
+    correct_override: bool | None = None,
 ) -> AnswerOutcome:
     """Google Forms 経由（選択式）の回答を1件記録する。
 
@@ -194,16 +201,18 @@ def record_form_response(
     採点・誤答分類・復習スケジューリングは answer() とまったく同じロジックを通す
     （経路によって閉ループの中身がずれると学習履歴の意味が変わってしまうため）。
 
+    correct_override は語彙テスト向け（form_map側のanswer_indexで採点する。
+    answer() のdocstring参照）。Part5/Part7/リスニングは渡さず、従来通り
+    item.check(response) に任せる。
+
     記述式（自己採点）の回答はここでは扱わない — 自己採点の結果は item.check() が
     比較できる「正解」を持たない（本人の申告そのものが正誤）ため、answer() の
-    correct = item.check(response) という前提に乗らない。記述式をここに含めるには
-    answer() 側に correct の上書き経路を別途足す必要があり、現状は未対応
-    （docs/2026-08-09-toeic-forms-integration.md 参照）。
+    correct = item.check(response) という前提に乗らない。
     """
     item_id = find_item_id_by_review_id(connection, review_id)
     if item_id is None:
         raise LookupError(f"review_id={review_id} に対応する generated_item が見つかりません。")
-    return answer(connection, session_id, item_id, response, elapsed_ms)
+    return answer(connection, session_id, item_id, response, elapsed_ms, correct_override=correct_override)
 
 
 # 答えを見たあとに本人が付ける手応え。Anki の4段階と同じ粒度。

@@ -136,8 +136,18 @@ def _cmd_record(args: argparse.Namespace) -> int:
         session_id = study.start_session(connection, args.course_id, note=f"form:{form_map['form_id']}")
         results = []
         for answer in answers:
+            mapping = form_map["items"].get(answer["review_id"], {})
+            correct_override = None
+            if "answer_index" in mapping:
+                try:
+                    correct_override = int(answer["response"]) == mapping["answer_index"]
+                except (TypeError, ValueError):
+                    correct_override = False
             try:
-                outcome = study.record_form_response(connection, session_id, answer["review_id"], answer["response"])
+                outcome = study.record_form_response(
+                    connection, session_id, answer["review_id"], answer["response"],
+                    correct_override=correct_override,
+                )
             except LookupError as error:
                 results.append({"review_id": answer["review_id"], "error": str(error)})
                 continue

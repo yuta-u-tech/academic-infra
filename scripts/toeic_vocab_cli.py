@@ -9,6 +9,29 @@ TOEIC語彙（`acenglish_cli.py fetch-toeic` で取り込み済みの2,282語）
 
     python3 scripts/toeic_vocab_cli.py build --count 100 --out .toeic-vocab/sets/20260806
     python3 scripts/toeic_vocab_cli.py publish --pdf .toeic-vocab/sets/20260806/worksheet.pdf
+
+Google Forms連携（任意・実装済み2026-08-10）。手順は build → Form変換・作成 →
+attach-form-url → publish の順を厳守する（Form作成より前に冊子へURLを埋め込めないため）。
+語彙は`fetch-toeic`で取り込み済みのVocabItemが既にDBにあるため、Part5/Part7と違い
+別途ingestは不要（build時のreview_idがそのままgenerated_itemのreview_idと一致する）:
+
+    # build後、items.json の各問題を choice型Form用スキーマ（question=word,
+    # choices=meaning群, answer_index, explanation）に変換してから作成する
+    # （Part5/Part7と同じくこの変換はClaudeがその都度書く。専用コマンドは無い）
+    python3 scripts/toeic_forms_cli.py create --items <変換後>.json --type choice \
+        --title "語彙テスト 2026-08-06" --out .toeic-forms/sets/20260806-vocab \
+        --allowed-email <許可アカウント>
+
+    python3 scripts/toeic_vocab_cli.py attach-form-url --set-dir .toeic-vocab/sets/20260806 \
+        --form-url <2で得たresponder_url>
+
+    # 回答が出揃ったら（record は選択式Formなら他のTOEIC教材と共通）
+    python3 scripts/toeic_forms_cli.py record --form-map .toeic-forms/sets/20260806-vocab/form_map.json
+
+語彙テストは選択肢が出題のたびにランダムに組み直されるため、generated_item
+（VocabItem）自身は正解choicesを持たない。record時の採点は form_map.json 側に
+保存された answer_index を使う（acenglish.study.answer() の correct_override 経路。
+item.check() には依存しない）。
 """
 
 from __future__ import annotations
@@ -95,6 +118,40 @@ def _cmd_build(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_attach_form_url(args: argparse.Namespace) -> int:
+    """build 済みの --set-dir に、Google Form の回答URLを差し込んで worksheet を作り直す。
+
+    `scripts/toeic_forms_cli.py create` で作った Form の responder_url を渡す想定
+    （順序: build → items.json を Form 用スキーマへ変換して create → ここで埋め込み、を厳守）。
+    state（出題の読み進み位置）は書き換えない。
+    """
+    items_path = args.set_dir / "items.json"
+    if not items_path.exists():
+        raise FileNotFoundError(f"{items_path} がありません。先に build を実行してください。")
+    payload = json.loads(items_path.read_text(encoding="utf-8"))
+    title = payload["title"]
+    questions = [
+        QuizQuestion(
+            review_id=q["review_id"],
+            word=q["word"],
+            choices=q["choices"],
+            answer_index=q["answer_index"],
+            meaning=q["meaning"],
+            example=q["example"],
+        )
+        for q in payload["questions"]
+    ]
+
+    tex_path = args.set_dir / "worksheet.tex"
+    tex_path.write_text(render_tex(title, questions, form_url=args.form_url), encoding="utf-8")
+
+    result = {"worksheet_tex": str(tex_path)}
+    if not args.no_pdf:
+        result["worksheet_pdf"] = str(build_pdf(tex_path))
+    print(json.dumps(result, ensure_ascii=False, indent=2))
+    return 0
+
+
 def _cmd_publish(args: argparse.Namespace) -> int:
     import _drive_common
 
@@ -165,6 +222,14 @@ def build_parser() -> argparse.ArgumentParser:
     build.add_argument("--db", type=Path, default=None, help="既定: ~/.academic-english/english.db")
     build.add_argument("--home", type=Path, default=None, help="状態ファイルの置き場所。既定: ~/.academic-english")
     build.set_defaults(func=_cmd_build)
+
+    attach_form_url = sub.add_parser(
+        "attach-form-url", help="toeic_forms_cli.py create で得た回答フォームURLを冊子に載せて作り直す"
+    )
+    attach_form_url.add_argument("--set-dir", type=Path, required=True, help="build の出力先")
+    attach_form_url.add_argument("--form-url", required=True)
+    attach_form_url.add_argument("--no-pdf", action="store_true")
+    attach_form_url.set_defaults(func=_cmd_attach_form_url)
 
     publish = sub.add_parser("publish", help="問題冊子PDFを Drive へ上げる")
     publish.add_argument("--pdf", type=Path, required=True)

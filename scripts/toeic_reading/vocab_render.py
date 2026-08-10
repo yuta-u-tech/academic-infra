@@ -29,6 +29,12 @@ _PREAMBLE = r"""\documentclass[a4paper,11pt]{ltjsarticle}
 _LABELS = ["A", "B", "C", "D", "E"]
 
 
+def _form_line(form_url: str | None) -> list[str]:
+    if not form_url:
+        return []
+    return [r"\par\noindent\textbf{回答フォーム（自動採点）:} \href{" + form_url + r"}{回答フォームはこちら}", ""]
+
+
 @dataclass(frozen=True)
 class QuizQuestion:
     review_id: str
@@ -39,13 +45,14 @@ class QuizQuestion:
     example: str
 
 
-def render_tex(title: str, questions: list[QuizQuestion]) -> str:
+def render_tex(title: str, questions: list[QuizQuestion], form_url: str | None = None) -> str:
     lines = [
         _PREAMBLE,
         r"\title{" + escape(title) + "}",
         r"\date{}",
         r"\begin{document}",
         r"\maketitle",
+        *_form_line(form_url),
         r"\section*{語彙テスト}",
         "",
         "次の単語の意味として最も適切なものを (A)〜(D) から1つ選びなさい。",
