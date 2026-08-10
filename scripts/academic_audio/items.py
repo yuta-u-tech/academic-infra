@@ -513,6 +513,59 @@ def passage_to_script(passage_set: PassageSet, listening_format: ListeningFormat
     )
 
 
+def to_form_items(listening_set: ListeningSet, set_id: str) -> list[dict[str, Any]]:
+    """review_id 提出用フォーム(toeic_forms_cli.py create)向けのフラットな選択式項目に変換する。
+
+    質問文だけを title に置く。選択肢は choices として別に渡すので、
+    title に選択肢テキストを重ねて書くと Forms 上で全く同じ文言が二重表示される
+    （2026-08-10 に実際に混入し、ユーザー指摘で削除した不具合）。
+    """
+    part_slug = listening_set.format_id.removeprefix("toeic-")
+    items: list[dict[str, Any]] = []
+    for index, item in enumerate(listening_set.items, start=1):
+        question_text = item.parts_with_role("question")[0].text
+        choices = [choice_part.text for choice_part in item.parts_with_role("choice")]
+        items.append(
+            {
+                "kind": "choice",
+                "review_id": f"toeic.listening.{part_slug}.{set_id}.{index:04d}",
+                "topic": listening_set.format_id,
+                "difficulty": 3,
+                "question": f"Number {index}. {question_text}",
+                "choices": choices,
+                "answer_index": item.answer_index,
+                "explanation": item.explanation,
+            }
+        )
+    return items
+
+
+def passage_to_form_items(passage_set: PassageSet, set_id: str) -> list[dict[str, Any]]:
+    """review_id 提出用フォーム(toeic_forms_cli.py create)向けの選択式項目に変換する（Part3/4）。
+
+    title には passage（会話/説明文の書き起こし）+ 設問文だけを置く。選択肢は choices として
+    別に渡すので、title に選択肢テキストを重ねて書かない（to_form_items と同じ理由）。
+    """
+    part_slug = passage_set.format_id.removeprefix("toeic-")
+    items: list[dict[str, Any]] = []
+    for item_index, item in enumerate(passage_set.items, start=1):
+        passage_text = " / ".join(f"{line.speaker}: {line.text}" for line in item.passage)
+        for question_index, question in enumerate(item.questions, start=1):
+            items.append(
+                {
+                    "kind": "choice",
+                    "review_id": f"toeic.listening.{part_slug}.{set_id}.{item_index:04d}.{question_index}",
+                    "topic": passage_set.format_id,
+                    "difficulty": 3,
+                    "question": f"{passage_text} // {question.text}",
+                    "choices": question.choices,
+                    "answer_index": question.answer_index,
+                    "explanation": question.explanation,
+                }
+            )
+    return items
+
+
 def passage_to_answers(passage_set: PassageSet) -> dict[str, Any]:
     return {
         "format": passage_set.format_id,

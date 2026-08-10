@@ -43,8 +43,10 @@ from academic_audio.items import (  # noqa: E402
     load_passage_result,
     load_result,
     passage_to_answers,
+    passage_to_form_items,
     passage_to_script,
     to_answers,
+    to_form_items,
     to_script,
 )
 from academic_audio.jobs import default_state_dir, job_path, new_job_id, read_job, read_script, write_job  # noqa: E402
@@ -495,6 +497,27 @@ def _cmd_listening_ingest_db(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_listening_forms_items(args: argparse.Namespace) -> int:
+    """result.json を toeic_forms_cli.py create にそのまま渡せる items.json へ機械的に変換する。
+
+    質問文/選択肢をどう組み立てるかは(review_idの採番規則も含めて)完全に決定論的なので、
+    毎回 Claude が手で書くと構成ミス（選択肢テキストの二重表示など）が起きる
+    （2026-08-10 に実際に起きた）。この変換はコード側に固定する。
+    """
+    listening_format = load_format(args.format)
+    if listening_format.grouping == "passage":
+        item_set = load_passage_result(args.file, listening_format)
+        items = passage_to_form_items(item_set, args.set_id)
+    else:
+        item_set = load_result(args.file, listening_format)
+        items = to_form_items(item_set, args.set_id)
+    payload = {"items": items}
+    args.out.parent.mkdir(parents=True, exist_ok=True)
+    args.out.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    print(json.dumps({"items": len(items), "out": str(args.out)}, ensure_ascii=False, indent=2))
+    return 0
+
+
 def _read_attached_urls(set_dir: Path) -> dict[str, str]:
     urls_path = set_dir / "urls.json"
     if not urls_path.exists():
@@ -731,6 +754,15 @@ def main() -> int:
     listening_ingest_db.add_argument("--set-id", required=True, help="このセットの識別子（review_idに使う）")
     listening_ingest_db.add_argument("--db", type=Path, help="既定: ~/.academic-english/english.db")
     listening_ingest_db.set_defaults(func=_cmd_listening_ingest_db)
+
+    listening_forms_items = listening_sub.add_parser(
+        "forms-items", help="result.json を toeic_forms_cli.py create 用の items.json へ機械的に変換する"
+    )
+    listening_forms_items.add_argument("--file", type=Path, required=True, help="result.json（作問結果）")
+    listening_forms_items.add_argument("--format", required=True)
+    listening_forms_items.add_argument("--set-id", required=True, help="review_id に使う識別子（ingest-dbと同じ値にする）")
+    listening_forms_items.add_argument("--out", type=Path, required=True)
+    listening_forms_items.set_defaults(func=_cmd_listening_forms_items)
 
     listening_attach_url = listening_sub.add_parser(
         "attach-youtube-url", help="youtube publish で得たURLを冊子に載せて作り直す"
