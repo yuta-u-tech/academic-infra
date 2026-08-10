@@ -510,7 +510,7 @@ def _cmd_listening_forms_items(args: argparse.Namespace) -> int:
         items = passage_to_form_items(item_set, args.set_id)
     else:
         item_set = load_result(args.file, listening_format)
-        items = to_form_items(item_set, args.set_id)
+        items = to_form_items(item_set, listening_format, args.set_id)
     payload = {"items": items}
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")

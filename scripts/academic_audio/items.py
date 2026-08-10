@@ -513,25 +513,42 @@ def passage_to_script(passage_set: PassageSet, listening_format: ListeningFormat
     )
 
 
-def to_form_items(listening_set: ListeningSet, set_id: str) -> list[dict[str, Any]]:
+_GENERIC_CHOICE_LABELS = ("A", "B", "C", "D")
+
+
+def to_form_items(
+    listening_set: ListeningSet, listening_format: ListeningFormat, set_id: str
+) -> list[dict[str, Any]]:
     """review_id 提出用フォーム(toeic_forms_cli.py create)向けのフラットな選択式項目に変換する。
 
-    質問文だけを title に置く。選択肢は choices として別に渡すので、
-    title に選択肢テキストを重ねて書くと Forms 上で全く同じ文言が二重表示される
-    （2026-08-10 に実際に混入し、ユーザー指摘で削除した不具合）。
+    `answer_in_audio` が True の形式（TOEIC Part 2）は、設問・選択肢の実テキストが
+    音声でしか聞けない出題方式そのもの（冊子も空欄のみ、`render_tex` を見よ）。
+    Form にテキストを見せると音声を聴かずに答えられてしまい出題方式が壊れるため、
+    "Number N." と A/B/C の記号だけを持つ固定テンプレートにする
+    （2026-08-10、Form にテキストが出ているとユーザー指摘を受けて修正。
+    最初の修正版で選択肢テキストの二重表示は直したが、そもそも Part 2 は
+    テキストを一切見せてはいけない形式だという点を見落としていた）。
+    それ以外（Part 3/4、answer_in_audio=False）は選択肢が冊子にも印刷される形式なので
+    実テキストをそのまま使う。
     """
     part_slug = listening_set.format_id.removeprefix("toeic-")
     items: list[dict[str, Any]] = []
     for index, item in enumerate(listening_set.items, start=1):
-        question_text = item.parts_with_role("question")[0].text
-        choices = [choice_part.text for choice_part in item.parts_with_role("choice")]
+        choice_parts = item.parts_with_role("choice")
+        if listening_format.answer_in_audio:
+            question_title = f"Number {index}."
+            choices = list(_GENERIC_CHOICE_LABELS[: len(choice_parts)])
+        else:
+            question_text = item.parts_with_role("question")[0].text
+            question_title = f"Number {index}. {question_text}"
+            choices = [choice_part.text for choice_part in choice_parts]
         items.append(
             {
                 "kind": "choice",
                 "review_id": f"toeic.listening.{part_slug}.{set_id}.{index:04d}",
                 "topic": listening_set.format_id,
                 "difficulty": 3,
-                "question": f"Number {index}. {question_text}",
+                "question": question_title,
                 "choices": choices,
                 "answer_index": item.answer_index,
                 "explanation": item.explanation,
