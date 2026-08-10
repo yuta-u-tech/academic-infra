@@ -87,6 +87,11 @@ Form作成のいずれよりも前に、必ず `toeic_reading_cli.py shuffle --i
   この日の20260805分の`weak-points`（8件、`目的を表す不定詞`/`仮定法現在`/`adapt-adopt`/
   `place an order`/`issue a refund`/`extend an invitation`/`renew a contract`/`raise-rise`）
   を苦手重点20問に反映した初回セット。
+- 2026-08-10: `weak-points --limit 30`で19件の誤答（20260805d/20260809分）を確認し、
+  頻出（3回: `extend an invitation`のC、2回: `目的を表す不定詞`のA・`adopt/adapt`のB）を
+  優先して苦手重点20問に反映。shuffle実行後、通常30問（A11:B9:C10）と合わせて
+  review_id `toeic.part5.20260810.0001`〜`0050`で一気通貫実行（Form作成→PDF→Drive公開→
+  ingestまで完走）。
 
 ### 使用済み語彙・コロケーションログ（パターンB/C、重複回避用）
 
@@ -100,14 +105,20 @@ Form作成のいずれよりも前に、必ず `toeic_reading_cli.py shuffle --i
   `continuous`/`continual`, `industrial`/`industrious`, `comprehensive`/`comprehensible`,
   `confidential`/`confident`, `successive`/`successful`, `efficient`/`sufficient`,
   `exhaustive`/`exhausted`, `stationery`/`stationary`, `credible`/`creditable`,
-  `respective`/`respectable`/`respectful`/`respected`（2026-08-09追加）
+  `respective`/`respectable`/`respectful`/`respected`（2026-08-09追加）,
+  `methodical`/`methodological`, `overview`/`oversight`, `secure`/`secured`,
+  `lengthy`/`length`/`lengthen`, `discrepancy`/`discretion`, `reassure`/`assure`/`ensure`/`insure`,
+  `remarkable`/`remarkably`, `divergent`/`diverse`（2026-08-10追加）
 - パターンC（コロケーション）: `raise concerns`, `meet the deadline`, `place an order`,
   `conduct a survey`, `reach a consensus`, `submit an application`, `issue a refund`,
   `extend an invitation`, `address a complaint`, `renew a contract`, `postpone`（文脈適合）,
   `implement a policy`, `terminate a contract`, `forfeit a deposit`, `allocate a budget`,
   `process a complaint`, `exceed expectations`, `reach an agreement`, `grant an extension`
   （2026-08-09追加）,
-  `raise funds`, `draw attention`
+  `raise funds`, `draw attention`,
+  `convene a meeting with`, `draft a proposal`, `secure funding`, `waive a fee`,
+  `honor a warranty`, `void a contract`, `streamline a workflow`, `mitigate a risk`,
+  `expedite a shipment`, `curb spending`（2026-08-10追加）
 
 ## sentence
 
