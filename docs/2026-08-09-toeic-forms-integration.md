@@ -81,10 +81,27 @@ Forms に差し替えるのが最小変更。
    `academic_audio_cli.py listening ingest-db` を新設し、Part5/Part7と同じ形で
    Forms連携＋学習ループ反映を実装した。`study.record_form_response()`はkind非依存の
    設計だったため、record側の変更は不要だった。
-9. **Phase 6（残作業・次回以降）**:
-   - 記述式（自己採点）の記録は未実装（`answer()` の `correct` 外部指定への拡張が必要）。
-   - 間隔反復スケジューラと既存の `weak-points`（直近誤答の抽出）ロジックの統合は未着手。
-   - 翌朝バッチの自動化（cron等）はしていない。「答え終わった」等の発話をトリガーに
-     `toeic_forms_cli.py record` を都度実行する運用（他のTOEIC教材と同じ制約）。
-   - リスニングの実運用での動作確認（実際にFormを作って回答→`record`まで通す）はまだ
-     行っていない（Part5は2026-08-09に実運用確認済み）。
+9. **語彙テスト(vocab)のForms対応（2026-08-10）**: `toeic_vocab_cli.py` の語彙MCQは
+   選択肢が出題のたびにランダムに組み直されるため、Part5/Part7/リスニングと違い
+   generated_item（VocabItem）自身が正解choicesを持たない
+   （VocabItem.check()はそもそも別方向の出題（意味を見て単語を答える）用の比較ロジックで、
+   語彙テストの「単語を見て意味を選ぶ」方向とは噛み合わない）。この2つの出題方向のずれを
+   吸収するため、`answer()`/`record_form_response()`に`correct_override`パラメータを追加し、
+   `item.check()`を経由せず正誤を外部から渡せるようにした（項目8で「記述式は未対応」と
+   書いていた `correct` 外部指定への拡張を、記述式ではなく語彙テストのために先に実装した形）。
+   採点の正は `toeic_forms/builder.py` が新たに choice設問すべてのform_mapへ書き込む
+   `answer_index`（そのForm・その日の選択肢セットに対する正解）で、
+   `toeic_forms_cli.py record` 側がそこから`correct_override`を計算して渡す。
+   `toeic_vocab_cli.py` に `attach-form-url` を新設し、Part5/リスニングと同じ
+   「build（生成）→ Form変換・作成 → attach-form-urlで冊子に埋め込み」の順に揃えた。
+   3問のテストFormでForm作成→attach-form-url→answer_index経由の採点ロジック（DBコピー上で
+   `record_form_response(..., correct_override=True/False)`を直接呼ぶ検証）まで確認済み。
+   実際のForm回答→`record`コマンドを通した実運用確認はまだ行っていない。
+10. **Phase 6（残作業・次回以降）**:
+    - 記述式（自己採点）の記録は未実装（`correct_override`の土台はできたので、
+      自己採点の3択回答を`correct`へマップする変換を`_cmd_record`側に足せば対応できる）。
+    - 間隔反復スケジューラと既存の `weak-points`（直近誤答の抽出）ロジックの統合は未着手。
+    - 翌朝バッチの自動化（cron等）はしていない。「答え終わった」等の発話をトリガーに
+      `toeic_forms_cli.py record` を都度実行する運用（他のTOEIC教材と同じ制約）。
+    - リスニング・語彙テストの実運用での動作確認（実際にFormを作って回答→`record`まで
+      通す）はまだ行っていない（Part5は2026-08-09に実運用確認済み）。
