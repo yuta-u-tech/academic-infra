@@ -7,6 +7,12 @@ TOEIC語彙（`acenglish_cli.py fetch-toeic` で取り込み済みの2,282語）
 再シャッフルして次のサイクルへ入るため、「毎日ランダムだが同じサイクル内では
 重複しない」出題になる。
 
+**苦手語の再出題（2026-08-10追加）**: `--weak-count`（既定20）で、直近の回答が
+不正解だった語を毎回そのぶんだけ優先的に混ぜる。Forms解答提出で`attempt`に
+正誤が残るようになったことで実現した（`acenglish.vocab_quiz.weak_review_ids()`が
+`toeic_forms_cli.py record`後のattemptを見て決定論的に選ぶ。文脈判断が要らないので
+Claudeは介在しない）。既に克服した語（最新の回答が正解）は対象から外れる。
+
     python3 scripts/toeic_vocab_cli.py build --count 100 --out .toeic-vocab/sets/20260806
     python3 scripts/toeic_vocab_cli.py publish --pdf .toeic-vocab/sets/20260806/worksheet.pdf
 
@@ -45,7 +51,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from acenglish.db import connect  # noqa: E402
-from acenglish.vocab_quiz import build_choices, load_pool, next_batch  # noqa: E402
+from acenglish.vocab_quiz import build_choices, load_pool, next_batch, weak_review_ids  # noqa: E402
 from toeic_reading.vocab_render import QuizQuestion, build_pdf, render_md, render_tex  # noqa: E402
 
 DEFAULT_DRIVE_FOLDER_NAME = "TOEIC/vocabulary"
@@ -61,7 +67,8 @@ def _cmd_build(args: argparse.Namespace) -> int:
             raise SystemExit(
                 "語彙プールが空です。先に `acenglish_cli.py fetch-toeic` で取り込んでください。"
             )
-        batch, state = next_batch(pool, args.count, home=args.home)
+        weak_ids = weak_review_ids(connection, limit=args.weak_count) if args.weak_count > 0 else []
+        batch, state = next_batch(pool, args.count, home=args.home, weak_ids=weak_ids)
 
     questions = []
     for entry in batch:
@@ -105,6 +112,7 @@ def _cmd_build(args: argparse.Namespace) -> int:
     md_path = args.out / "worksheet.md"
     md_path.write_text(render_md(title, questions), encoding="utf-8")
 
+    included_weak = [q.review_id for q in questions if q.review_id in set(weak_ids)]
     print(json.dumps(
         {
             "pdf": str(pdf_path),
@@ -113,6 +121,9 @@ def _cmd_build(args: argparse.Namespace) -> int:
             "count": len(questions),
             "cycle": state["cycle"],
             "pool_size": len(pool),
+            "weak_requested": len(weak_ids),
+            "weak_included": len(included_weak),
+            "weak_review_ids": included_weak,
         },
         ensure_ascii=False, indent=2))
     return 0
@@ -217,6 +228,10 @@ def build_parser() -> argparse.ArgumentParser:
 
     build = sub.add_parser("build", help="今日分の語彙テストPDFを組む（状態を1回分進める）")
     build.add_argument("--count", type=int, default=100, help="1回の出題数（既定100）")
+    build.add_argument(
+        "--weak-count", type=int, default=20,
+        help="直近の回答が不正解だった語を優先的に混ぜる件数（既定20。0で無効化）",
+    )
     build.add_argument("--out", type=Path, required=True, help="出力先ディレクトリ")
     build.add_argument("--title", help="既定: 語彙テスト <日付>")
     build.add_argument("--db", type=Path, default=None, help="既定: ~/.academic-english/english.db")
