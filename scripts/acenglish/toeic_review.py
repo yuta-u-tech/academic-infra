@@ -150,3 +150,97 @@ def write_review(connection: sqlite3.Connection, home: Path | None = None) -> Pa
     items = fetch_wrong_items(connection)
     path.write_text(render_review_markdown(existing, items), encoding="utf-8")
     return path
+
+
+PDF_TITLE = "TOEIC 復習ノート"
+PDF_FILENAME = "toeic-review.pdf"
+
+_PDF_PREAMBLE = r"""\documentclass[a4paper,11pt]{ltjsarticle}
+\usepackage{luatexja}
+\usepackage[margin=25mm]{geometry}
+\usepackage{enumitem}
+\setlist[enumerate]{itemsep=6pt,topsep=4pt}
+\renewcommand{\thesection}{}
+"""
+
+
+def _tex_choice_lines(payload: dict, escape) -> list[str]:
+    choices = payload["choices"]
+    answer = choices[payload["answer_index"]]
+    return [
+        r"    \par\noindent 選択肢: " + escape(" / ".join(choices)),
+        r"    \par\noindent \textbf{正解: " + escape(answer) + "}",
+    ]
+
+
+def _tex_item(row: dict, escape) -> list[str]:
+    """Markdown版の `_format_item` と同じ内容を、同じ4種のkind分岐でTeXにする。"""
+    payload = json.loads(row["payload"])
+    kind = payload.get("kind")
+    lines = [r"\item \textbf{" + escape(row["review_id"]) + "}"]
+
+    if kind == "grammar":
+        lines.append(r"    \par\noindent " + escape(payload["sentence"]))
+        lines.extend(_tex_choice_lines(payload, escape))
+        lines.append(r"    \par\noindent 論点: " + escape(payload.get("point", "-")))
+        lines.append(r"    \par\smallskip\noindent " + escape(payload["explanation"]))
+    elif kind == "reading":
+        passage = payload["passage"]
+        if len(passage) > 500:
+            passage = passage[:500] + "…"
+        lines.append(r"    \par\noindent パッセージ: " + escape(passage))
+        lines.append(r"    \par\noindent 設問: " + escape(payload["question"]))
+        lines.extend(_tex_choice_lines(payload, escape))
+        lines.append(r"    \par\smallskip\noindent " + escape(payload["explanation"]))
+    elif kind == "listening":
+        lines.append(r"    \par\noindent 設問: " + escape(payload["question"]))
+        lines.extend(_tex_choice_lines(payload, escape))
+        lines.append(r"    \par\smallskip\noindent " + escape(payload["explanation"]))
+    elif kind == "vocab":
+        lines.append(r"    \par\noindent 語: " + escape(payload["word"]))
+        lines.append(r"    \par\noindent 意味: " + escape(payload["meaning"]))
+        if payload.get("example"):
+            lines.append(r"    \par\smallskip\noindent 例文: " + escape(payload["example"]))
+
+    return lines
+
+
+def render_tex(items: list[dict]) -> str:
+    from academic_audio.worksheet import escape
+
+    lines = [_PDF_PREAMBLE, r"\title{" + escape(PDF_TITLE) + "}", r"\date{}", r"\begin{document}", r"\maketitle"]
+
+    if not items:
+        lines.append(escape("現在、間違えたまま残っている問題はありません。"))
+        lines.append(r"\end{document}")
+        return "\n".join(lines) + "\n"
+
+    by_domain: dict[str, list[dict]] = {}
+    for item in items:
+        by_domain.setdefault(item["domain"], []).append(item)
+
+    for domain in _DOMAIN_ORDER:
+        rows = by_domain.get(domain)
+        if not rows:
+            continue
+        lines.append(r"\section*{" + escape(f"{_DOMAIN_TITLES[domain]}（{len(rows)}問）") + "}")
+        lines.append(r"\begin{enumerate}[label=\textbf{\arabic*.}]")
+        for row in rows:
+            lines.extend(_tex_item(row, escape))
+        lines.append(r"\end{enumerate}")
+
+    lines.append(r"\end{document}")
+    return "\n".join(lines) + "\n"
+
+
+def write_pdf(connection: sqlite3.Connection, out_dir: Path) -> Path:
+    """PDFは常に同じファイル名(`toeic-review.pdf`)で書く。呼び出し側がDriveへ同名で
+    publishすれば、既存ファイルが更新される（日付付き名にすると毎回別ファイルになる）。
+    """
+    from academic_audio.worksheet import build_pdf
+
+    out_dir.mkdir(parents=True, exist_ok=True)
+    items = fetch_wrong_items(connection)
+    tex_path = out_dir / PDF_FILENAME.replace(".pdf", ".tex")
+    tex_path.write_text(render_tex(items), encoding="utf-8")
+    return build_pdf(tex_path)

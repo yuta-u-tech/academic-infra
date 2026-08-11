@@ -164,3 +164,48 @@ def test_a_hand_written_table_of_contents_survives_rebuild(db, repo):
 def test_a_wrong_notes_directory_is_refused(db, tmp_path):
     with pytest.raises(NotesRepositoryError, match="ENGLISH_NOTES_HOME"):
         toeic_review.write_review(db, tmp_path / "not-a-repo")
+
+
+def test_the_pdf_always_gets_the_same_filename():
+    """日付を名前に入れると毎回別ファイルになり publish が上書きしてくれない。"""
+    assert toeic_review.PDF_FILENAME == "toeic-review.pdf"
+
+
+def test_render_tex_with_no_wrong_items_still_produces_a_document():
+    tex = toeic_review.render_tex([])
+    assert r"\begin{document}" in tex
+    assert r"\end{document}" in tex
+    assert "現在、間違えたまま残っている問題はありません" in tex
+
+
+def test_render_tex_includes_the_question_and_answer(db):
+    _answer(db, PART5, _grammar_result(), ["1"])
+    items = toeic_review.fetch_wrong_items(db)
+    tex = toeic_review.render_tex(items)
+
+    assert "toeic.part5.20260810.0001" in tex
+    assert "reviewed" in tex  # 正解の選択肢
+    assert r"\section*{Part5" in tex
+
+
+def test_render_tex_escapes_latex_special_characters():
+    import json
+
+    row = {
+        "review_id": "toeic.part5.fake.0001",
+        "domain": "grammar",
+        "created_at": "2026-08-10T00:00:00+00:00",
+        "error_cause": "knowledge_gap",
+        "payload": json.dumps({
+            "kind": "grammar",
+            "sentence": "Sales rose by 20% & profits followed ____.",
+            "choices": ["accordingly", "instead"],
+            "answer_index": 0,
+            "point": "x",
+            "explanation": "explanation with 100% & special_chars",
+        }),
+    }
+    tex = toeic_review.render_tex([row])
+    assert r"20\%" in tex
+    assert r"\&" in tex
+    assert r"100\%" in tex

@@ -33,6 +33,7 @@ from acenglish.api import DEFAULT_HOST, DEFAULT_PORT, NonLoopbackBindError  # no
 from acenglish.db import backup, connect, database_path  # noqa: E402
 from acenglish.items import write_json_schemas  # noqa: E402
 from acenglish.sources import studyforge  # noqa: E402
+from academic_audio.worksheet import WorksheetError  # noqa: E402
 from acenglish.sources.studyforge import DeckNotFoundError  # noqa: E402
 from acenglish.sources.ted import SubtitleNotFoundError, YtDlpNotInstalledError  # noqa: E402
 from acenglish.sources.voa import ArticleFetchError  # noqa: E402
@@ -228,7 +229,15 @@ def _cmd_note_draft(args: argparse.Namespace) -> int:
 def _cmd_toeic_review(args: argparse.Namespace) -> int:
     with connect(args.db) as connection:
         path = toeic_review.write_review(connection, args.notes_home)
-    print(f"TOEIC復習ノートを更新: {path}")
+        print(f"TOEIC復習ノートを更新: {path}")
+        if args.pdf_out:
+            pdf_path = toeic_review.write_pdf(connection, args.pdf_out)
+            print(f"TOEIC復習PDFを更新: {pdf_path}")
+            print(
+                "Driveへ反映(常に同じファイル名で上書き): "
+                f"python3 scripts/toeic_reading_cli.py publish --pdf {pdf_path} "
+                f"--folder-name TOEIC/review --name {toeic_review.PDF_FILENAME}"
+            )
     return 0
 
 
@@ -310,6 +319,7 @@ def main() -> int:
         "toeic-review", help="間違えたTOEIC問題を1つの復習ノート(TOEIC_MISC/toeic-review.md)にまとめる"
     )
     toeic_review_parser.add_argument("--notes-home", type=Path, help="既定: ~/english-notes")
+    toeic_review_parser.add_argument("--pdf-out", type=Path, help="指定すると同じ内容のPDF(toeic-review.pdf)もここに書く")
     toeic_review_parser.set_defaults(func=_cmd_toeic_review)
 
     status = subparsers.add_parser("status", help="DBの件数を見る")
@@ -320,7 +330,8 @@ def main() -> int:
         return args.func(args)
     except (CourseNotFoundError, ManifestNotFoundError, TargetNotFoundError,
             generate.UnknownKindError, DeckNotFoundError, ArticleFetchError,
-            SubtitleNotFoundError, YtDlpNotInstalledError, NotesRepositoryError) as error:
+            SubtitleNotFoundError, YtDlpNotInstalledError, NotesRepositoryError,
+            WorksheetError) as error:
         print(str(error), file=sys.stderr)
         return 1
     except ValidationError as error:
