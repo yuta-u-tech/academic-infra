@@ -6,9 +6,13 @@ TOEICのacenglishと違い、SM-2間隔反復やLaTeX冊子・Drive publishは�
 このCLIで取り込み・出題・採点するだけ。
 
     # 生成した問題を取り込む（competency_idは4分野のいずれか）
+    # 既定はexam_level（過去問レベルのストック）。その日の資料(reading-next)の理解確認問題は
+    # --kind reading_check --chapter <章番号> を付けて取り込む（易しめ・quizで必ず先に出る）
     python3 scripts/toukei_cli.py ingest --file items.json --competency toukei.probability_distribution --set-id 20260806
+    python3 scripts/toukei_cli.py ingest --file reading-check.json --competency toukei.probability_distribution --set-id 20260811 --kind reading_check --chapter 1
 
-    # 出題（ターミナルで解答。誤答が多い問題・未回答の問題を優先して出す）
+    # 出題（ターミナルで解答。reading_checkを出し切ってからexam_levelへ進む。
+    # 各kind内では誤答が多い問題・未回答の問題を優先して出す）
     python3 scripts/toukei_cli.py quiz --count 10
     python3 scripts/toukei_cli.py quiz --competency toukei.statistical_inference --count 10
 
@@ -35,6 +39,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from toukei_study.db import connect  # noqa: E402
+from toukei_study.reading import ReadingError  # noqa: E402
+from toukei_study.reading import build_chapter_pdf, mark_delivered, next_chapter, status_report  # noqa: E402
 from toukei_study.render import build_pdf as render_build_pdf  # noqa: E402
 from toukei_study.render import render_generated_tex  # noqa: E402
 from toukei_study.study import ingest_problems, next_batch, record_attempt, status  # noqa: E402
@@ -60,8 +66,15 @@ def _cmd_ingest(args: argparse.Namespace) -> int:
     payload = json.loads(args.file.read_text(encoding="utf-8"))
     items = payload["items"] if isinstance(payload, dict) else payload
     with connect(args.db) as connection:
-        inserted = ingest_problems(connection, args.set_id, args.competency, items)
-    print(json.dumps({"competency": args.competency, "set_id": args.set_id, "inserted": inserted}, ensure_ascii=False, indent=2))
+        inserted = ingest_problems(
+            connection, args.set_id, args.competency, items,
+            kind=args.kind, chapter_number=args.chapter,
+        )
+    print(json.dumps(
+        {"competency": args.competency, "set_id": args.set_id, "kind": args.kind,
+         "chapter": args.chapter, "inserted": inserted},
+        ensure_ascii=False, indent=2,
+    ))
     return 0
 
 
@@ -74,7 +87,9 @@ def _cmd_quiz(args: argparse.Namespace) -> int:
 
         correct_count = 0
         for index, problem in enumerate(problems, start=1):
-            print(f"\n[{index}/{len(problems)}] ({problem.competency_id})")
+            tier = "理解確認" if problem.kind == "reading_check" else "過去問レベル"
+            chapter_note = f" 第{problem.chapter_number}章" if problem.chapter_number else ""
+            print(f"\n[{index}/{len(problems)}] ({problem.competency_id}) [{tier}{chapter_note}]")
             print(problem.question)
             for choice_index, choice in enumerate(problem.choices):
                 print(f"  {choice_index + 1}. {choice}")
@@ -162,6 +177,40 @@ def _cmd_publish(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_reading_next(args: argparse.Namespace) -> int:
+    chapter = next_chapter(args.competency)
+    if chapter is None:
+        print(
+            f"{COMPETENCY_TITLES.get(args.competency, args.competency)} に対応する未配信の章がありません"
+            "（参考書に該当章がまだ無いか、既に全章配信済みです）。",
+            file=sys.stderr,
+        )
+        return 1
+
+    try:
+        pdf_path = build_chapter_pdf(chapter.number, args.out)
+    except ReadingError as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
+
+    mark_delivered(chapter.number)
+    print(json.dumps(
+        {
+            "competency": args.competency,
+            "chapter": chapter.number,
+            "title": chapter.title,
+            "pdf": str(pdf_path),
+        },
+        ensure_ascii=False, indent=2,
+    ))
+    return 0
+
+
+def _cmd_reading_status(args: argparse.Namespace) -> int:
+    print(json.dumps(status_report(), ensure_ascii=False, indent=2))
+    return 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--db", type=Path, default=None, help="SQLiteのパス（既定: ~/.academic-toukei/toukei.db）")
@@ -171,6 +220,11 @@ def main() -> int:
     ingest.add_argument("--file", type=Path, required=True)
     ingest.add_argument("--competency", required=True, choices=COMPETENCY_IDS)
     ingest.add_argument("--set-id", required=True, dest="set_id")
+    ingest.add_argument(
+        "--kind", choices=("reading_check", "exam_level"), default="exam_level",
+        help="reading_check=その日の資料の理解確認（易しめ）。exam_level=過去問レベルのストック（既定）",
+    )
+    ingest.add_argument("--chapter", type=int, default=None, help="reading_check時、対応する章番号")
     ingest.set_defaults(func=_cmd_ingest)
 
     quiz = subparsers.add_parser("quiz", help="ターミナルで出題・採点する")
@@ -196,6 +250,16 @@ def main() -> int:
     publish.add_argument("--parent-id", help="既定は GDRIVE_PARENT_FOLDER_ID")
     publish.add_argument("--dry-run", action="store_true")
     publish.set_defaults(func=_cmd_publish)
+
+    reading_next = subparsers.add_parser(
+        "reading-next", help="参考書(practice-workbook)から未配信の章を1つビルドする（今日の資料）"
+    )
+    reading_next.add_argument("--competency", required=True, choices=COMPETENCY_IDS)
+    reading_next.add_argument("--out", type=Path, required=True)
+    reading_next.set_defaults(func=_cmd_reading_next)
+
+    reading_status = subparsers.add_parser("reading-status", help="資料配信の進捗をCompetency別に見る")
+    reading_status.set_defaults(func=_cmd_reading_status)
 
     args = parser.parse_args()
     return args.func(args)

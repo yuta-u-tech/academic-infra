@@ -22,17 +22,28 @@ class Problem:
     explanation: str
     source_file: str | None = None
     source_number: int | None = None
+    kind: str = "exam_level"
+    chapter_number: int | None = None
 
 
-def ingest_problems(connection: sqlite3.Connection, set_id: str, competency_id: str, items: list[dict]) -> int:
+def ingest_problems(
+    connection: sqlite3.Connection,
+    set_id: str,
+    competency_id: str,
+    items: list[dict],
+    kind: str = "exam_level",
+    chapter_number: int | None = None,
+) -> int:
+    """`kind`/`chapter_number`はバッチ全体の既定値。item側に個別指定があればそちらを優先する
+    （`reading-next`で配信した1章に対する理解確認問題は、通常この章番号で丸ごとタグ付けする）。"""
     now = now_iso()
     inserted = 0
     for item in items:
         connection.execute(
             "INSERT INTO problem"
             " (competency_id, question, choices, answer_index, explanation, set_id, created_at,"
-            "  source_file, source_number)"
-            " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "  source_file, source_number, kind, chapter_number)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 competency_id,
                 item["question"],
@@ -43,6 +54,8 @@ def ingest_problems(connection: sqlite3.Connection, set_id: str, competency_id: 
                 now,
                 item.get("source_file"),
                 item.get("source_number"),
+                item.get("kind", kind),
+                item.get("chapter_number", chapter_number),
             ),
         )
         inserted += 1
@@ -51,20 +64,22 @@ def ingest_problems(connection: sqlite3.Connection, set_id: str, competency_id: 
 
 
 def next_batch(connection: sqlite3.Connection, competency_id: str | None, count: int) -> list[Problem]:
-    """未回答を優先し、無ければ誤答が多かった問題を優先して出す。"""
+    """`reading_check`（その日の資料の理解確認・易しめ）を優先して出し切り、
+    その後`exam_level`（過去問レベルのストック）へ進む。各kind内では未回答を優先し、
+    無ければ誤答が多かった問題を優先して出す。"""
     where = "WHERE p.competency_id = ?" if competency_id else ""
     params: tuple = (competency_id,) if competency_id else ()
     rows = connection.execute(
         f"""
         SELECT p.id, p.competency_id, p.question, p.choices, p.answer_index, p.explanation,
-               p.source_file, p.source_number,
+               p.source_file, p.source_number, p.kind, p.chapter_number,
                COUNT(a.id) AS attempts,
                COALESCE(SUM(1 - a.correct), 0) AS misses
         FROM problem p
         LEFT JOIN attempt a ON a.problem_id = p.id
         {where}
         GROUP BY p.id
-        ORDER BY (attempts > 0) ASC, misses DESC, attempts ASC, RANDOM()
+        ORDER BY (p.kind != 'reading_check') ASC, (attempts > 0) ASC, misses DESC, attempts ASC, RANDOM()
         LIMIT ?
         """,
         (*params, count),
@@ -79,6 +94,8 @@ def next_batch(connection: sqlite3.Connection, competency_id: str | None, count:
             explanation=row["explanation"],
             source_file=row["source_file"],
             source_number=row["source_number"],
+            kind=row["kind"],
+            chapter_number=row["chapter_number"],
         )
         for row in rows
     ]

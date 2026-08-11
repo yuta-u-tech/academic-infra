@@ -28,7 +28,9 @@ _SCHEMA = (
         set_id        TEXT NOT NULL,
         created_at    TEXT NOT NULL,
         source_file   TEXT,
-        source_number INTEGER
+        source_number INTEGER,
+        kind          TEXT NOT NULL DEFAULT 'exam_level',
+        chapter_number INTEGER
     )
     """,
     "CREATE INDEX IF NOT EXISTS idx_problem_competency ON problem (competency_id)",
@@ -92,3 +94,7 @@ def _migrate_problem_columns(connection: sqlite3.Connection) -> None:
         connection.execute("ALTER TABLE problem ADD COLUMN source_file TEXT")
     if "source_number" not in existing:
         connection.execute("ALTER TABLE problem ADD COLUMN source_number INTEGER")
+    if "kind" not in existing:
+        connection.execute("ALTER TABLE problem ADD COLUMN kind TEXT NOT NULL DEFAULT 'exam_level'")
+    if "chapter_number" not in existing:
+        connection.execute("ALTER TABLE problem ADD COLUMN chapter_number INTEGER")
