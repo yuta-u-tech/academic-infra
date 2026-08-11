@@ -28,7 +28,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from _data_repo import DataRepoError, commit_and_push, data_repo_path  # noqa: E402
-from acenglish import fetch, generate, notes, promote, regenerate  # noqa: E402
+from acenglish import fetch, generate, notes, promote, regenerate, toeic_review  # noqa: E402
 from acenglish.api import DEFAULT_HOST, DEFAULT_PORT, NonLoopbackBindError  # noqa: E402
 from acenglish.db import backup, connect, database_path  # noqa: E402
 from acenglish.items import write_json_schemas  # noqa: E402
@@ -225,6 +225,13 @@ def _cmd_note_draft(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_toeic_review(args: argparse.Namespace) -> int:
+    with connect(args.db) as connection:
+        path = toeic_review.write_review(connection, args.notes_home)
+    print(f"TOEIC復習ノートを更新: {path}")
+    return 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--db", type=Path, default=None, help="SQLiteのパス（既定: ~/.academic-english/english.db）")
@@ -298,6 +305,12 @@ def main() -> int:
     note.add_argument("--notes-home", type=Path, help="既定: ~/english-notes")
     note.add_argument("--mark-promoted", action="store_true")
     note.set_defaults(func=_cmd_note_draft)
+
+    toeic_review_parser = subparsers.add_parser(
+        "toeic-review", help="間違えたTOEIC問題を1つの復習ノート(TOEIC_MISC/toeic-review.md)にまとめる"
+    )
+    toeic_review_parser.add_argument("--notes-home", type=Path, help="既定: ~/english-notes")
+    toeic_review_parser.set_defaults(func=_cmd_toeic_review)
 
     status = subparsers.add_parser("status", help="DBの件数を見る")
     status.set_defaults(func=_cmd_status)

@@ -1,0 +1,152 @@
+"""間違えたTOEIC問題を1枚の復習ノートに集約する。
+
+出題はドメインごとに別スクリプト（part5/part7/listening/vocab）で動くが、試験前に
+見返す資料はドメインを跨いで1つにまとめたい。ここでは「今も間違えたまま」（同じ
+review_id の最新試行が不正解）のものだけを拾う。一度マスターした（後で正解した）
+問題は自動的に外れる — 復習が要らなくなったものを載せ続けても資料が肥大化するだけ
+なので。
+
+生成はフルリビルド。手作業で書く部分（動画プレイリンク等の目次）と機械生成部分は
+AUTO-GENERATED マーカーで分け、リビルドのたびに後者だけ差し替える。
+"""
+
+from __future__ import annotations
+
+import json
+import re
+import sqlite3
+from pathlib import Path
+
+from .notes import NotesRepositoryError, notes_home
+
+MISC_DIR = "TOEIC_MISC"
+REVIEW_FILENAME = "toeic-review.md"
+
+_BEGIN_MARKER = "<!-- AUTO-GENERATED:BEGIN -->"
+_END_MARKER = "<!-- AUTO-GENERATED:END -->"
+_MARKER_PATTERN = re.compile(re.escape(_BEGIN_MARKER) + r".*?" + re.escape(_END_MARKER), re.DOTALL)
+
+_DOMAIN_ORDER = ("grammar", "reading", "listening", "vocabulary")
+_DOMAIN_TITLES = {
+    "grammar": "Part5（文法）",
+    "reading": "Part7（読解）",
+    "listening": "リスニング",
+    "vocabulary": "語彙",
+}
+
+_DEFAULT_HEADER = """# TOEIC 復習ノート
+
+このファイル1つで、試験前の見直しが済むようにする。
+
+## 目次
+
+- 復習動画プレイリスト: <ここにYouTube再生リストのURLを貼る>
+
+## 間違えている問題（現在時点）
+
+間違えたが後で正解した問題は次回更新時に自動的に消える。まだ間違えたままのものだけが並ぶ。
+"""
+
+
+def review_path(home: Path | None = None) -> Path:
+    return (home or notes_home()) / MISC_DIR / REVIEW_FILENAME
+
+
+def fetch_wrong_items(connection: sqlite3.Connection) -> list[dict]:
+    """今も間違えたままのTOEIC問題を返す（review_id単位、最新試行が不正解のものだけ）。"""
+    rows = connection.execute(
+        """
+        SELECT a.review_id, a.domain, a.created_at, a.error_cause, a.correct, g.payload
+        FROM attempt a
+        JOIN generated_item g ON a.item_id = g.id
+        WHERE a.review_id LIKE 'toeic.%'
+        ORDER BY a.review_id, a.created_at ASC, a.id ASC
+        """
+    ).fetchall()
+
+    latest: dict[str, dict] = {}
+    for row in rows:
+        latest[row["review_id"]] = dict(row)  # 同じreview_idは後勝ち = 最新試行
+
+    wrong = [row for row in latest.values() if not row["correct"]]
+    wrong.sort(key=lambda row: row["created_at"], reverse=True)
+    return wrong
+
+
+def _choice_line(payload: dict) -> str:
+    choices = payload["choices"]
+    answer = choices[payload["answer_index"]]
+    return f"  - 選択肢: {' / '.join(choices)}\n  - 正解: {answer}"
+
+
+def _format_item(row: dict) -> str:
+    payload = json.loads(row["payload"])
+    kind = payload.get("kind")
+    header = f"- `{row['review_id']}`（誤答日: {row['created_at'][:10]}、原因: {row['error_cause'] or '-'}）"
+    lines = [header]
+
+    if kind == "grammar":
+        lines.append(f"  - 問題: {payload['sentence']}")
+        lines.append(_choice_line(payload))
+        lines.append(f"  - 論点: {payload.get('point', '-')}")
+        lines.append(f"  - 解説: {payload['explanation']}")
+    elif kind == "reading":
+        passage = payload["passage"]
+        if len(passage) > 500:
+            passage = passage[:500] + "…"
+        lines.append(f"  - パッセージ: {passage}")
+        lines.append(f"  - 設問: {payload['question']}")
+        lines.append(_choice_line(payload))
+        lines.append(f"  - 解説: {payload['explanation']}")
+    elif kind == "listening":
+        lines.append(f"  - 設問: {payload['question']}")
+        lines.append(_choice_line(payload))
+        lines.append(f"  - 解説: {payload['explanation']}")
+    elif kind == "vocab":
+        lines.append(f"  - 語: {payload['word']}")
+        lines.append(f"  - 意味: {payload['meaning']}")
+        if payload.get("example"):
+            lines.append(f"  - 例文: {payload['example']}")
+
+    return "\n".join(lines)
+
+
+def render_body(items: list[dict]) -> str:
+    if not items:
+        return "現在、間違えたまま残っている問題はありません。"
+
+    by_domain: dict[str, list[dict]] = {}
+    for item in items:
+        by_domain.setdefault(item["domain"], []).append(item)
+
+    sections = []
+    for domain in _DOMAIN_ORDER:
+        rows = by_domain.get(domain)
+        if not rows:
+            continue
+        sections.append(f"### {_DOMAIN_TITLES[domain]}（{len(rows)}問）\n\n" + "\n\n".join(_format_item(r) for r in rows))
+    return "\n\n".join(sections)
+
+
+def render_review_markdown(existing: str | None, items: list[dict]) -> str:
+    """既存ファイルの AUTO-GENERATED 区間だけを差し替える。手作業で書いた目次は触らない。"""
+    block = f"{_BEGIN_MARKER}\n\n{render_body(items)}\n\n{_END_MARKER}"
+    if existing and _MARKER_PATTERN.search(existing):
+        return _MARKER_PATTERN.sub(block, existing)
+    header = existing.rstrip("\n") + "\n\n" if existing else _DEFAULT_HEADER
+    return f"{header}\n{block}\n"
+
+
+def write_review(connection: sqlite3.Connection, home: Path | None = None) -> Path:
+    root = home or notes_home()
+    if not (root / ".git").exists():
+        raise NotesRepositoryError(
+            f"{root} が english-notes リポジトリではありません。"
+            f"別の場所を使うなら ENGLISH_NOTES_HOME を設定してください。"
+        )
+    path = root / MISC_DIR / REVIEW_FILENAME
+    path.parent.mkdir(parents=True, exist_ok=True)
+    existing = path.read_text(encoding="utf-8") if path.exists() else None
+    items = fetch_wrong_items(connection)
+    path.write_text(render_review_markdown(existing, items), encoding="utf-8")
+    return path
