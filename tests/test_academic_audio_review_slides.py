@@ -5,7 +5,7 @@ import json
 import pytest
 
 from academic_audio.engines import WavEngine
-from academic_audio.review_slides import ReviewSlideError, build_slides
+from academic_audio.review_slides import _SLIDE_TAIL_SECONDS, ReviewSlideError, build_slides
 
 ROW = {
     "review_id": "toeic.part5.20260810.0005",
@@ -66,6 +66,14 @@ def test_japanese_captions_reuse_the_db_explanation_not_authored_text(audio_dir)
     answer = slides[1]
     ja_text = "".join(cue["text"] for cue in answer["captionsJa"])
     assert "regardlessです" in ja_text
+
+
+def test_a_pause_is_added_after_the_audio_ends_before_the_next_slide(audio_dir):
+    """音声終了直後に次のスライドへ切り替わるとテンポが速すぎるという指摘への対応。"""
+    slides = build_slides([ROW], CONTENT, audio_dir, WavEngine())
+    for slide in slides:
+        last_cue_end = max(cue["end"] for cues in (slide["captionsEn"], slide["captionsJa"]) for cue in cues)
+        assert slide["durationSeconds"] >= last_cue_end + _SLIDE_TAIL_SECONDS - 1e-6
 
 
 def test_captions_do_not_overlap_in_time(audio_dir):

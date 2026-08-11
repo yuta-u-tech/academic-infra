@@ -25,6 +25,10 @@ _LETTERS = "ABCD"
 _EN_SENTENCE_SPLIT = re.compile(r"(?<=[.!?]) ")
 _JA_SENTENCE_SPLIT = re.compile(r"(?<=。)")
 _SLIDE_GAP_SECONDS = 0.6
+# スライドの音声が終わってから次のスライドへ切り替わるまでの無音の間。
+# 音声が終わった瞬間に次に切り替わるとテンポが速すぎるという指摘を受けて追加
+# （字幕を読み終える余韻・次の問題への切り替わりを意識させる間）。
+_SLIDE_TAIL_SECONDS = 3.0
 
 
 class ReviewSlideError(ValueError):
@@ -115,8 +119,8 @@ def build_slides(
         slide2_wav = audio_dir / f"{review_id}.slide2.wav"
         concatenate_wav([(a_wav, _SLIDE_GAP_SECONDS), (r_wav, 0.0)], slide2_wav)
 
-        slide1_duration = q_dur + _SLIDE_GAP_SECONDS + c_dur
-        slide2_duration = a_dur + _SLIDE_GAP_SECONDS + r_dur
+        slide1_duration = q_dur + _SLIDE_GAP_SECONDS + c_dur + _SLIDE_TAIL_SECONDS
+        slide2_duration = a_dur + _SLIDE_GAP_SECONDS + r_dur + _SLIDE_TAIL_SECONDS
         choices_start = q_dur + _SLIDE_GAP_SECONDS
         reason_start = a_dur + _SLIDE_GAP_SECONDS
 
@@ -131,13 +135,17 @@ def build_slides(
                 "durationSeconds": round(slide1_duration, 3),
                 "captionsEn": [
                     {"start": 0, "end": round(q_dur, 3), "text": question_text_en},
-                    {"start": round(choices_start, 3), "end": round(slide1_duration, 3), "text": choice_text_en},
+                    {
+                        "start": round(choices_start, 3),
+                        "end": round(choices_start + c_dur, 3),
+                        "text": choice_text_en,
+                    },
                 ],
                 "captionsJa": [
                     {"start": 0, "end": round(q_dur, 3), "text": content["question_ja"]},
                     {
                         "start": round(choices_start, 3),
-                        "end": round(slide1_duration, 3),
+                        "end": round(choices_start + c_dur, 3),
                         "text": content["choices_ja"],
                     },
                 ],
