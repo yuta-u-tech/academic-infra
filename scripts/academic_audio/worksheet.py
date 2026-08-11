@@ -110,6 +110,8 @@ def render_tex(
                 + marker + escape(choice.text)
             )
         lines.append(r"    \par\medskip\noindent " + escape(item.explanation))
+        if item.pronunciation_note:
+            lines.append(r"    \par\noindent\textit{発音: " + escape(item.pronunciation_note) + "}")
     lines.append(r"\end{enumerate}")
     lines.append(r"\end{document}")
     return "\n".join(lines) + "\n"
@@ -176,6 +178,8 @@ def render_passage_tex(
                     + marker + escape(choice)
                 )
             lines.append(r"    \par\medskip\noindent " + escape(question.explanation))
+            if question.pronunciation_note:
+                lines.append(r"    \par\noindent\textit{発音: " + escape(question.pronunciation_note) + "}")
         lines.append(r"\end{enumerate}")
     lines.append(r"\end{document}")
     return "\n".join(lines) + "\n"

@@ -129,6 +129,24 @@ def test_import_toeic_listening_passage_creates_one_review_id_per_question(db, t
     }
 
 
+def test_import_toeic_listening_carries_the_pronunciation_note_into_the_payload(db, tmp_path):
+    import json
+
+    from academic_audio.formats import load_format
+
+    result_path = _part2_result_path(tmp_path)
+    data = json.loads(result_path.read_text(encoding="utf-8"))
+    data["items"][0]["pronunciation_note"] = "checking the がつながる。"
+    result_path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+
+    listening_set = load_result(result_path, load_format("toeic-part2"))
+    import_toeic_listening(db, "20260810", listening_set, "part2")
+
+    row = db.execute("SELECT payload FROM generated_item WHERE kind = 'listening'").fetchone()
+    payload = json.loads(row["payload"])
+    assert payload["pronunciation_note"] == "checking the がつながる。"
+
+
 def test_record_form_response_works_for_listening_items(db, tmp_path):
     """toeic_forms経由の record が listening にもそのまま使えることを確認する
     （kind非依存に設計されているため、追加のコード変更は不要）。

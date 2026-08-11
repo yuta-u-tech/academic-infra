@@ -160,6 +160,36 @@ def test_passage_answers_never_include_choice_text_from_the_passage(tmp_path: Pa
     assert answers["items"][0]["questions"][0]["answer_label"] == "B"
 
 
+def test_pronunciation_note_is_optional_and_defaults_to_empty(tmp_path: Path, part3: ListeningFormat) -> None:
+    passage_set = load_passage_result(_write(tmp_path, _part3_result()), part3)
+
+    assert passage_set.items[0].questions[0].pronunciation_note == ""
+
+
+def test_pronunciation_note_round_trips_into_answers_json(tmp_path: Path, part3: ListeningFormat) -> None:
+    data = _part3_result()
+    data["items"][0]["questions"][0]["pronunciation_note"] = "threw away は /θruː‿əˈweɪ/ とつながる。"
+
+    passage_set = load_passage_result(_write(tmp_path, data), part3)
+    answers = passage_to_answers(passage_set)
+
+    assert passage_set.items[0].questions[0].pronunciation_note == "threw away は /θruː‿əˈweɪ/ とつながる。"
+    assert answers["items"][0]["questions"][0]["pronunciation_note"] == "threw away は /θruː‿əˈweɪ/ とつながる。"
+    assert answers["items"][0]["questions"][1]["pronunciation_note"] == ""
+
+
+def test_passage_worksheet_prints_the_pronunciation_note_in_the_answer_section(
+    tmp_path: Path, part3: ListeningFormat
+) -> None:
+    data = _part3_result()
+    data["items"][0]["questions"][0]["pronunciation_note"] = "went out がつながる。"
+    passage_set = load_passage_result(_write(tmp_path, data), part3)
+
+    tex = render_passage_tex(passage_set, part3)
+
+    assert r"発音: went out がつながる。" in tex
+
+
 def test_passage_worksheet_hides_the_transcript_from_the_question_page(tmp_path: Path, part3: ListeningFormat) -> None:
     passage_set = load_passage_result(_write(tmp_path, _part3_result()), part3)
     tex = render_passage_tex(passage_set, part3)

@@ -35,6 +35,11 @@ class ListeningItem:
     answer_index: int | None
     explanation: str
     reason: str
+    # 聞き取りの難所(リンキング・リダクション・脱落等)の解説。explanationの文中に
+    # 埋め込ませると復習動画・DBから構造化して取り出せないので、別フィールドに分ける
+    # (2026-08-12「texなどから発音部分の抽出をして、今度からjsonにも取り入れて」)。
+    # 省略可(過去のセットには無い)。
+    pronunciation_note: str = ""
 
     def parts_with_role(self, role: str) -> list[ItemPart]:
         return [part for part in self.parts if part.role == role]
@@ -108,6 +113,7 @@ def _build_item(raw: Any, index: int, listening_format: ListeningFormat) -> List
         answer_index=answer_index,
         explanation=str(raw["explanation"]).strip(),
         reason=str(raw.get("reason", "")).strip(),
+        pronunciation_note=str(raw.get("pronunciation_note", "")).strip(),
     )
 
 
@@ -250,6 +256,7 @@ def to_answers(listening_set: ListeningSet) -> dict[str, Any]:
                     else None
                 ),
                 "explanation": item.explanation,
+                "pronunciation_note": item.pronunciation_note,
                 "reason": item.reason,
             }
             for item in listening_set.items
@@ -276,6 +283,8 @@ class PassageQuestion:
     choices: list[str]
     answer_index: int
     explanation: str
+    # ListeningItem.pronunciation_note と同じ理由・同じ省略可の扱い。
+    pronunciation_note: str = ""
 
 
 @dataclass(frozen=True)
@@ -416,7 +425,11 @@ def _build_passage_question(raw: Any, where: str, q_index: int, question_slot: Q
         )
 
     return PassageQuestion(
-        text=text, choices=choices, answer_index=answer_index, explanation=str(raw["explanation"]).strip()
+        text=text,
+        choices=choices,
+        answer_index=answer_index,
+        explanation=str(raw["explanation"]).strip(),
+        pronunciation_note=str(raw.get("pronunciation_note", "")).strip(),
     )
 
 
@@ -599,6 +612,7 @@ def passage_to_answers(passage_set: PassageSet) -> dict[str, Any]:
                         "answer_label": _label(question.answer_index),
                         "answer_text": question.choices[question.answer_index],
                         "explanation": question.explanation,
+                        "pronunciation_note": question.pronunciation_note,
                     }
                     for question in item.questions
                 ],

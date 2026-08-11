@@ -141,6 +141,18 @@ def test_answers_carry_the_label_and_text(tmp_path: Path, toeic: ListeningFormat
     assert answers["items"][0]["answer_text"] == "By the end of this afternoon."
 
 
+def test_pronunciation_note_is_optional_and_round_trips(tmp_path: Path, toeic: ListeningFormat) -> None:
+    listening_set = load_result(_write(tmp_path, _result()), toeic)
+    assert listening_set.items[0].pronunciation_note == ""
+
+    data = _result(pronunciation_note="finish checking は /ˈfɪnɪʃ‿ˈtʃɛkɪŋ/ とつながる。")
+    listening_set = load_result(_write(tmp_path, data), toeic)
+    answers = to_answers(listening_set)
+
+    assert listening_set.items[0].pronunciation_note == "finish checking は /ˈfɪnɪʃ‿ˈtʃɛkɪŋ/ とつながる。"
+    assert answers["items"][0]["pronunciation_note"] == "finish checking は /ˈfɪnɪʃ‿ˈtʃɛkɪŋ/ とつながる。"
+
+
 def test_worksheet_keeps_the_question_page_blank_like_the_real_exam(
     tmp_path: Path, toeic: ListeningFormat
 ) -> None:
@@ -152,6 +164,15 @@ def test_worksheet_keeps_the_question_page_blank_like_the_real_exam(
     assert "When will you finish checking" in answers
     assert "By the end of this afternoon." not in questions
     assert "By the end of this afternoon." in answers
+
+
+def test_worksheet_prints_the_pronunciation_note_in_the_answer_section(
+    tmp_path: Path, toeic: ListeningFormat
+) -> None:
+    data = _result(pronunciation_note="finish checking がつながる。")
+    tex = render_tex(load_result(_write(tmp_path, data), toeic), toeic)
+
+    assert r"発音: finish checking がつながる。" in tex
 
 
 def test_latex_special_characters_are_escaped() -> None:

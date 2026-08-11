@@ -89,6 +89,10 @@ class ListeningItem(_Strict):
     choices: list[str] = Field(min_length=2, max_length=6)
     answer_index: int = Field(ge=0)
     explanation: str = Field(min_length=1, max_length=2000)
+    # 聞き取りの難所(リンキング・リダクション等)の解説。academic_audio側の
+    # PassageQuestion/ListeningItem.pronunciation_note をそのまま持ち込む。
+    # 過去に取り込んだセットには無いので省略可。
+    pronunciation_note: str | None = Field(default=None, max_length=1000)
 
     @model_validator(mode="after")
     def _answer_in_range(self) -> "ListeningItem":

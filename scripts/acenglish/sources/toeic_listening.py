@@ -49,6 +49,7 @@ def iter_materials(
             choices=choices,
             answer_index=item.answer_index,
             explanation=item.explanation,
+            pronunciation_note=item.pronunciation_note or None,
         )
         yield material, listening_item
 
@@ -75,6 +76,7 @@ def iter_materials_passage(
                 choices=question.choices,
                 answer_index=question.answer_index,
                 explanation=question.explanation,
+                pronunciation_note=question.pronunciation_note or None,
             )
             yield material, listening_item
 
