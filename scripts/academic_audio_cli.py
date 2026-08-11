@@ -57,6 +57,7 @@ from academic_audio.planner import create_dialogue  # noqa: E402
 from academic_audio.publications import read_publication  # noqa: E402
 from academic_audio.publisher import DEFAULT_VISIBILITY, LocalPublisher, PublishError, YouTubePublisher  # noqa: E402
 from academic_audio.renderer import render_script  # noqa: E402
+from academic_audio.review_script import ReviewItemError, build_review_script  # noqa: E402
 from academic_audio.source import AudioSourceError, resolve_source  # noqa: E402
 from academic_audio import vocab  # noqa: E402
 from academic_audio.vocab import VocabFetchError  # noqa: E402
@@ -632,6 +633,20 @@ def _cmd_render(args: argparse.Namespace) -> int:
     return 0 if job.status == "completed" else 2
 
 
+def _cmd_review_script(args: argparse.Namespace) -> int:
+    """間違えたTOEIC問題(reason付き)のJSONから復習動画の台本(dialogue.json)を書き出す。
+
+    reasonは`acenglish_cli.py toeic-review`が拾う誤答データに、Claudeが1問ずつ
+    短い英語の説明を足したもの。台本の組み立て自体は決定論的（review_script.py）。
+    """
+    items = json.loads(args.file.read_text(encoding="utf-8"))
+    script = build_review_script(args.title, args.source_id, items)
+    out_dir = args.out_dir or job_path(_state_dir(args), new_job_id(script.source_id))
+    json_path, md_path = script.write(out_dir)
+    print(json.dumps({"dialogue_json": str(json_path), "dialogue_md": str(md_path)}, ensure_ascii=False, indent=2))
+    return 0
+
+
 def _cmd_job_status(args: argparse.Namespace) -> int:
     job = read_job(_state_dir(args), args.job_id)
     print(json.dumps(job.to_json_dict(), ensure_ascii=False, indent=2))
@@ -701,6 +716,15 @@ def main() -> int:
     render.add_argument("--job-id")
     render.add_argument("--force", action="store_true")
     render.set_defaults(func=_cmd_render)
+
+    review_script = subparsers.add_parser(
+        "review-script", help="間違えたTOEIC問題(reason付きJSON)から復習動画の台本を書く"
+    )
+    review_script.add_argument("--file", type=Path, required=True, help="[{review_id,sentence,choices,answer_index,reason}] のJSON")
+    review_script.add_argument("--title", required=True)
+    review_script.add_argument("--source-id", required=True)
+    review_script.add_argument("--out-dir", type=Path)
+    review_script.set_defaults(func=_cmd_review_script)
 
     job = subparsers.add_parser("job", help="ジョブ操作")
     job_sub = job.add_subparsers(dest="job_command", required=True)
