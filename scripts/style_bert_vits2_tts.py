@@ -102,13 +102,39 @@ class Renderer:
         self._models[voice] = model
         return model
 
-    def render(self, *, text: str, speaker: str, emotion: str, speed: float) -> bytes:
+    def render(
+        self,
+        *,
+        text: str,
+        speaker: str,
+        emotion: str,
+        speed: float,
+        sdp_ratio: float = 0.2,
+        noise: float = 0.6,
+        noise_w: float = 0.8,
+        intonation_scale: float = 1.0,
+    ) -> bytes:
         voice = self.voice_map.get(speaker, DEFAULT_VOICE_MAP["host"])
         model = self._model(voice)
         style = _resolve_style(model, emotion)
         # Style-Bert-VITS2 は長さ倍率で受け取るため、speed の逆数を渡す。
         length = 1.0 / speed if speed > 0 else 1.0
-        sample_rate, audio = model.infer(text=text, style=style, length=length)
+        # sdp_ratio/noise/noise_w drive the stochastic duration/pitch
+        # predictor and intonation_scale scales pitch range — all default
+        # to Style-Bert-VITS2's own defaults (unchanged behavior for any
+        # caller that doesn't pass them, e.g. academic_audio's host/learner
+        # dialogue, which wants expressive delivery). A caller that wants
+        # flatter, more even-toned narration passes lower noise/noise_w and
+        # a lower intonation_scale.
+        sample_rate, audio = model.infer(
+            text=text,
+            style=style,
+            length=length,
+            sdp_ratio=sdp_ratio,
+            noise=noise,
+            noise_w=noise_w,
+            intonation_scale=intonation_scale,
+        )
         return _to_wav_bytes(audio, sample_rate)
 
 
@@ -138,7 +164,16 @@ def _cmd_download(args: argparse.Namespace) -> int:
 
 def _cmd_render(args: argparse.Namespace) -> int:
     renderer = Renderer(args.models_dir, parse_voice_map(args.voice_map), device=args.device)
-    payload = renderer.render(text=args.text, speaker=args.speaker, emotion=args.emotion, speed=args.speed)
+    payload = renderer.render(
+        text=args.text,
+        speaker=args.speaker,
+        emotion=args.emotion,
+        speed=args.speed,
+        sdp_ratio=args.sdp_ratio,
+        noise=args.noise,
+        noise_w=args.noise_w,
+        intonation_scale=args.intonation_scale,
+    )
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_bytes(payload)
     return 0
@@ -157,6 +192,10 @@ def _cmd_serve(args: argparse.Namespace) -> int:
                     speaker=request.get("speaker", "host"),
                     emotion=request.get("emotion", "neutral"),
                     speed=float(request.get("speed", 1.0)),
+                    sdp_ratio=float(request.get("sdp_ratio", 0.2)),
+                    noise=float(request.get("noise", 0.6)),
+                    noise_w=float(request.get("noise_w", 0.8)),
+                    intonation_scale=float(request.get("intonation_scale", 1.0)),
                 )
             except (KeyError, ValueError, StyleBertVITS2Error) as error:
                 body = json.dumps({"error": str(error)}, ensure_ascii=False).encode("utf-8")
@@ -202,6 +241,10 @@ def main() -> int:
     render.add_argument("--speaker", default="host")
     render.add_argument("--emotion", default="neutral")
     render.add_argument("--speed", type=float, default=1.0)
+    render.add_argument("--sdp-ratio", type=float, default=0.2)
+    render.add_argument("--noise", type=float, default=0.6)
+    render.add_argument("--noise-w", type=float, default=0.8)
+    render.add_argument("--intonation-scale", type=float, default=1.0)
     render.set_defaults(func=_cmd_render)
 
     serve = subparsers.add_parser("serve", help="WAV を返す HTTP エンドポイントを常駐させる")
