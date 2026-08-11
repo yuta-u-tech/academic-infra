@@ -178,6 +178,19 @@ def test_render_tex_with_no_wrong_items_still_produces_a_document():
     assert "現在、間違えたまま残っている問題はありません" in tex
 
 
+def test_the_playlist_link_is_embedded_in_the_pdf_itself():
+    """別ファイルの目次に書くだけでは、読んでいる解説から動画へ辿れない。"""
+    url = "https://www.youtube.com/playlist?list=PLLRq7EqIBBIA"
+    tex = toeic_review.render_tex([], playlist_url=url)
+    assert r"\href{" + url + "}" in tex
+
+
+def test_no_playlist_url_means_no_broken_link():
+    tex = toeic_review.render_tex([], playlist_url=None)
+    assert r"\href{}" not in tex
+    assert "復習動画プレイリスト" not in tex
+
+
 def test_render_tex_includes_the_question_and_answer(db):
     _answer(db, PART5, _grammar_result(), ["1"])
     items = toeic_review.fetch_wrong_items(db)

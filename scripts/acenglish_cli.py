@@ -231,7 +231,7 @@ def _cmd_toeic_review(args: argparse.Namespace) -> int:
         path = toeic_review.write_review(connection, args.notes_home)
         print(f"TOEIC復習ノートを更新: {path}")
         if args.pdf_out:
-            pdf_path = toeic_review.write_pdf(connection, args.pdf_out)
+            pdf_path = toeic_review.write_pdf(connection, args.pdf_out, args.playlist_url)
             print(f"TOEIC復習PDFを更新: {pdf_path}")
             print(
                 "Driveへ反映(常に同じファイル名で上書き): "
@@ -320,6 +320,7 @@ def main() -> int:
     )
     toeic_review_parser.add_argument("--notes-home", type=Path, help="既定: ~/english-notes")
     toeic_review_parser.add_argument("--pdf-out", type=Path, help="指定すると同じ内容のPDF(toeic-review.pdf)もここに書く")
+    toeic_review_parser.add_argument("--playlist-url", help="復習動画プレイリストのURL。PDF本文の先頭に埋め込む（--pdf-out指定時のみ有効）")
     toeic_review_parser.set_defaults(func=_cmd_toeic_review)
 
     status = subparsers.add_parser("status", help="DBの件数を見る")

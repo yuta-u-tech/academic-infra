@@ -159,9 +159,19 @@ _PDF_PREAMBLE = r"""\documentclass[a4paper,11pt]{ltjsarticle}
 \usepackage{luatexja}
 \usepackage[margin=25mm]{geometry}
 \usepackage{enumitem}
+\usepackage{hyperref}
+\hypersetup{hidelinks}
 \setlist[enumerate]{itemsep=6pt,topsep=4pt}
 \renewcommand{\thesection}{}
 """
+
+
+def _playlist_line(playlist_url: str | None) -> list[str]:
+    if not playlist_url:
+        return []
+    # 冊子(worksheet.py)のForm/YouTube埋め込みと同じ考え方。別ファイルに書くだけでは
+    # 「今読んでいる解説」から動画へ辿れないので、PDF本文の先頭に必ず埋め込む。
+    return [r"\par\noindent\textbf{復習動画プレイリスト:} \href{" + playlist_url + r"}{YouTubeで見る}", ""]
 
 
 def _tex_choice_lines(payload: dict, escape) -> list[str]:
@@ -205,10 +215,13 @@ def _tex_item(row: dict, escape) -> list[str]:
     return lines
 
 
-def render_tex(items: list[dict]) -> str:
+def render_tex(items: list[dict], playlist_url: str | None = None) -> str:
     from academic_audio.worksheet import escape
 
-    lines = [_PDF_PREAMBLE, r"\title{" + escape(PDF_TITLE) + "}", r"\date{}", r"\begin{document}", r"\maketitle"]
+    lines = [
+        _PDF_PREAMBLE, r"\title{" + escape(PDF_TITLE) + "}", r"\date{}", r"\begin{document}", r"\maketitle",
+        *_playlist_line(playlist_url),
+    ]
 
     if not items:
         lines.append(escape("現在、間違えたまま残っている問題はありません。"))
@@ -233,14 +246,16 @@ def render_tex(items: list[dict]) -> str:
     return "\n".join(lines) + "\n"
 
 
-def write_pdf(connection: sqlite3.Connection, out_dir: Path) -> Path:
+def write_pdf(connection: sqlite3.Connection, out_dir: Path, playlist_url: str | None = None) -> Path:
     """PDFは常に同じファイル名(`toeic-review.pdf`)で書く。呼び出し側がDriveへ同名で
     publishすれば、既存ファイルが更新される（日付付き名にすると毎回別ファイルになる）。
+    `playlist_url` を渡すと、PDF本文の先頭にその場でリンクを埋め込む（別ファイルの
+    目次に書くだけでは、読んでいる解説から動画へ辿れないため）。
     """
     from academic_audio.worksheet import build_pdf
 
     out_dir.mkdir(parents=True, exist_ok=True)
     items = fetch_wrong_items(connection)
     tex_path = out_dir / PDF_FILENAME.replace(".pdf", ".tex")
-    tex_path.write_text(render_tex(items), encoding="utf-8")
+    tex_path.write_text(render_tex(items, playlist_url), encoding="utf-8")
     return build_pdf(tex_path)
