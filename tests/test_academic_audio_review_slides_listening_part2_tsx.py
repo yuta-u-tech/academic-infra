@@ -21,6 +21,7 @@ EXPLANATION_SLIDE = {
     "reviewId": "toeic.listening.part2.20260809.0001",
     "index": 1,
     "answerLabel": "A",
+    "points": [{"label": "A", "text": "matches the When question"}],
     "soundPath": "/home/user/academic-infra/.academic-audio/jobs/x/slide2.wav",
     "durationSeconds": 10.0,
     "captionsEn": [{"start": 0, "end": 5, "text": "The answer is A."}],
@@ -59,7 +60,9 @@ def test_no_shadowing_type_is_defined(tmp_path):
     assert "ShadowingScene" not in tsx
 
 
-def test_the_layout_anchors_content_to_the_top_to_avoid_caption_overlap(tmp_path):
-    """2026-08-12: 中央寄せだと選択肢が下端の字幕帯と重なった指摘への対応。"""
+def test_the_layout_matches_the_approved_part5_base(tmp_path):
+    """2026-08-12: Part5(review_slides_tsx.py)と同じcenter + 均等paddingの
+    土台を使う。独自レイアウトを考えるのではなく承認済みのものを踏襲する。"""
     tsx = render_project_tsx(ALL_SLIDES, framescript_root=tmp_path)
-    assert 'justifyContent: "flex-start"' in tsx
+    assert 'justifyContent: "center"' in tsx
+    assert "padding: 80" in tsx

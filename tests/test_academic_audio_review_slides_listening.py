@@ -54,7 +54,18 @@ CONTENT = {
             "話者が話し合っている問題は何ですか。",
             "この会話はどこで行われていますか。",
         ],
+        "points": [
+            [
+                {"label": "A", "text": "Wrong labels were printed, matching the opening line directly."},
+                {"label": "B", "text": "Printer trouble is mentioned, but the fault was an old template, not a breakdown."},
+            ],
+            [
+                {"label": "C", "text": "Packing area and shipping records point to a shipping facility."},
+                {"label": "A", "text": "Printer wording is a sound-alike distractor, not a print shop."},
+            ],
+        ],
         "pronunciation_intro_en": "Notice how these phrases link together in fast speech.",
+        "pronunciation_intro_ja": "これらのフレーズがつながる様子に注目しましょう。",
         "pronunciation_points": [
             {"phrase": "went out", "note_en": "went out links into one sound, like wen-tout.", "note_ja": "went out は t が次の母音とつながり「ウェンタウト」のように聞こえます。"},
         ],
@@ -109,6 +120,14 @@ def test_each_explanation_slide_reveals_its_own_answer(audio_dir):
     a1, a2 = slides[1], slides[3]
     assert a1["answerLabel"] == "A"
     assert a2["answerLabel"] == "C"
+
+
+def test_each_explanation_slide_carries_its_own_structured_points(audio_dir):
+    """答えの文字だけでは粒度が低いという指摘(2026-08-12)への対応。"""
+    slides = build_slides_listening([PASSAGE], CONTENT, audio_dir, WavEngine())
+    a1, a2 = slides[1], slides[3]
+    assert a1["points"] == CONTENT[PASSAGE["passageId"]]["points"][0]
+    assert a2["points"] == CONTENT[PASSAGE["passageId"]]["points"][1]
 
 
 def test_explanation_captions_are_split_into_short_sentence_cues_not_one_giant_block(audio_dir):
@@ -174,6 +193,12 @@ def test_reason_en_count_must_match_question_count(audio_dir):
 def test_question_ja_count_must_match_question_count(audio_dir):
     broken = {PASSAGE["passageId"]: {**CONTENT[PASSAGE["passageId"]], "question_ja": ["only one"]}}
     with pytest.raises(ReviewSlideError, match="question_ja"):
+        build_slides_listening([PASSAGE], broken, audio_dir, WavEngine())
+
+
+def test_points_count_must_match_question_count(audio_dir):
+    broken = {PASSAGE["passageId"]: {**CONTENT[PASSAGE["passageId"]], "points": [[{"label": "A", "text": "x"}]]}}
+    with pytest.raises(ReviewSlideError, match="points"):
         build_slides_listening([PASSAGE], broken, audio_dir, WavEngine())
 
 

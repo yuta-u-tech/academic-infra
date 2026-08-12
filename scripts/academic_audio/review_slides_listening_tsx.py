@@ -4,9 +4,12 @@ Part5(review_slides_tsx.py)とはScene構成が違う(質問/解説/発音/シ�
 4種)ので別ファイルにするが、土台(配色・Motion/Glass/Background/DualCaptions)は
 `_review_slides_tsx_shared.py` を共有する。
 
-2026-08-12: 3問+選択肢を1枚に全部乗せた最初のプロトタイプは字幕と重なるほど
-密度過多だった(視聴後の指摘)。1問=1枚に割った上で、レイアウトも画面中央寄せから
-上寄せ(flex-start)に変え、コンテンツが下端の字幕帯に伸びていかないようにした。
+2026-08-12: 独自に「上寄せ+下部に大きい余白」というレイアウトを考えたが、
+4択の質問スライドが画面下端からはみ出して見切れた。承認済みのPart5
+(review_slides_tsx.py の QuestionScene)を見直すと、はみ出さない理由は単純で、
+選択肢を1列に積まず「2x2グリッド」で並べて縦の高さを半分にした上で、
+`justifyContent: "center"` + 均等パディング(80px)にしているだけだった。
+その実物のレイアウトをそのまま踏襲する(独自の安全マージン計算はしない)。
 """
 
 from __future__ import annotations
@@ -43,6 +46,7 @@ type ExplanationSlide = {
   questionNumber: number
   totalQuestions: number
   answerLabel: string
+  points: { label: string; text: string }[]
   soundPath: string
   durationSeconds: number
   captionsEn: CaptionCue[]
@@ -75,17 +79,18 @@ type Slide = QuestionSlide | ExplanationSlide | PronunciationSlide | ShadowingSl
 
 const partLabel = (passageId: string) => (passageId.includes(".part4.") ? "Part 4" : "Part 3")
 
-// 字幕帯(DualCaptions)は画面下部に重なって表示されるため、本文は上寄せにして
-// 下に十分な余白を残す(2026-08-12: 中央寄せだと選択肢や解説が字幕と重なった)。
+// Part5のQuestionScene/AnswerSceneと同じ土台(center + 均等padding: 80)。
 const SlideFrame = ({
   index, total, children,
 }: { index: number; total: number; children: React.ReactNode }) => (
-  <FillFrame style={{ alignItems: "center", justifyContent: "flex-start", padding: "150px 100px 320px" }}>
+  <FillFrame style={{ alignItems: "center", justifyContent: "center", padding: 80 }}>
     <Background index={index} total={total} />
     {children}
   </FillFrame>
 )
 
+// 選択肢は1列に積まず2x2グリッドで並べる(Part5と同じ)。1列に積むと高さが
+// 画面をはみ出す(2026-08-12に実際に見切れた)。
 const QuestionScene = ({ slide, index, total }: { slide: QuestionSlide; index: number; total: number }) => (
   <SlideFrame index={index} total={total}>
     <div style={{ width: "100%", maxWidth: 1500 }}>
@@ -95,16 +100,16 @@ const QuestionScene = ({ slide, index, total }: { slide: QuestionSlide; index: n
         />
       </Motion>
       <Motion delay={0.14} y={22}>
-        <div style={{ marginTop: 30, fontSize: 42, fontWeight: 800, color: INK, lineHeight: 1.4 }}>
+        <div style={{ marginTop: 30, fontSize: 34, fontWeight: 800, color: INK, lineHeight: 1.35 }}>
           {slide.question}
         </div>
       </Motion>
-      <div style={{ marginTop: 44, display: "flex", flexDirection: "column", gap: 14 }}>
+      <div style={{ marginTop: 40, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
         {slide.choices.map((choice, i) => (
-          <Motion key={choice} delay={0.24 + i * 0.08} y={18}>
-            <Glass style={{ padding: "18px 26px", display: "flex", gap: 16 }}>
-              <span style={{ fontSize: 26, fontWeight: 800, color: ACCENT }}>{"ABCD"[i]}.</span>
-              <span style={{ fontSize: 24, fontWeight: 700, color: INK }}>{choice}</span>
+          <Motion key={choice} delay={0.22 + i * 0.06} y={18}>
+            <Glass style={{ padding: "18px 22px", display: "flex", gap: 14 }}>
+              <span style={{ fontSize: 22, fontWeight: 800, color: ACCENT }}>{"ABCD"[i]}.</span>
+              <span style={{ fontSize: 21, fontWeight: 700, color: INK, lineHeight: 1.3 }}>{choice}</span>
             </Glass>
           </Motion>
         ))}
@@ -115,19 +120,41 @@ const QuestionScene = ({ slide, index, total }: { slide: QuestionSlide; index: n
   </SlideFrame>
 )
 
-// 解説の全文はここには置かない。長い解説を1枚に載せると必ずはみ出す
-// (2026-08-12の指摘)ので、詳細は下の字幕(文単位に分割済み)に任せる。
+// 答えの文字だけでは解説として粒度が低いという指摘(2026-08-12)への対応。
+// Part5のAnswerPointと同じ構造化された短い要点を並べる(正解の理由だけでなく
+// 他の選択肢がなぜ違うかも含める)。全文の解説そのものは下の字幕(文単位に分割済み)。
+const ExplanationPoint = ({ label, text, delay }: { label: string; text: string; delay: number }) => (
+  <Motion delay={delay} y={16}>
+    <Glass style={{ padding: "16px 22px", display: "flex", gap: 16, alignItems: "flex-start" }}>
+      <div
+        style={{
+          flexShrink: 0, width: 34, height: 34, borderRadius: 999, background: ACCENT_SOFT, color: ACCENT,
+          fontSize: 16, fontWeight: 800, display: "flex", alignItems: "center", justifyContent: "center",
+        }}
+      >
+        {label}
+      </div>
+      <div style={{ fontSize: 20, lineHeight: 1.4, color: INK, fontWeight: 600 }}>{text}</div>
+    </Glass>
+  </Motion>
+)
+
 const ExplanationScene = ({ slide, index, total }: { slide: ExplanationSlide; index: number; total: number }) => (
   <SlideFrame index={index} total={total}>
     <div style={{ width: "100%", maxWidth: 1500 }}>
       <Motion delay={0.05} y={16}>
         <Kicker text={`解説 — Q${slide.questionNumber} of ${slide.totalQuestions}`} />
       </Motion>
-      <Motion delay={0.14} y={20}>
-        <div style={{ marginTop: 26, fontSize: 88, fontWeight: 900, color: ACCENT, letterSpacing: -1 }}>
-          {slide.answerLabel}
+      <Motion delay={0.12} y={20}>
+        <div style={{ marginTop: 20, fontSize: 44, fontWeight: 900, color: ACCENT, letterSpacing: -1 }}>
+          正解: {slide.answerLabel}
         </div>
       </Motion>
+      <div style={{ marginTop: 20, display: "flex", flexDirection: "column", gap: 10 }}>
+        {slide.points.map((point, i) => (
+          <ExplanationPoint key={point.label + i} delay={0.2 + i * 0.08} label={point.label} text={point.text} />
+        ))}
+      </div>
     </div>
     <Sound sound={slide.soundPath} />
     <DualCaptions en={slide.captionsEn} ja={slide.captionsJa} />
@@ -172,12 +199,12 @@ const ShadowingScene = ({ slide, index, total }: { slide: ShadowingSlide; index:
         <Motion delay={0.05} y={16}>
           <Kicker text="シャドーイング" />
         </Motion>
-        <Glass style={{ marginTop: 22, padding: "26px 32px", display: "flex", flexDirection: "column", gap: 14 }}>
+        <Glass style={{ marginTop: 22, padding: "24px 30px", display: "flex", flexDirection: "column", gap: 12 }}>
           {slide.transcript.map((line, i) => (
             <div
               key={i}
               style={{
-                display: "flex", gap: 14, fontSize: 24, lineHeight: 1.5,
+                display: "flex", gap: 14, fontSize: 21, lineHeight: 1.4,
                 color: i === activeLine ? INK : MUTED,
                 fontWeight: i === activeLine ? 800 : 600,
                 opacity: i === activeLine ? 1 : 0.55,

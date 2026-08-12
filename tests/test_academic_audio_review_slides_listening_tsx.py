@@ -26,6 +26,7 @@ EXPLANATION_SLIDE = {
     "questionNumber": 1,
     "totalQuestions": 2,
     "answerLabel": "A",
+    "points": [{"label": "A", "text": "matches the opening line"}],
     "soundPath": "/home/user/academic-infra/.academic-audio/jobs/x/a1.wav",
     "durationSeconds": 10.0,
     "captionsEn": [{"start": 0, "end": 5, "text": "The answer is A."}],
@@ -83,7 +84,8 @@ def test_question_and_explanation_slides_carry_a_single_question_not_a_list(tmp_
     assert '"totalQuestions": 2' in tsx
 
 
-def test_the_layout_anchors_content_to_the_top_to_avoid_caption_overlap(tmp_path):
-    """2026-08-12: 中央寄せだと選択肢/解説が下端の字幕帯と重なった指摘への対応。"""
+def test_choices_are_laid_out_in_a_grid_like_part5_not_stacked_in_one_column(tmp_path):
+    """2026-08-12: 選択肢を1列に積むと4択で画面下端からはみ出した。承認済みの
+    Part5と同じ2x2グリッドに変える。"""
     tsx = render_project_tsx(ALL_SLIDES, framescript_root=tmp_path)
-    assert 'justifyContent: "flex-start"' in tsx
+    assert 'gridTemplateColumns: "1fr 1fr"' in tsx

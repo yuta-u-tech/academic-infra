@@ -36,8 +36,11 @@ _SLIDE_GAP_SECONDS = 0.6
 # review_slides.py と同じ理由(音声終了直後の切り替えはテンポが速すぎる)で揃える。
 _SLIDE_TAIL_SECONDS = 3.0
 
-_REQUIRED_CONTENT_FIELDS = ("reason_en", "question_ja", "pronunciation_intro_en", "pronunciation_points")
-_PER_QUESTION_FIELDS = ("reason_en", "question_ja")
+_REQUIRED_CONTENT_FIELDS = (
+    "reason_en", "question_ja", "points",
+    "pronunciation_intro_en", "pronunciation_intro_ja", "pronunciation_points",
+)
+_PER_QUESTION_FIELDS = ("reason_en", "question_ja", "points")
 
 
 class ReviewSlideError(ValueError):
@@ -127,8 +130,17 @@ def _question_slide(
 
 
 def _explanation_slide(
-    passage: dict, question_number: int, question: dict, reason_en: str, audio_dir: Path, engine: TTSEngine
+    passage: dict,
+    question_number: int,
+    question: dict,
+    reason_en: str,
+    points: list[dict],
+    audio_dir: Path,
+    engine: TTSEngine,
 ) -> dict:
+    """points: `[{label, text}]` — 正解の理由だけでなく他の選択肢がなぜ違うかも含めた
+    構造化された短い要点(Part5のAnswerSlide.pointsと同じ役割)。答えの文字だけを
+    大きく出すのは解説として粒度が低いという指摘(2026-08-12)への対応。"""
     passage_id = passage["passageId"]
     total = len(passage["questions"])
     letter = _LETTERS[question["answerIndex"]]
@@ -148,6 +160,7 @@ def _explanation_slide(
         "questionNumber": question_number,
         "totalQuestions": total,
         "answerLabel": letter,
+        "points": points,
         "soundPath": str(merged),
         "durationSeconds": round(total_duration, 3),
         "captionsEn": cues_en,
@@ -167,7 +180,7 @@ def _pronunciation_slide(passage: dict, content: dict, audio_dir: Path, engine: 
 
     cues_en: list[dict] = []
     cues_ja: list[dict] = []
-    texts_ja = [content.get("pronunciation_intro_ja", content["pronunciation_intro_en"])] + [
+    texts_ja = [content["pronunciation_intro_ja"]] + [
         p["note_ja"] for p in points
     ]
     cursor = 0.0
@@ -225,9 +238,11 @@ def build_slides_listening(
     (academic-english-data の dialogue.json/answers.json から呼び出し側が組み立てる)。
 
     content_by_passage_id: `{passageId: {reason_en: [設問ごとの英語ナレーション],
-    question_ja: [設問ごとの日本語訳], pronunciation_intro_en,
+    question_ja: [設問ごとの日本語訳], points: [設問ごとの [{label, text}]
+    (正解の理由だけでなく他の選択肢がなぜ違うかも含めた短い要点、画面に出す分)],
+    pronunciation_intro_en, pronunciation_intro_ja,
     pronunciation_points: [{phrase, note_en, note_ja}]}}` — Claudeが1パッセージずつ
-    書いたもの(reason_en/question_ja/pronunciationは機械的には書けない)。
+    書いたもの(reason_en/question_ja/points/pronunciationは機械的には書けない)。
 
     1パッセージにつき Q1, A1, Q2, A2, ... , Pronunciation, Shadowing の順で返す
     (設問ごとに即座に解説することでスライド1枚あたりの密度を抑える)。
@@ -243,14 +258,14 @@ def build_slides_listening(
         _validate_content(passage_id, content, len(passage["questions"]))
 
         passage_slides: list[dict] = []
-        for question_number, (question, reason_en, question_ja) in enumerate(
-            zip(passage["questions"], content["reason_en"], content["question_ja"]), start=1
+        for question_number, (question, reason_en, question_ja, points) in enumerate(
+            zip(passage["questions"], content["reason_en"], content["question_ja"], content["points"]), start=1
         ):
             passage_slides.append(
                 _question_slide(passage, question_number, question, question_ja, audio_dir, engine)
             )
             passage_slides.append(
-                _explanation_slide(passage, question_number, question, reason_en, audio_dir, engine)
+                _explanation_slide(passage, question_number, question, reason_en, points, audio_dir, engine)
             )
         passage_slides.append(_pronunciation_slide(passage, content, audio_dir, engine))
         passage_slides.append(_shadowing_slide(passage, audio_dir, engine))

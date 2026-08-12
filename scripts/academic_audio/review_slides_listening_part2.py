@@ -24,7 +24,10 @@ _LETTERS = "ABC"
 _SLIDE_GAP_SECONDS = 0.6
 _SLIDE_TAIL_SECONDS = 3.0
 
-_REQUIRED_CONTENT_FIELDS = ("reason_en", "question_ja", "pronunciation_intro_en", "pronunciation_points")
+_REQUIRED_CONTENT_FIELDS = (
+    "reason_en", "question_ja", "points",
+    "pronunciation_intro_en", "pronunciation_intro_ja", "pronunciation_points",
+)
 
 
 class ReviewSlideError(ValueError):
@@ -80,6 +83,9 @@ def _question_slide(item: dict, content: dict, audio_dir: Path, engine: TTSEngin
 
 
 def _explanation_slide(item: dict, content: dict, audio_dir: Path, engine: TTSEngine) -> dict:
+    """content["points"]: `[{label, text}]` — 正解の理由だけでなく他の選択肢が
+    なぜ違うかも含めた短い要点(Part5のAnswerSlide.pointsと同じ役割)。答えの
+    文字だけを大きく出すのは解説として粒度が低いという指摘(2026-08-12)への対応。"""
     review_id = item["reviewId"]
     letter = _LETTERS[item["answerIndex"]]
     text_en = f"The answer is {letter}. {content['reason_en']}"
@@ -94,6 +100,7 @@ def _explanation_slide(item: dict, content: dict, audio_dir: Path, engine: TTSEn
         "kind": "explanation",
         "reviewId": review_id,
         "answerLabel": letter,
+        "points": content["points"],
         "soundPath": str(merged),
         "durationSeconds": round(duration, 3),
         "captionsEn": cues_en,
@@ -105,7 +112,7 @@ def _pronunciation_slide(item: dict, content: dict, audio_dir: Path, engine: TTS
     review_id = item["reviewId"]
     points = content["pronunciation_points"]
     texts_en = [content["pronunciation_intro_en"]] + [p["note_en"] for p in points]
-    texts_ja = [content.get("pronunciation_intro_ja", content["pronunciation_intro_en"])] + [
+    texts_ja = [content["pronunciation_intro_ja"]] + [
         p["note_ja"] for p in points
     ]
     parts = [
@@ -143,7 +150,9 @@ def build_slides_listening_part2(
     """items: `{reviewId, questionEn, choices, answerIndex, explanation}` の配列
     (academic-english-data の該当Part2セットから呼び出し側が組み立てる)。
 
-    content_by_review_id: `{reviewId: {reason_en, question_ja, pronunciation_intro_en,
+    content_by_review_id: `{reviewId: {reason_en, question_ja, points: [{label, text}]
+    (正解の理由だけでなく他の選択肢がなぜ違うかも含めた短い要点、画面に出す分),
+    pronunciation_intro_en, pronunciation_intro_ja,
     pronunciation_points: [{phrase, note_en, note_ja}]}}` — Claudeが1問ずつ書いたもの。
     """
     audio_dir.mkdir(parents=True, exist_ok=True)

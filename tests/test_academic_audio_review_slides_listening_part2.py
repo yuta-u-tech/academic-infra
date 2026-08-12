@@ -32,7 +32,12 @@ CONTENT = {
     "toeic.listening.part2.20260809.0001": {
         "reason_en": "The question asks When. The reply must give a day and a time.",
         "question_ja": "部署会議はいつに変更されましたか。",
+        "points": [
+            {"label": "A", "text": "Gives a day and a time, matching the When question directly."},
+            {"label": "B", "text": "Answers a Where question, a common When/Where mix-up trap."},
+        ],
         "pronunciation_intro_en": "Notice how these phrases link together in fast speech.",
+        "pronunciation_intro_ja": "これらのフレーズがつながる様子に注目しましょう。",
         "pronunciation_points": [
             {
                 "phrase": "moved to",
@@ -74,6 +79,13 @@ def test_the_explanation_slide_reveals_the_answer_with_split_captions(audio_dir)
         assert len(cue["text"]) < 60
     joined_ja = "".join(cue["text"] for cue in explanation["captionsJa"])
     assert "正解は(A)" in joined_ja
+
+
+def test_the_explanation_slide_carries_structured_points(audio_dir):
+    """答えの文字だけでは粒度が低いという指摘(2026-08-12)への対応。"""
+    slides = build_slides_listening_part2([ITEM], CONTENT, audio_dir, WavEngine())
+    explanation = slides[1]
+    assert explanation["points"] == CONTENT[ITEM["reviewId"]]["points"]
 
 
 def test_the_pronunciation_slide_is_always_present(audio_dir):

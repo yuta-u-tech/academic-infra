@@ -1,8 +1,11 @@
 """`review_slides_listening_part2.build_slides_listening_part2()` の出力を
 project.tsx へ書く。3種のScene(質問/解説/発音)だけで、シャドーイングは無い。
 
-2026-08-12: 中央寄せレイアウトだと選択肢や解説が下端の字幕帯と重なって見えた
-(プロトタイプ視聴後の指摘)。上寄せ(flex-start)にして下に十分な余白を残す。
+2026-08-12: 承認済みのPart5(review_slides_tsx.py)と同じ土台
+(`justifyContent: "center"` + 均等padding: 80)にする。以前は独自に
+「上寄せ+下部に大きい余白」を試したが、それでも質問スライドが画面下端から
+はみ出して見切れた。Part5がはみ出さないのは選択肢の総高さがそもそも小さいから
+であって、寄せ方の問題ではなかった。
 """
 
 from __future__ import annotations
@@ -34,6 +37,7 @@ type ExplanationSlide = {
   reviewId: string
   index: number
   answerLabel: string
+  points: { label: string; text: string }[]
   soundPath: string
   durationSeconds: number
   captionsEn: CaptionCue[]
@@ -53,12 +57,11 @@ type PronunciationSlide = {
 
 type Slide = QuestionSlide | ExplanationSlide | PronunciationSlide
 
-// 字幕帯(DualCaptions)は画面下部に重なって表示されるため、本文は上寄せにして
-// 下に十分な余白を残す(2026-08-12: 中央寄せだと選択肢が字幕と重なった)。
+// Part5のQuestionScene/AnswerSceneと同じ土台(center + 均等padding: 80)。
 const SlideFrame = ({
   index, total, children,
 }: { index: number; total: number; children: React.ReactNode }) => (
-  <FillFrame style={{ alignItems: "center", justifyContent: "flex-start", padding: "150px 100px 320px" }}>
+  <FillFrame style={{ alignItems: "center", justifyContent: "center", padding: 80 }}>
     <Background index={index} total={total} />
     {children}
   </FillFrame>
@@ -71,16 +74,16 @@ const QuestionScene = ({ slide, index, total }: { slide: QuestionSlide; index: n
         <Kicker text={`TOEIC Part 2 復習 — Question ${slide.index}`} />
       </Motion>
       <Motion delay={0.14} y={22}>
-        <div style={{ marginTop: 28, fontSize: 40, fontWeight: 800, color: INK, lineHeight: 1.4 }}>
+        <div style={{ marginTop: 26, fontSize: 34, fontWeight: 800, color: INK, lineHeight: 1.35 }}>
           {slide.questionEn}
         </div>
       </Motion>
-      <div style={{ marginTop: 42, display: "flex", flexDirection: "column", gap: 14 }}>
+      <div style={{ marginTop: 32, display: "flex", flexDirection: "column", gap: 12 }}>
         {slide.choices.map((choice, i) => (
           <Motion key={choice} delay={0.24 + i * 0.08} y={18}>
-            <Glass style={{ padding: "18px 26px", display: "flex", gap: 16 }}>
-              <span style={{ fontSize: 28, fontWeight: 800, color: ACCENT }}>{"ABC"[i]}.</span>
-              <span style={{ fontSize: 26, fontWeight: 700, color: INK }}>{choice}</span>
+            <Glass style={{ padding: "16px 22px", display: "flex", gap: 14 }}>
+              <span style={{ fontSize: 22, fontWeight: 800, color: ACCENT }}>{"ABC"[i]}.</span>
+              <span style={{ fontSize: 21, fontWeight: 700, color: INK, lineHeight: 1.3 }}>{choice}</span>
             </Glass>
           </Motion>
         ))}
@@ -91,19 +94,40 @@ const QuestionScene = ({ slide, index, total }: { slide: QuestionSlide; index: n
   </SlideFrame>
 )
 
-// 解説の全文はここには置かない。長い解説を1枚に載せると必ずはみ出す
-// (2026-08-12の指摘)ので、詳細は下の字幕(文単位に分割済み)に任せる。
+// 答えの文字だけでは解説として粒度が低いという指摘(2026-08-12)への対応。
+// Part5のAnswerPointと同じ構造化された短い要点を並べる。
+const ExplanationPoint = ({ label, text, delay }: { label: string; text: string; delay: number }) => (
+  <Motion delay={delay} y={16}>
+    <Glass style={{ padding: "16px 22px", display: "flex", gap: 16, alignItems: "flex-start" }}>
+      <div
+        style={{
+          flexShrink: 0, width: 34, height: 34, borderRadius: 999, background: ACCENT_SOFT, color: ACCENT,
+          fontSize: 16, fontWeight: 800, display: "flex", alignItems: "center", justifyContent: "center",
+        }}
+      >
+        {label}
+      </div>
+      <div style={{ fontSize: 20, lineHeight: 1.4, color: INK, fontWeight: 600 }}>{text}</div>
+    </Glass>
+  </Motion>
+)
+
 const ExplanationScene = ({ slide, index, total }: { slide: ExplanationSlide; index: number; total: number }) => (
   <SlideFrame index={index} total={total}>
     <div style={{ width: "100%", maxWidth: 1450 }}>
       <Motion delay={0.05} y={16}>
         <Kicker text="Answer" />
       </Motion>
-      <Motion delay={0.14} y={20}>
-        <div style={{ marginTop: 24, fontSize: 88, fontWeight: 900, color: ACCENT, letterSpacing: -1 }}>
-          {slide.answerLabel}
+      <Motion delay={0.12} y={20}>
+        <div style={{ marginTop: 20, fontSize: 44, fontWeight: 900, color: ACCENT, letterSpacing: -1 }}>
+          正解: {slide.answerLabel}
         </div>
       </Motion>
+      <div style={{ marginTop: 20, display: "flex", flexDirection: "column", gap: 10 }}>
+        {slide.points.map((point, i) => (
+          <ExplanationPoint key={point.label + i} delay={0.2 + i * 0.08} label={point.label} text={point.text} />
+        ))}
+      </div>
     </div>
     <Sound sound={slide.soundPath} />
     <DualCaptions en={slide.captionsEn} ja={slide.captionsJa} />
