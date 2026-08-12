@@ -12,8 +12,12 @@ DBの `ListeningItem` には会話の台本(誰が何を話したか)が残っ�
 発音1枚 + シャドーイング1枚。最初は「1枚目は質問、2枚目で解説」で全設問をまとめて
 1枚に乗せていたが、3問+選択肢を1枚に全部乗せると字幕と重なるほど密度過多になった
 (2026-08-12の指摘、プロトタイプ視聴後)ため、Part5と同じく1問=1枚に割った。
-発音スライドは「該当する時だけ」ではなく毎回出す、という明示の指示に基づく。
-リンキングのアニメーション等の個別演出は別途(この器の対象外)。
+
+字幕は文単位に分割する(2026-08-12「字幕が大きくなりすぎている」の指摘への対応)。
+選択肢は画面上にカードで表示済みなので字幕には含めない(4択を1つのcueに詰めると
+必ず画面からはみ出すため)。発音スライドは「該当する時だけ」ではなく毎回出す、
+という明示の指示に基づく。リンキングのアニメーション等の個別演出は別途
+(この器の対象外)。
 """
 
 from __future__ import annotations
@@ -21,6 +25,7 @@ from __future__ import annotations
 import wave
 from pathlib import Path
 
+from ._caption_cues import EN_SENTENCE_SPLIT, JA_SENTENCE_SPLIT, sentence_cues
 from .engines import TTSEngine
 from .models import DialogueSegment
 from .pronunciation import normalize
@@ -31,7 +36,8 @@ _SLIDE_GAP_SECONDS = 0.6
 # review_slides.py と同じ理由(音声終了直後の切り替えはテンポが速すぎる)で揃える。
 _SLIDE_TAIL_SECONDS = 3.0
 
-_REQUIRED_CONTENT_FIELDS = ("reason_en", "pronunciation_intro_en", "pronunciation_points")
+_REQUIRED_CONTENT_FIELDS = ("reason_en", "question_ja", "pronunciation_intro_en", "pronunciation_points")
+_PER_QUESTION_FIELDS = ("reason_en", "question_ja")
 
 
 class ReviewSlideError(ValueError):
@@ -47,20 +53,12 @@ def _validate_content(passage_id: str, content: dict, question_count: int) -> No
     missing = [key for key in _REQUIRED_CONTENT_FIELDS if key not in content]
     if missing:
         raise ReviewSlideError(f"{passage_id} の authored content に {', '.join(missing)} がありません。")
-    if len(content["reason_en"]) != question_count:
-        raise ReviewSlideError(
-            f"{passage_id} の reason_en は設問数({question_count})と同じ数だけ必要です"
-            f"(実際: {len(content['reason_en'])})。"
-        )
-
-
-def _sequential_cues(texts: list[str], durations: list[float], gap: float = _SLIDE_GAP_SECONDS) -> list[dict]:
-    cues = []
-    cursor = 0.0
-    for text, duration in zip(texts, durations):
-        cues.append({"start": round(cursor, 3), "end": round(cursor + duration, 3), "text": text})
-        cursor += duration + gap
-    return cues
+    for field in _PER_QUESTION_FIELDS:
+        if len(content[field]) != question_count:
+            raise ReviewSlideError(
+                f"{passage_id} の {field} は設問数({question_count})と同じ数だけ必要です"
+                f"(実際: {len(content[field])})。"
+            )
 
 
 def _render_segment(engine: TTSEngine, audio_dir: Path, seg_id: str, speaker: str, text: str, language: str) -> Path:
@@ -78,25 +76,41 @@ def _merge(audio_dir: Path, name: str, parts: list[Path]) -> tuple[Path, list[fl
     return merged, durations
 
 
-def _question_slide(passage: dict, question_number: int, question: dict, audio_dir: Path, engine: TTSEngine) -> dict:
+def _question_slide(
+    passage: dict, question_number: int, question: dict, question_ja: str, audio_dir: Path, engine: TTSEngine
+) -> dict:
     """1問だけを乗せるスライド。会話全体で1度だけ話される案内文(introEn)は最初の
-    設問のスライドにだけ含める(実際のTOEICの進行と同じ)。"""
+    設問のスライドにだけ含める(実際のTOEICの進行と同じ)。選択肢は音声には含めるが
+    字幕には出さない(画面上に既にカードで出ているのに加えて4択ぶんを1つの字幕cueに
+    詰めると必ずはみ出すため)。"""
     passage_id = passage["passageId"]
     total = len(passage["questions"])
     choice_text = " ".join(f"{_LETTERS[j]}, {c}." for j, c in enumerate(question["choices"]))
-    texts_en = ([passage["introEn"]] if question_number == 1 else []) + [
-        f"Number {question_number}. {question['question']} {choice_text}"
-    ]
-    texts_ja = ([passage["introEn"]] if question_number == 1 else []) + [question["question"]]
+    question_line = f"Number {question_number}. {question['question']}"
 
+    labeled_parts = ([("intro", passage["introEn"])] if question_number == 1 else []) + [
+        ("question", question_line),
+        ("choices", choice_text),
+    ]
     parts = [
-        _render_segment(engine, audio_dir, f"{passage_id}.q{question_number}.{i}", "narrator", text, "en")
-        for i, text in enumerate(texts_en)
+        _render_segment(engine, audio_dir, f"{passage_id}.q{question_number}.{label}", "narrator", text, "en")
+        for label, text in labeled_parts
     ]
     merged, durations = _merge(audio_dir, f"{passage_id}.q{question_number}.wav", parts)
-    cues_en = _sequential_cues(texts_en, durations)
-    cues_ja = _sequential_cues(texts_ja, durations)
-    duration = cues_en[-1]["end"] + _SLIDE_TAIL_SECONDS
+
+    cues_en: list[dict] = []
+    cues_ja: list[dict] = []
+    cursor = 0.0
+    for (label, text), duration in zip(labeled_parts, durations):
+        if label == "intro":
+            cues_en.append({"start": round(cursor, 3), "end": round(cursor + duration, 3), "text": text})
+        elif label == "question":
+            cues_en.append({"start": round(cursor, 3), "end": round(cursor + duration, 3), "text": text})
+            cues_ja.append({"start": round(cursor, 3), "end": round(cursor + duration, 3), "text": question_ja})
+        # "choices" はここでは字幕を出さない(音声のみ、選択肢は画面のカードで読む)。
+        cursor += duration + _SLIDE_GAP_SECONDS
+
+    duration = sum(durations) + _SLIDE_GAP_SECONDS * (len(durations) - 1) + _SLIDE_TAIL_SECONDS
     return {
         "kind": "question",
         "passageId": passage_id,
@@ -118,22 +132,24 @@ def _explanation_slide(
     passage_id = passage["passageId"]
     total = len(passage["questions"])
     letter = _LETTERS[question["answerIndex"]]
-    text_en = f"The answer to number {question_number}. is {letter}. {reason_en}"
+    lead_en = f"The answer to number {question_number}. is {letter}."
+    text_en = f"{lead_en} {reason_en}"
 
     part = _render_segment(engine, audio_dir, f"{passage_id}.a{question_number}.src", "narrator", text_en, "en")
     merged, durations = _merge(audio_dir, f"{passage_id}.a{question_number}.wav", [part])
-    cues_en = _sequential_cues([text_en], durations)
-    cues_ja = _sequential_cues([question["explanation"]], durations)
-    duration = cues_en[-1]["end"] + _SLIDE_TAIL_SECONDS
+    duration_seconds = durations[0]
+
+    cues_en = sentence_cues(text_en, duration_seconds, EN_SENTENCE_SPLIT)
+    cues_ja = sentence_cues(question["explanation"], duration_seconds, JA_SENTENCE_SPLIT)
+    total_duration = duration_seconds + _SLIDE_TAIL_SECONDS
     return {
         "kind": "explanation",
         "passageId": passage_id,
         "questionNumber": question_number,
         "totalQuestions": total,
         "answerLabel": letter,
-        "explanation": question["explanation"],
         "soundPath": str(merged),
-        "durationSeconds": round(duration, 3),
+        "durationSeconds": round(total_duration, 3),
         "captionsEn": cues_en,
         "captionsJa": cues_ja,
     }
@@ -148,13 +164,20 @@ def _pronunciation_slide(passage: dict, content: dict, audio_dir: Path, engine: 
         for i, text in enumerate(texts_en)
     ]
     merged, durations = _merge(audio_dir, f"{passage_id}.pronunciation.wav", parts)
-    cues_en = _sequential_cues(texts_en, durations)
-    cues_ja = _sequential_cues(
-        [content.get("pronunciation_intro_ja", content["pronunciation_intro_en"])]
-        + [p["note_ja"] for p in points],
-        durations,
-    )
-    duration = cues_en[-1]["end"] + _SLIDE_TAIL_SECONDS
+
+    cues_en: list[dict] = []
+    cues_ja: list[dict] = []
+    texts_ja = [content.get("pronunciation_intro_ja", content["pronunciation_intro_en"])] + [
+        p["note_ja"] for p in points
+    ]
+    cursor = 0.0
+    for text_en, text_ja, duration in zip(texts_en, texts_ja, durations):
+        cues_en.extend(sentence_cues(text_en, duration, EN_SENTENCE_SPLIT, offset=cursor))
+        cues_ja.extend(sentence_cues(text_ja, duration, JA_SENTENCE_SPLIT, offset=cursor))
+        cursor += duration + _SLIDE_GAP_SECONDS
+
+    last_end = max((c["end"] for c in cues_en + cues_ja), default=0.0)
+    duration = last_end + _SLIDE_TAIL_SECONDS
     return {
         "kind": "pronunciation",
         "passageId": passage_id,
@@ -174,7 +197,11 @@ def _shadowing_slide(passage: dict, audio_dir: Path, engine: TTSEngine) -> dict:
         for i, line in enumerate(transcript)
     ]
     merged, durations = _merge(audio_dir, f"{passage_id}.shadowing.wav", parts)
-    cues_en = _sequential_cues([line["text"] for line in transcript], durations)
+    cues_en = []
+    cursor = 0.0
+    for line, duration in zip(transcript, durations):
+        cues_en.append({"start": round(cursor, 3), "end": round(cursor + duration, 3), "text": line["text"]})
+        cursor += duration + _SLIDE_GAP_SECONDS
     duration = cues_en[-1]["end"] + _SLIDE_TAIL_SECONDS
     return {
         "kind": "shadowing",
@@ -198,8 +225,9 @@ def build_slides_listening(
     (academic-english-data の dialogue.json/answers.json から呼び出し側が組み立てる)。
 
     content_by_passage_id: `{passageId: {reason_en: [設問ごとの英語ナレーション],
-    pronunciation_intro_en, pronunciation_points: [{phrase, note_en, note_ja}]}}`
-    — Claudeが1パッセージずつ書いたもの(reason_enとpronunciationは機械的には書けない)。
+    question_ja: [設問ごとの日本語訳], pronunciation_intro_en,
+    pronunciation_points: [{phrase, note_en, note_ja}]}}` — Claudeが1パッセージずつ
+    書いたもの(reason_en/question_ja/pronunciationは機械的には書けない)。
 
     1パッセージにつき Q1, A1, Q2, A2, ... , Pronunciation, Shadowing の順で返す
     (設問ごとに即座に解説することでスライド1枚あたりの密度を抑える)。
@@ -215,10 +243,12 @@ def build_slides_listening(
         _validate_content(passage_id, content, len(passage["questions"]))
 
         passage_slides: list[dict] = []
-        for question_number, (question, reason_en) in enumerate(
-            zip(passage["questions"], content["reason_en"]), start=1
+        for question_number, (question, reason_en, question_ja) in enumerate(
+            zip(passage["questions"], content["reason_en"], content["question_ja"]), start=1
         ):
-            passage_slides.append(_question_slide(passage, question_number, question, audio_dir, engine))
+            passage_slides.append(
+                _question_slide(passage, question_number, question, question_ja, audio_dir, engine)
+            )
             passage_slides.append(
                 _explanation_slide(passage, question_number, question, reason_en, audio_dir, engine)
             )

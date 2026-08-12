@@ -3,8 +3,10 @@
 Part5用(review_slides.py)とは別テンプレート — 会話台本の再現とシャドーイングが
 要る点が違うので、器も分ける。1問=質問1枚+解説1枚(Q1/A1/Q2/A2/...)、最後に
 発音1枚+シャドーイング1枚(2026-08-12: 全設問を1枚に乗せると字幕と重なるほど
-密度過多という指摘を受けて、Part5と同じ1問=1枚方式に変更)。発音スライドは
-「該当する時だけ」ではなく毎回出す、という明示の指示への対応。
+密度過多という指摘を受けて、Part5と同じ1問=1枚方式に変更)。字幕は文単位に分割し、
+選択肢は音声のみ・字幕には出さない(2026-08-12「字幕が大きくなりすぎている」の
+指摘への対応)。発音スライドは「該当する時だけ」ではなく毎回出す、という明示の
+指示への対応。
 """
 
 import pytest
@@ -30,7 +32,7 @@ PASSAGE = {
             "question": "What problem are the speakers discussing?",
             "choices": ["Incorrect labels were printed.", "A printer broke down.", "Boxes were damaged.", "A shipment was late."],
             "answerIndex": 0,
-            "explanation": "冒頭で「間違ったラベルが貼られていた」と述べている。",
+            "explanation": "冒頭で「間違ったラベルが貼られていた」と述べている。二つ目の文はここ。",
         },
         {
             "reviewId": "toeic.listening.part3.20260809.0001.2",
@@ -45,8 +47,12 @@ PASSAGE = {
 CONTENT = {
     "toeic.listening.part3.20260809.0001": {
         "reason_en": [
-            "The speakers open by pointing out wrong labels on boxes, so that is the problem.",
+            "The speakers open by pointing out wrong labels on boxes. That is the problem.",
             "Words like packing area and shipping records place this at a shipping facility.",
+        ],
+        "question_ja": [
+            "話者が話し合っている問題は何ですか。",
+            "この会話はどこで行われていますか。",
         ],
         "pronunciation_intro_en": "Notice how these phrases link together in fast speech.",
         "pronunciation_points": [
@@ -88,13 +94,33 @@ def test_the_intro_line_is_only_spoken_once_on_the_first_question(audio_dir):
     assert all(cue["text"] != PASSAGE["introEn"] for cue in q2["captionsEn"])
 
 
-def test_each_explanation_slide_reveals_its_own_answer_and_reason(audio_dir):
+def test_the_question_slide_captions_the_question_but_not_the_choices(audio_dir):
+    """選択肢は画面のカードで既に読めるので、字幕には出さない(はみ出し防止)。"""
+    slides = build_slides_listening([PASSAGE], CONTENT, audio_dir, WavEngine())
+    q1 = slides[0]
+    all_caption_text = " ".join(cue["text"] for cue in q1["captionsEn"] + q1["captionsJa"])
+    assert "Number 1." in all_caption_text
+    assert "Incorrect labels were printed" not in all_caption_text
+    assert q1["captionsJa"][-1]["text"] == "話者が話し合っている問題は何ですか。"
+
+
+def test_each_explanation_slide_reveals_its_own_answer(audio_dir):
     slides = build_slides_listening([PASSAGE], CONTENT, audio_dir, WavEngine())
     a1, a2 = slides[1], slides[3]
     assert a1["answerLabel"] == "A"
     assert a2["answerLabel"] == "C"
-    assert "間違ったラベル" in a1["captionsJa"][0]["text"]
-    assert (audio_dir / f"{PASSAGE['passageId']}.a1.wav").exists()
+
+
+def test_explanation_captions_are_split_into_short_sentence_cues_not_one_giant_block(audio_dir):
+    """2026-08-12「字幕が大きくなりすぎている」の指摘への対応。"""
+    slides = build_slides_listening([PASSAGE], CONTENT, audio_dir, WavEngine())
+    a1 = slides[1]
+    assert len(a1["captionsEn"]) >= 2
+    assert len(a1["captionsJa"]) >= 2
+    for cue in a1["captionsEn"] + a1["captionsJa"]:
+        assert len(cue["text"]) < 60
+    joined_ja = "".join(cue["text"] for cue in a1["captionsJa"])
+    assert "間違ったラベル" in joined_ja
 
 
 def test_the_pronunciation_slide_is_always_present_even_without_extra_authoring(audio_dir):
@@ -142,6 +168,12 @@ def test_missing_required_field_is_rejected(audio_dir):
 def test_reason_en_count_must_match_question_count(audio_dir):
     broken = {PASSAGE["passageId"]: {**CONTENT[PASSAGE["passageId"]], "reason_en": ["only one"]}}
     with pytest.raises(ReviewSlideError, match="reason_en"):
+        build_slides_listening([PASSAGE], broken, audio_dir, WavEngine())
+
+
+def test_question_ja_count_must_match_question_count(audio_dir):
+    broken = {PASSAGE["passageId"]: {**CONTENT[PASSAGE["passageId"]], "question_ja": ["only one"]}}
+    with pytest.raises(ReviewSlideError, match="question_ja"):
         build_slides_listening([PASSAGE], broken, audio_dir, WavEngine())
 
 

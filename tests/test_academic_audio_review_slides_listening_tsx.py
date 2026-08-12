@@ -26,7 +26,6 @@ EXPLANATION_SLIDE = {
     "questionNumber": 1,
     "totalQuestions": 2,
     "answerLabel": "A",
-    "explanation": "理由はこちら。",
     "soundPath": "/home/user/academic-infra/.academic-audio/jobs/x/a1.wav",
     "durationSeconds": 10.0,
     "captionsEn": [{"start": 0, "end": 5, "text": "The answer is A."}],

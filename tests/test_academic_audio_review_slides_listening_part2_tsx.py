@@ -21,7 +21,6 @@ EXPLANATION_SLIDE = {
     "reviewId": "toeic.listening.part2.20260809.0001",
     "index": 1,
     "answerLabel": "A",
-    "explanation": "理由はこちら。",
     "soundPath": "/home/user/academic-infra/.academic-audio/jobs/x/slide2.wav",
     "durationSeconds": 10.0,
     "captionsEn": [{"start": 0, "end": 5, "text": "The answer is A."}],

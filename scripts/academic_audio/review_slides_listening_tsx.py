@@ -43,7 +43,6 @@ type ExplanationSlide = {
   questionNumber: number
   totalQuestions: number
   answerLabel: string
-  explanation: string
   soundPath: string
   durationSeconds: number
   captionsEn: CaptionCue[]
@@ -116,21 +115,18 @@ const QuestionScene = ({ slide, index, total }: { slide: QuestionSlide; index: n
   </SlideFrame>
 )
 
+// 解説の全文はここには置かない。長い解説を1枚に載せると必ずはみ出す
+// (2026-08-12の指摘)ので、詳細は下の字幕(文単位に分割済み)に任せる。
 const ExplanationScene = ({ slide, index, total }: { slide: ExplanationSlide; index: number; total: number }) => (
   <SlideFrame index={index} total={total}>
     <div style={{ width: "100%", maxWidth: 1500 }}>
       <Motion delay={0.05} y={16}>
         <Kicker text={`解説 — Q${slide.questionNumber} of ${slide.totalQuestions}`} />
       </Motion>
-      <Motion delay={0.12} y={20}>
-        <div style={{ marginTop: 22, fontSize: 52, fontWeight: 900, color: ACCENT, letterSpacing: -1 }}>
+      <Motion delay={0.14} y={20}>
+        <div style={{ marginTop: 26, fontSize: 88, fontWeight: 900, color: ACCENT, letterSpacing: -1 }}>
           {slide.answerLabel}
         </div>
-      </Motion>
-      <Motion delay={0.22} y={18}>
-        <Glass style={{ marginTop: 24, padding: "24px 30px" }}>
-          <div style={{ fontSize: 24, lineHeight: 1.55, color: INK, fontWeight: 600 }}>{slide.explanation}</div>
-        </Glass>
       </Motion>
     </div>
     <Sound sound={slide.soundPath} />

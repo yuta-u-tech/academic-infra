@@ -2,7 +2,9 @@
 
 Part3/4(review_slides_listening.py)は1パッセージ=4枚(質問/解説/発音/シャドーイング)
 だが、Part2には共有パッセージが無いので3枚(質問/解説/発音)に留める、と
-2026-08-12に合意した内容への対応。シャドーイング枚は無し。
+2026-08-12に合意した内容への対応。シャドーイング枚は無し。字幕は文単位に分割し、
+選択肢は音声のみ・字幕には出さない(2026-08-12「字幕が大きくなりすぎている」の
+指摘への対応)。
 """
 
 import pytest
@@ -23,12 +25,13 @@ ITEM = {
         "It was a business trip to the branch office.",
     ],
     "answerIndex": 0,
-    "explanation": "正解は(A)。Whenで時期を聞いているので曜日と時間帯で答える(A)が適切。",
+    "explanation": "正解は(A)。Whenで時期を聞いているので曜日と時間帯で答える(A)が適切。他の選択肢は疑問詞や音の取り違え。",
 }
 
 CONTENT = {
     "toeic.listening.part2.20260809.0001": {
-        "reason_en": "The question asks When, so the reply must give a day and time.",
+        "reason_en": "The question asks When. The reply must give a day and a time.",
+        "question_ja": "部署会議はいつに変更されましたか。",
         "pronunciation_intro_en": "Notice how these phrases link together in fast speech.",
         "pronunciation_points": [
             {
@@ -51,20 +54,26 @@ def test_an_item_becomes_three_slides(audio_dir):
     assert [s["kind"] for s in slides] == ["question", "explanation", "pronunciation"]
 
 
-def test_the_question_slide_carries_the_choices(audio_dir):
+def test_the_question_slide_carries_the_choices_but_does_not_caption_them(audio_dir):
     slides = build_slides_listening_part2([ITEM], CONTENT, audio_dir, WavEngine())
     question = slides[0]
     assert question["reviewId"] == ITEM["reviewId"]
     assert question["choices"] == ITEM["choices"]
     assert (audio_dir / f"{ITEM['reviewId']}.slide1.wav").exists()
+    all_caption_text = " ".join(cue["text"] for cue in question["captionsEn"] + question["captionsJa"])
+    assert "Thursday morning" not in all_caption_text
+    assert question["captionsJa"][0]["text"] == "部署会議はいつに変更されましたか。"
 
 
-def test_the_explanation_slide_reveals_the_answer_and_reuses_db_explanation(audio_dir):
+def test_the_explanation_slide_reveals_the_answer_with_split_captions(audio_dir):
     slides = build_slides_listening_part2([ITEM], CONTENT, audio_dir, WavEngine())
     explanation = slides[1]
     assert explanation["answerLabel"] == "A"
-    ja_text = "".join(cue["text"] for cue in explanation["captionsJa"])
-    assert "正解は(A)" in ja_text
+    assert len(explanation["captionsJa"]) >= 2
+    for cue in explanation["captionsEn"] + explanation["captionsJa"]:
+        assert len(cue["text"]) < 60
+    joined_ja = "".join(cue["text"] for cue in explanation["captionsJa"])
+    assert "正解は(A)" in joined_ja
 
 
 def test_the_pronunciation_slide_is_always_present(audio_dir):

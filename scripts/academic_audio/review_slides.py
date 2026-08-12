@@ -12,18 +12,18 @@ DBに既にある explanation をそのまま使う(二重に書く必要をな�
 from __future__ import annotations
 
 import json
-import re
 import wave
 from pathlib import Path
 
+from ._caption_cues import EN_SENTENCE_SPLIT as _EN_SENTENCE_SPLIT
+from ._caption_cues import JA_SENTENCE_SPLIT as _JA_SENTENCE_SPLIT
+from ._caption_cues import sentence_cues as _sentence_cues
 from .engines import TTSEngine
 from .models import DialogueSegment
 from .pronunciation import normalize
 from .renderer import concatenate_wav
 
 _LETTERS = "ABCD"
-_EN_SENTENCE_SPLIT = re.compile(r"(?<=[.!?]) ")
-_JA_SENTENCE_SPLIT = re.compile(r"(?<=。)")
 _SLIDE_GAP_SECONDS = 0.6
 # スライドの音声が終わってから次のスライドへ切り替わるまでの無音の間。
 # 音声が終わった瞬間に次に切り替わるとテンポが速すぎるという指摘を受けて追加
@@ -38,25 +38,6 @@ class ReviewSlideError(ValueError):
 def _wav_seconds(path: Path) -> float:
     with wave.open(str(path), "rb") as handle:
         return handle.getnframes() / handle.getframerate()
-
-
-def _sentence_cues(text: str, duration: float, split_pattern: re.Pattern, offset: float = 0.0) -> list[dict]:
-    """英語は `. `、日本語は `。` の直後で分け、文字数に比例して時間を割る。
-
-    音声そのものと1対1で対応しない字幕(日本語訳)にも使うため、厳密な同期ではなく
-    近似でよい前提（`toeic_review.py` の render_tex と同じ「読める範囲で足りる」方針）。
-    """
-    sentences = [s.strip() for s in split_pattern.split(text) if s.strip()]
-    if not sentences:
-        return [{"start": round(offset, 3), "end": round(offset + duration, 3), "text": text.strip()}]
-    total_chars = sum(len(s) for s in sentences) or 1
-    cues = []
-    cursor = offset
-    for sentence in sentences:
-        span = duration * (len(sentence) / total_chars)
-        cues.append({"start": round(cursor, 3), "end": round(cursor + span, 3), "text": sentence})
-        cursor += span
-    return cues
 
 
 _REQUIRED_CONTENT_FIELDS = ("reason_en", "points", "question_ja", "choices_ja")
