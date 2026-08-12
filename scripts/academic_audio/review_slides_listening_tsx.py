@@ -193,22 +193,27 @@ const PronunciationScene = ({ slide, index, total }: { slide: PronunciationSlide
   </SlideFrame>
 )
 
+// シャドーイングにはDualCaptionsが無い(字幕帯を使わない)ので、SlideFrame共通の
+// 下部予約(250px)は不要どころか、6発話ぶんの書き起こしがその分だけ余計に
+// 圧迫されてはみ出す原因になっていた(2026-08-12、実測で上端の帯と重なった)。
+// このシーンだけ独自のFillFrameで、余白を左右対称・上下均等に取り直す。
 const ShadowingScene = ({ slide, index, total }: { slide: ShadowingSlide; index: number; total: number }) => {
   const frame = useCurrentFrame()
   const t = PROJECT_SETTINGS.fps > 0 ? frame / PROJECT_SETTINGS.fps : 0
   const activeLine = slide.captionsEn.findIndex((cue) => t >= cue.start && t < cue.end)
   return (
-    <SlideFrame index={index} total={total}>
-      <div style={{ width: "100%", maxWidth: 1350 }}>
+    <FillFrame style={{ alignItems: "center", justifyContent: "center", padding: 70 }}>
+      <Background index={index} total={total} />
+      <div style={{ width: "100%", maxWidth: 1400 }}>
         <Motion delay={0.05} y={16}>
           <Kicker text="シャドーイング" />
         </Motion>
-        <Glass style={{ marginTop: 22, padding: "24px 30px", display: "flex", flexDirection: "column", gap: 12 }}>
+        <Glass style={{ marginTop: 18, padding: "18px 26px", display: "flex", flexDirection: "column", gap: 8 }}>
           {slide.transcript.map((line, i) => (
             <div
               key={i}
               style={{
-                display: "flex", gap: 14, fontSize: 21, lineHeight: 1.4,
+                display: "flex", gap: 12, fontSize: 17, lineHeight: 1.3,
                 color: i === activeLine ? INK : MUTED,
                 fontWeight: i === activeLine ? 800 : 600,
                 opacity: i === activeLine ? 1 : 0.55,
@@ -221,7 +226,7 @@ const ShadowingScene = ({ slide, index, total }: { slide: ShadowingSlide; index:
         </Glass>
       </div>
       <Sound sound={slide.soundPath} />
-    </SlideFrame>
+    </FillFrame>
   )
 }
 
