@@ -1,12 +1,14 @@
 """間違えたTOEICリスニング問題からFrameScript用のスライド配列を組み立てる。
 
 Part5用(review_slides.py)とは別テンプレート — 会話台本の再現とシャドーイングが
-要る点が違うので、器も分ける。1問=質問1枚+解説1枚(Q1/A1/Q2/A2/...)、最後に
-発音1枚+シャドーイング1枚(2026-08-12: 全設問を1枚に乗せると字幕と重なるほど
-密度過多という指摘を受けて、Part5と同じ1問=1枚方式に変更)。字幕は文単位に分割し、
-選択肢は音声のみ・字幕には出さない(2026-08-12「字幕が大きくなりすぎている」の
-指摘への対応)。発音スライドは「該当する時だけ」ではなく毎回出す、という明示の
-指示への対応。
+要る点が違うので、器も分ける。Passage(会話/スピーチの通し聴き) → 1問=質問1枚+
+解説1枚(Q1/A1/Q2/A2/...) → 発音1枚 → シャドーイング1枚(2026-08-12: 全設問を
+1枚に乗せると字幕と重なるほど密度過多という指摘を受けて、Part5と同じ1問=1枚方式に
+変更。さらに「設問の前提となる会話が1枚目にあってもいい」という指摘を受けて
+Passageスライドを追加)。字幕は文単位に分割し、選択肢は音声のみ・字幕には出さない
+(2026-08-12「字幕が大きくなりすぎている」の指摘への対応)。発音スライドは
+「該当する時だけ」ではなく毎回出す、という明示の指示への対応。フレーズの発音
+ポイントは例文つきで示す(2026-08-12「例文で実際にどう発音されるか」の指摘)。
 """
 
 import pytest
@@ -67,7 +69,12 @@ CONTENT = {
         "pronunciation_intro_en": "Notice how these phrases link together in fast speech.",
         "pronunciation_intro_ja": "これらのフレーズがつながる様子に注目しましょう。",
         "pronunciation_points": [
-            {"phrase": "went out", "note_en": "went out links into one sound, like wen-tout.", "note_ja": "went out は t が次の母音とつながり「ウェンタウト」のように聞こえます。"},
+            {
+                "phrase": "went out",
+                "note_en": "went out links into one sound, like wen-tout.",
+                "note_ja": "went out は t が次の母音とつながり「ウェンタウト」のように聞こえます。",
+                "example_en": "The shipment went out yesterday afternoon.",
+            },
         ],
     }
 }
@@ -78,17 +85,27 @@ def audio_dir(tmp_path):
     return tmp_path / "audio"
 
 
-def test_a_two_question_passage_becomes_six_slides(audio_dir):
-    """Q1/A1/Q2/A2/発音/シャドーイング = 6枚。"""
+def test_a_two_question_passage_becomes_seven_slides(audio_dir):
+    """Passage/Q1/A1/Q2/A2/発音/シャドーイング = 7枚。"""
     slides = build_slides_listening([PASSAGE], CONTENT, audio_dir, WavEngine())
     assert [s["kind"] for s in slides] == [
-        "question", "explanation", "question", "explanation", "pronunciation", "shadowing",
+        "passage", "question", "explanation", "question", "explanation", "pronunciation", "shadowing",
     ]
+
+
+def test_the_passage_slide_plays_the_full_conversation_before_any_question(audio_dir):
+    """2026-08-12「設問の前提となる会話が1枚目にあってもいい」の指摘への対応。"""
+    slides = build_slides_listening([PASSAGE], CONTENT, audio_dir, WavEngine())
+    passage_slide = slides[0]
+    assert passage_slide["introEn"] == PASSAGE["introEn"]
+    assert passage_slide["transcript"] == PASSAGE["transcript"]
+    assert passage_slide["captionsEn"][0]["text"] == PASSAGE["introEn"]
+    assert (audio_dir / f"{PASSAGE['passageId']}.passage.wav").exists()
 
 
 def test_each_question_slide_carries_exactly_one_question(audio_dir):
     slides = build_slides_listening([PASSAGE], CONTENT, audio_dir, WavEngine())
-    q1, q2 = slides[0], slides[2]
+    q1, q2 = slides[1], slides[3]
     assert q1["questionNumber"] == 1
     assert q1["totalQuestions"] == 2
     assert q1["choices"] == ["Incorrect labels were printed.", "A printer broke down.", "Boxes were damaged.", "A shipment was late."]
@@ -100,7 +117,7 @@ def test_each_question_slide_carries_exactly_one_question(audio_dir):
 
 def test_the_intro_line_is_only_spoken_once_on_the_first_question(audio_dir):
     slides = build_slides_listening([PASSAGE], CONTENT, audio_dir, WavEngine())
-    q1, q2 = slides[0], slides[2]
+    q1, q2 = slides[1], slides[3]
     assert q1["captionsEn"][0]["text"] == PASSAGE["introEn"]
     assert all(cue["text"] != PASSAGE["introEn"] for cue in q2["captionsEn"])
 
@@ -108,7 +125,7 @@ def test_the_intro_line_is_only_spoken_once_on_the_first_question(audio_dir):
 def test_the_question_slide_captions_the_question_but_not_the_choices(audio_dir):
     """選択肢は画面のカードで既に読めるので、字幕には出さない(はみ出し防止)。"""
     slides = build_slides_listening([PASSAGE], CONTENT, audio_dir, WavEngine())
-    q1 = slides[0]
+    q1 = slides[1]
     all_caption_text = " ".join(cue["text"] for cue in q1["captionsEn"] + q1["captionsJa"])
     assert "Number 1." in all_caption_text
     assert "Incorrect labels were printed" not in all_caption_text
@@ -117,7 +134,7 @@ def test_the_question_slide_captions_the_question_but_not_the_choices(audio_dir)
 
 def test_each_explanation_slide_reveals_its_own_answer(audio_dir):
     slides = build_slides_listening([PASSAGE], CONTENT, audio_dir, WavEngine())
-    a1, a2 = slides[1], slides[3]
+    a1, a2 = slides[2], slides[4]
     assert a1["answerLabel"] == "A"
     assert a2["answerLabel"] == "C"
 
@@ -125,7 +142,7 @@ def test_each_explanation_slide_reveals_its_own_answer(audio_dir):
 def test_each_explanation_slide_carries_its_own_structured_points(audio_dir):
     """答えの文字だけでは粒度が低いという指摘(2026-08-12)への対応。"""
     slides = build_slides_listening([PASSAGE], CONTENT, audio_dir, WavEngine())
-    a1, a2 = slides[1], slides[3]
+    a1, a2 = slides[2], slides[4]
     assert a1["points"] == CONTENT[PASSAGE["passageId"]]["points"][0]
     assert a2["points"] == CONTENT[PASSAGE["passageId"]]["points"][1]
 
@@ -133,7 +150,7 @@ def test_each_explanation_slide_carries_its_own_structured_points(audio_dir):
 def test_explanation_captions_are_split_into_short_sentence_cues_not_one_giant_block(audio_dir):
     """2026-08-12「字幕が大きくなりすぎている」の指摘への対応。"""
     slides = build_slides_listening([PASSAGE], CONTENT, audio_dir, WavEngine())
-    a1 = slides[1]
+    a1 = slides[2]
     assert len(a1["captionsEn"]) >= 2
     assert len(a1["captionsJa"]) >= 2
     for cue in a1["captionsEn"] + a1["captionsJa"]:
@@ -154,6 +171,15 @@ def test_the_pronunciation_slide_is_always_present_even_without_extra_authoring(
     pronunciation = [s for s in slides if s["kind"] == "pronunciation"]
     assert len(pronunciation) == 1
     assert pronunciation[0]["points"] == []
+
+
+def test_pronunciation_points_are_narrated_with_their_example_sentence(audio_dir):
+    """発音ポイントはフレーズの説明だけでなく、例文でどう発音されるかも音声つきで
+    示してほしいという指摘(2026-08-12)への対応。"""
+    slides = build_slides_listening([PASSAGE], CONTENT, audio_dir, WavEngine())
+    pronunciation = next(s for s in slides if s["kind"] == "pronunciation")
+    joined_en = " ".join(cue["text"] for cue in pronunciation["captionsEn"])
+    assert "The shipment went out yesterday afternoon." in joined_en
 
 
 def test_the_shadowing_slide_replays_the_original_transcript_verbatim(audio_dir):
@@ -207,4 +233,4 @@ def test_passage_numbers_are_sequential_across_passages(audio_dir):
     content2 = {**CONTENT, "toeic.listening.part3.20260809.0002": CONTENT[PASSAGE["passageId"]]}
     slides = build_slides_listening([PASSAGE, passage2], content2, audio_dir, WavEngine())
     assert slides[0]["index"] == 1
-    assert slides[6]["index"] == 2
+    assert slides[7]["index"] == 2

@@ -1,8 +1,20 @@
-"""スライド配列(Part3/4, 4種、1問=1枚) -> FrameScriptのproject.tsx。"""
+"""スライド配列(Part3/4, 5種、1問=1枚) -> FrameScriptのproject.tsx。"""
 
 import pytest
 
 from academic_audio.review_slides_listening_tsx import render_project_tsx
+
+PASSAGE_SLIDE = {
+    "kind": "passage",
+    "passageId": "toeic.listening.part3.20260809.0001",
+    "index": 1,
+    "introEn": "Questions 1 through 3 refer to the following conversation.",
+    "transcript": [{"speaker": "A", "text": "Hello there."}, {"speaker": "B", "text": "Hi."}],
+    "soundPath": "/home/user/academic-infra/.academic-audio/jobs/x/passage.wav",
+    "durationSeconds": 10.0,
+    "captionsEn": [{"start": 0, "end": 5, "text": "Questions 1 through 3 refer to the following conversation."}],
+    "captionsJa": [],
+}
 
 QUESTION_SLIDE = {
     "kind": "question",
@@ -37,7 +49,14 @@ PRONUNCIATION_SLIDE = {
     "kind": "pronunciation",
     "passageId": "toeic.listening.part3.20260809.0001",
     "index": 1,
-    "points": [{"phrase": "went out", "note_en": "links together", "note_ja": "つながります"}],
+    "points": [
+        {
+            "phrase": "went out",
+            "note_en": "links together",
+            "note_ja": "つながります",
+            "example_en": "The shipment went out yesterday.",
+        }
+    ],
     "soundPath": "/home/user/academic-infra/.academic-audio/jobs/x/pronunciation.wav",
     "durationSeconds": 10.0,
     "captionsEn": [{"start": 0, "end": 5, "text": "Notice."}],
@@ -55,7 +74,7 @@ SHADOWING_SLIDE = {
     "captionsJa": [],
 }
 
-ALL_SLIDES = [QUESTION_SLIDE, EXPLANATION_SLIDE, PRONUNCIATION_SLIDE, SHADOWING_SLIDE]
+ALL_SLIDES = [PASSAGE_SLIDE, QUESTION_SLIDE, EXPLANATION_SLIDE, PRONUNCIATION_SLIDE, SHADOWING_SLIDE]
 
 
 def test_no_slides_is_rejected():
@@ -63,17 +82,17 @@ def test_no_slides_is_rejected():
         render_project_tsx([], framescript_root=None)  # type: ignore[arg-type]
 
 
-def test_all_four_slide_kinds_are_embedded(tmp_path):
+def test_all_five_slide_kinds_are_embedded(tmp_path):
     tsx = render_project_tsx(ALL_SLIDES, framescript_root=tmp_path)
-    for kind in ("question", "explanation", "pronunciation", "shadowing"):
+    for kind in ("passage", "question", "explanation", "pronunciation", "shadowing"):
         assert f'"kind": "{kind}"' in tsx
 
 
-def test_all_four_scene_components_and_types_are_present(tmp_path):
+def test_all_five_scene_components_and_types_are_present(tmp_path):
     tsx = render_project_tsx(ALL_SLIDES, framescript_root=tmp_path)
-    for name in ("QuestionScene", "ExplanationScene", "PronunciationScene", "ShadowingScene"):
+    for name in ("PassageScene", "QuestionScene", "ExplanationScene", "PronunciationScene", "ShadowingScene"):
         assert name in tsx
-    for type_name in ("QuestionSlide", "ExplanationSlide", "PronunciationSlide", "ShadowingSlide"):
+    for type_name in ("PassageSlide", "QuestionSlide", "ExplanationSlide", "PronunciationSlide", "ShadowingSlide"):
         assert f"type {type_name} = {{" in tsx
 
 
@@ -89,3 +108,9 @@ def test_choices_are_laid_out_in_a_grid_like_part5_not_stacked_in_one_column(tmp
     Part5と同じ2x2グリッドに変える。"""
     tsx = render_project_tsx(ALL_SLIDES, framescript_root=tmp_path)
     assert 'gridTemplateColumns: "1fr 1fr"' in tsx
+
+
+def test_pronunciation_card_shows_the_example_sentence(tmp_path):
+    """2026-08-12「例文で実際にどう発音されるか」の指摘への対応。"""
+    tsx = render_project_tsx(ALL_SLIDES, framescript_root=tmp_path)
+    assert "point.example_en" in tsx

@@ -79,6 +79,39 @@ def _merge(audio_dir: Path, name: str, parts: list[Path]) -> tuple[Path, list[fl
     return merged, durations
 
 
+def _passage_slide(passage: dict, audio_dir: Path, engine: TTSEngine) -> dict:
+    """会話/スピーチ本文を、設問に入る前にまず聴かせる1枚(2026-08-12「設問の前提と
+    なる会話やスピーチのスライドがあってもいい」の指摘への対応)。シャドーイング枚
+    (末尾、練習用にハイライトしながら聴く)とは役割が違うので、台本の再利用に
+    留め、画面上はハイライト無しの静的な書き起こしにする。"""
+    passage_id = passage["passageId"]
+    transcript = passage["transcript"]
+    parts = [
+        _render_segment(engine, audio_dir, f"{passage_id}.passage.intro", "narrator", passage["introEn"], "en")
+    ] + [
+        _render_segment(engine, audio_dir, f"{passage_id}.passage.{i}", line["speaker"], line["text"], "en")
+        for i, line in enumerate(transcript)
+    ]
+    merged, durations = _merge(audio_dir, f"{passage_id}.passage.wav", parts)
+    texts = [passage["introEn"]] + [line["text"] for line in transcript]
+    cues_en = []
+    cursor = 0.0
+    for text, duration in zip(texts, durations):
+        cues_en.append({"start": round(cursor, 3), "end": round(cursor + duration, 3), "text": text})
+        cursor += duration + _SLIDE_GAP_SECONDS
+    duration = cues_en[-1]["end"] + _SLIDE_TAIL_SECONDS
+    return {
+        "kind": "passage",
+        "passageId": passage_id,
+        "introEn": passage["introEn"],
+        "transcript": transcript,
+        "soundPath": str(merged),
+        "durationSeconds": round(duration, 3),
+        "captionsEn": cues_en,
+        "captionsJa": [],
+    }
+
+
 def _question_slide(
     passage: dict, question_number: int, question: dict, question_ja: str, audio_dir: Path, engine: TTSEngine
 ) -> dict:
@@ -169,9 +202,15 @@ def _explanation_slide(
 
 
 def _pronunciation_slide(passage: dict, content: dict, audio_dir: Path, engine: TTSEngine) -> dict:
+    """points[i]["example_en"]: そのフレーズを実際に使った例文。フレーズの説明だけ
+    でなく、例文でどう聞こえるかを音声つきで示してほしいという指摘(2026-08-12)への
+    対応。説明と例文を1つの音声にまとめ、文単位のcue分割(sentence_cues)で
+    自然に2つの字幕に分かれる(説明文・例文とも `.` で終わる前提)。"""
     passage_id = passage["passageId"]
     points = content["pronunciation_points"]
-    texts_en = [content["pronunciation_intro_en"]] + [p["note_en"] for p in points]
+    texts_en = [content["pronunciation_intro_en"]] + [
+        f"{p['note_en']} For example: {p['example_en']}" for p in points
+    ]
     parts = [
         _render_segment(engine, audio_dir, f"{passage_id}.pron{i}", "narrator", text, "en")
         for i, text in enumerate(texts_en)
@@ -244,8 +283,9 @@ def build_slides_listening(
     pronunciation_points: [{phrase, note_en, note_ja}]}}` — Claudeが1パッセージずつ
     書いたもの(reason_en/question_ja/points/pronunciationは機械的には書けない)。
 
-    1パッセージにつき Q1, A1, Q2, A2, ... , Pronunciation, Shadowing の順で返す
-    (設問ごとに即座に解説することでスライド1枚あたりの密度を抑える)。
+    1パッセージにつき Passage(会話/スピーチ本文の通し聴き), Q1, A1, Q2, A2, ... ,
+    Pronunciation, Shadowing の順で返す(設問ごとに即座に解説することでスライド
+    1枚あたりの密度を抑える)。
     """
     audio_dir.mkdir(parents=True, exist_ok=True)
     slides: list[dict] = []
@@ -257,7 +297,7 @@ def build_slides_listening(
             raise ReviewSlideError(f"{passage_id} の authored content がありません。")
         _validate_content(passage_id, content, len(passage["questions"]))
 
-        passage_slides: list[dict] = []
+        passage_slides: list[dict] = [_passage_slide(passage, audio_dir, engine)]
         for question_number, (question, reason_en, question_ja, points) in enumerate(
             zip(passage["questions"], content["reason_en"], content["question_ja"], content["points"]), start=1
         ):

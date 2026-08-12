@@ -1,8 +1,8 @@
 """`review_slides_listening.build_slides_listening()` の出力を project.tsx へ書く。
 
-Part5(review_slides_tsx.py)とはScene構成が違う(質問/解説/発音/シャドーイングの
-4種)ので別ファイルにするが、土台(配色・Motion/Glass/Background/DualCaptions)は
-`_review_slides_tsx_shared.py` を共有する。
+Part5(review_slides_tsx.py)とはScene構成が違う(会話本文/質問/解説/発音/
+シャドーイングの5種)ので別ファイルにするが、土台(配色・Motion/Glass/Background/
+DualCaptions)は `_review_slides_tsx_shared.py` を共有する。
 
 2026-08-12: 独自に「上寄せ+下部に大きい余白」というレイアウトを考えたが、
 4択の質問スライドが画面下端からはみ出して見切れた。承認済みのPart5
@@ -24,6 +24,18 @@ def render_project_tsx(slides: list[dict], framescript_root: Path, *, title: str
 
 
 _BODY = '''
+type PassageSlide = {
+  kind: "passage"
+  passageId: string
+  index: number
+  introEn: string
+  transcript: { speaker: string; text: string }[]
+  soundPath: string
+  durationSeconds: number
+  captionsEn: CaptionCue[]
+  captionsJa: CaptionCue[]
+}
+
 type QuestionSlide = {
   kind: "question"
   passageId: string
@@ -57,7 +69,7 @@ type PronunciationSlide = {
   kind: "pronunciation"
   passageId: string
   index: number
-  points: { phrase: string; note_en: string; note_ja: string }[]
+  points: { phrase: string; note_en: string; note_ja: string; example_en: string }[]
   soundPath: string
   durationSeconds: number
   captionsEn: CaptionCue[]
@@ -75,7 +87,7 @@ type ShadowingSlide = {
   captionsJa: CaptionCue[]
 }
 
-type Slide = QuestionSlide | ExplanationSlide | PronunciationSlide | ShadowingSlide
+type Slide = PassageSlide | QuestionSlide | ExplanationSlide | PronunciationSlide | ShadowingSlide
 
 const partLabel = (passageId: string) => (passageId.includes(".part4.") ? "Part 4" : "Part 3")
 
@@ -90,6 +102,31 @@ const SlideFrame = ({
   <FillFrame style={{ alignItems: "center", justifyContent: "center", padding: "70px 90px 250px" }}>
     <Background index={index} total={total} />
     {children}
+  </FillFrame>
+)
+
+// 設問に入る前に、まず会話/スピーチ本文を通しで聴かせる1枚
+// (2026-08-12「設問の前提となる会話が1枚目にあってもいい」の指摘への対応)。
+// シャドーイング枚(末尾、練習用にハイライトしながら聴く)とは役割が違うので、
+// ここでは静的な書き起こしのまま出す(ハイライト無し)。
+const PassageScene = ({ slide, index, total }: { slide: PassageSlide; index: number; total: number }) => (
+  <FillFrame style={{ alignItems: "center", justifyContent: "center", padding: 70 }}>
+    <Background index={index} total={total} />
+    <div style={{ width: "100%", maxWidth: 1400 }}>
+      <Motion delay={0.05} y={16}>
+        <Kicker text={`TOEIC ${partLabel(slide.passageId)} 復習 — Passage ${slide.index}`} />
+      </Motion>
+      <Glass style={{ marginTop: 18, padding: "18px 26px", display: "flex", flexDirection: "column", gap: 8 }}>
+        {slide.transcript.map((line, i) => (
+          <div key={i} style={{ display: "flex", gap: 12, fontSize: 17, lineHeight: 1.3, color: INK, fontWeight: 600 }}>
+            <span style={{ flexShrink: 0, fontWeight: 900, color: ACCENT }}>{line.speaker}:</span>
+            <span>{line.text}</span>
+          </div>
+        ))}
+      </Glass>
+    </div>
+    <Sound sound={slide.soundPath} />
+    <DualCaptions en={slide.captionsEn} ja={slide.captionsJa} />
   </FillFrame>
 )
 
@@ -183,6 +220,9 @@ const PronunciationScene = ({ slide, index, total }: { slide: PronunciationSlide
             <Glass style={{ padding: "22px 30px" }}>
               <div style={{ fontSize: 28, fontWeight: 900, color: ACCENT, marginBottom: 8 }}>{point.phrase}</div>
               <div style={{ fontSize: 20, color: INK, lineHeight: 1.5 }}>{point.note_ja}</div>
+              <div style={{ fontSize: 18, color: MUTED, lineHeight: 1.4, marginTop: 8, fontStyle: "italic" }}>
+                例: {point.example_en}
+              </div>
             </Glass>
           </Motion>
         ))
@@ -234,7 +274,9 @@ const VisualTrack = () => (
   <ClipSequence>
     {SLIDES.map((slide, index) => (
       <Clip key={`${slide.passageId}-${slide.kind}-${index}`} label={`${slide.passageId}-${slide.kind}`} duration={seconds(slide.durationSeconds)}>
-        {slide.kind === "question" ? (
+        {slide.kind === "passage" ? (
+          <PassageScene slide={slide} index={index} total={SLIDES.length} />
+        ) : slide.kind === "question" ? (
           <QuestionScene slide={slide} index={index} total={SLIDES.length} />
         ) : slide.kind === "explanation" ? (
           <ExplanationScene slide={slide} index={index} total={SLIDES.length} />
