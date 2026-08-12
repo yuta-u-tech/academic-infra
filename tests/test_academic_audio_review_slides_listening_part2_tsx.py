@@ -58,3 +58,9 @@ def test_no_shadowing_type_is_defined(tmp_path):
     tsx = render_project_tsx(ALL_SLIDES, framescript_root=tmp_path)
     assert "ShadowingSlide" not in tsx
     assert "ShadowingScene" not in tsx
+
+
+def test_the_layout_anchors_content_to_the_top_to_avoid_caption_overlap(tmp_path):
+    """2026-08-12: 中央寄せだと選択肢が下端の字幕帯と重なった指摘への対応。"""
+    tsx = render_project_tsx(ALL_SLIDES, framescript_root=tmp_path)
+    assert 'justifyContent: "flex-start"' in tsx

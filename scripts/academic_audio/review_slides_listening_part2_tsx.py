@@ -1,5 +1,8 @@
 """`review_slides_listening_part2.build_slides_listening_part2()` の出力を
 project.tsx へ書く。3種のScene(質問/解説/発音)だけで、シャドーイングは無い。
+
+2026-08-12: 中央寄せレイアウトだと選択肢や解説が下端の字幕帯と重なって見えた
+(プロトタイプ視聴後の指摘)。上寄せ(flex-start)にして下に十分な余白を残す。
 """
 
 from __future__ import annotations
@@ -51,24 +54,34 @@ type PronunciationSlide = {
 
 type Slide = QuestionSlide | ExplanationSlide | PronunciationSlide
 
-const QuestionScene = ({ slide, index, total }: { slide: QuestionSlide; index: number; total: number }) => (
-  <FillFrame style={{ alignItems: "center", justifyContent: "center", padding: 80 }}>
+// 字幕帯(DualCaptions)は画面下部に重なって表示されるため、本文は上寄せにして
+// 下に十分な余白を残す(2026-08-12: 中央寄せだと選択肢が字幕と重なった)。
+const SlideFrame = ({
+  index, total, children,
+}: { index: number; total: number; children: React.ReactNode }) => (
+  <FillFrame style={{ alignItems: "center", justifyContent: "flex-start", padding: "150px 100px 320px" }}>
     <Background index={index} total={total} />
-    <div style={{ width: "100%", maxWidth: 1500 }}>
+    {children}
+  </FillFrame>
+)
+
+const QuestionScene = ({ slide, index, total }: { slide: QuestionSlide; index: number; total: number }) => (
+  <SlideFrame index={index} total={total}>
+    <div style={{ width: "100%", maxWidth: 1450 }}>
       <Motion delay={0.05} y={16}>
         <Kicker text={`TOEIC Part 2 復習 — Question ${slide.index}`} />
       </Motion>
       <Motion delay={0.14} y={22}>
-        <div style={{ marginTop: 30, fontSize: 44, fontWeight: 800, color: INK, lineHeight: 1.4 }}>
+        <div style={{ marginTop: 28, fontSize: 40, fontWeight: 800, color: INK, lineHeight: 1.4 }}>
           {slide.questionEn}
         </div>
       </Motion>
-      <div style={{ marginTop: 48, display: "flex", flexDirection: "column", gap: 16 }}>
+      <div style={{ marginTop: 42, display: "flex", flexDirection: "column", gap: 14 }}>
         {slide.choices.map((choice, i) => (
           <Motion key={choice} delay={0.24 + i * 0.08} y={18}>
-            <Glass style={{ padding: "22px 30px", display: "flex", gap: 18 }}>
-              <span style={{ fontSize: 32, fontWeight: 800, color: ACCENT }}>{"ABC"[i]}.</span>
-              <span style={{ fontSize: 30, fontWeight: 700, color: INK }}>{choice}</span>
+            <Glass style={{ padding: "18px 26px", display: "flex", gap: 16 }}>
+              <span style={{ fontSize: 28, fontWeight: 800, color: ACCENT }}>{"ABC"[i]}.</span>
+              <span style={{ fontSize: 26, fontWeight: 700, color: INK }}>{choice}</span>
             </Glass>
           </Motion>
         ))}
@@ -76,51 +89,49 @@ const QuestionScene = ({ slide, index, total }: { slide: QuestionSlide; index: n
     </div>
     <Sound sound={slide.soundPath} />
     <DualCaptions en={slide.captionsEn} ja={slide.captionsJa} />
-  </FillFrame>
+  </SlideFrame>
 )
 
 const ExplanationScene = ({ slide, index, total }: { slide: ExplanationSlide; index: number; total: number }) => (
-  <FillFrame style={{ alignItems: "center", justifyContent: "center", padding: 80 }}>
-    <Background index={index} total={total} />
-    <div style={{ width: "100%", maxWidth: 1500 }}>
+  <SlideFrame index={index} total={total}>
+    <div style={{ width: "100%", maxWidth: 1450 }}>
       <Motion delay={0.05} y={16}>
         <Kicker text="Answer" />
       </Motion>
       <Motion delay={0.12} y={20}>
-        <div style={{ marginTop: 22, fontSize: 56, fontWeight: 900, color: ACCENT, letterSpacing: -1 }}>
+        <div style={{ marginTop: 20, fontSize: 52, fontWeight: 900, color: ACCENT, letterSpacing: -1 }}>
           {slide.answerLabel}
         </div>
       </Motion>
       <Motion delay={0.24} y={18}>
-        <Glass style={{ marginTop: 26, padding: "26px 32px" }}>
-          <div style={{ fontSize: 26, lineHeight: 1.55, color: INK, fontWeight: 600 }}>{slide.explanation}</div>
+        <Glass style={{ marginTop: 24, padding: "24px 30px" }}>
+          <div style={{ fontSize: 24, lineHeight: 1.55, color: INK, fontWeight: 600 }}>{slide.explanation}</div>
         </Glass>
       </Motion>
     </div>
     <Sound sound={slide.soundPath} />
     <DualCaptions en={slide.captionsEn} ja={slide.captionsJa} />
-  </FillFrame>
+  </SlideFrame>
 )
 
 const PronunciationScene = ({ slide, index, total }: { slide: PronunciationSlide; index: number; total: number }) => (
-  <FillFrame style={{ alignItems: "center", justifyContent: "center", padding: 80 }}>
-    <Background index={index} total={total} />
-    <div style={{ width: "100%", maxWidth: 1500, display: "flex", flexDirection: "column", gap: 20 }}>
+  <SlideFrame index={index} total={total}>
+    <div style={{ width: "100%", maxWidth: 1450, display: "flex", flexDirection: "column", gap: 16 }}>
       <Motion delay={0.05} y={16}>
         <Kicker text="発音のポイント" />
       </Motion>
       {slide.points.length === 0 ? (
         <Motion delay={0.16} y={18}>
-          <Glass style={{ padding: "26px 32px" }}>
-            <div style={{ fontSize: 26, color: MUTED }}>この設問に特筆すべき発音の難所はありません。</div>
+          <Glass style={{ padding: "24px 30px" }}>
+            <div style={{ fontSize: 24, color: MUTED }}>この設問に特筆すべき発音の難所はありません。</div>
           </Glass>
         </Motion>
       ) : (
         slide.points.map((point, i) => (
           <Motion key={point.phrase + i} delay={0.16 + i * 0.12} y={18}>
-            <Glass style={{ padding: "26px 32px" }}>
-              <div style={{ fontSize: 32, fontWeight: 900, color: ACCENT, marginBottom: 10 }}>{point.phrase}</div>
-              <div style={{ fontSize: 22, color: INK, lineHeight: 1.5 }}>{point.note_ja}</div>
+            <Glass style={{ padding: "22px 30px" }}>
+              <div style={{ fontSize: 28, fontWeight: 900, color: ACCENT, marginBottom: 8 }}>{point.phrase}</div>
+              <div style={{ fontSize: 20, color: INK, lineHeight: 1.5 }}>{point.note_ja}</div>
             </Glass>
           </Motion>
         ))
@@ -128,7 +139,7 @@ const PronunciationScene = ({ slide, index, total }: { slide: PronunciationSlide
     </div>
     <Sound sound={slide.soundPath} />
     <DualCaptions en={slide.captionsEn} ja={slide.captionsJa} />
-  </FillFrame>
+  </SlideFrame>
 )
 
 const VisualTrack = () => (

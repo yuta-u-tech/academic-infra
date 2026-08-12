@@ -8,10 +8,12 @@ DBの `ListeningItem` には会話の台本(誰が何を話したか)が残っ�
 `dialogue.json` から台本を拾い直し、`PassageGroup` の形に組み立てて渡す
 (この器はその変換の結果を受け取るだけで、academic-english-data には触れない)。
 
-1パッセージ(1会話・複数設問) = 常に4枚固定
-(質問 / 解説 / 発音 / シャドーイング)。発音スライドは「該当する時だけ」ではなく
-毎回出す、という明示の指示に基づく。リンキングのアニメーション等の個別演出は
-別途(この器の対象外)。
+1パッセージ(1会話・複数設問) = 質問と解説を設問ごとに1枚ずつ(Q1/A1/Q2/A2/...) +
+発音1枚 + シャドーイング1枚。最初は「1枚目は質問、2枚目で解説」で全設問をまとめて
+1枚に乗せていたが、3問+選択肢を1枚に全部乗せると字幕と重なるほど密度過多になった
+(2026-08-12の指摘、プロトタイプ視聴後)ため、Part5と同じく1問=1枚に割った。
+発音スライドは「該当する時だけ」ではなく毎回出す、という明示の指示に基づく。
+リンキングのアニメーション等の個別演出は別途(この器の対象外)。
 """
 
 from __future__ import annotations
@@ -76,62 +78,60 @@ def _merge(audio_dir: Path, name: str, parts: list[Path]) -> tuple[Path, list[fl
     return merged, durations
 
 
-def _question_slide(passage: dict, audio_dir: Path, engine: TTSEngine) -> tuple[dict, float]:
+def _question_slide(passage: dict, question_number: int, question: dict, audio_dir: Path, engine: TTSEngine) -> dict:
+    """1問だけを乗せるスライド。会話全体で1度だけ話される案内文(introEn)は最初の
+    設問のスライドにだけ含める(実際のTOEICの進行と同じ)。"""
     passage_id = passage["passageId"]
-    texts_en = [passage["introEn"]]
-    for n, question in enumerate(passage["questions"], start=1):
-        choice_text = " ".join(f"{_LETTERS[j]}, {c}." for j, c in enumerate(question["choices"]))
-        texts_en.append(f"Number {n}. {question['question']} {choice_text}")
+    total = len(passage["questions"])
+    choice_text = " ".join(f"{_LETTERS[j]}, {c}." for j, c in enumerate(question["choices"]))
+    texts_en = ([passage["introEn"]] if question_number == 1 else []) + [
+        f"Number {question_number}. {question['question']} {choice_text}"
+    ]
+    texts_ja = ([passage["introEn"]] if question_number == 1 else []) + [question["question"]]
 
     parts = [
-        _render_segment(engine, audio_dir, f"{passage_id}.q{i}", "narrator", text, "en")
+        _render_segment(engine, audio_dir, f"{passage_id}.q{question_number}.{i}", "narrator", text, "en")
         for i, text in enumerate(texts_en)
     ]
-    merged, durations = _merge(audio_dir, f"{passage_id}.slide1.wav", parts)
+    merged, durations = _merge(audio_dir, f"{passage_id}.q{question_number}.wav", parts)
     cues_en = _sequential_cues(texts_en, durations)
-    cues_ja = _sequential_cues(
-        [passage["introEn"]] + [q["question"] for q in passage["questions"]], durations
-    )
+    cues_ja = _sequential_cues(texts_ja, durations)
     duration = cues_en[-1]["end"] + _SLIDE_TAIL_SECONDS
-    return (
-        {
-            "kind": "question",
-            "passageId": passage_id,
-            "questions": [
-                {"question": q["question"], "choices": q["choices"], "reviewId": q["reviewId"]}
-                for q in passage["questions"]
-            ],
-            "soundPath": str(merged),
-            "durationSeconds": round(duration, 3),
-            "captionsEn": cues_en,
-            "captionsJa": cues_ja,
-        },
-        duration,
-    )
+    return {
+        "kind": "question",
+        "passageId": passage_id,
+        "questionNumber": question_number,
+        "totalQuestions": total,
+        "question": question["question"],
+        "choices": question["choices"],
+        "reviewId": question["reviewId"],
+        "soundPath": str(merged),
+        "durationSeconds": round(duration, 3),
+        "captionsEn": cues_en,
+        "captionsJa": cues_ja,
+    }
 
 
-def _explanation_slide(passage: dict, content: dict, audio_dir: Path, engine: TTSEngine) -> dict:
+def _explanation_slide(
+    passage: dict, question_number: int, question: dict, reason_en: str, audio_dir: Path, engine: TTSEngine
+) -> dict:
     passage_id = passage["passageId"]
-    questions = passage["questions"]
-    letters = [_LETTERS[q["answerIndex"]] for q in questions]
-    texts_en = [
-        f"The answer to number {n}. is {letter}. {reason}"
-        for n, (letter, reason) in enumerate(zip(letters, content["reason_en"]), start=1)
-    ]
-    parts = [
-        _render_segment(engine, audio_dir, f"{passage_id}.exp{i}", "narrator", text, "en")
-        for i, text in enumerate(texts_en)
-    ]
-    merged, durations = _merge(audio_dir, f"{passage_id}.slide2.wav", parts)
-    cues_en = _sequential_cues(texts_en, durations)
-    cues_ja = _sequential_cues([q["explanation"] for q in questions], durations)
+    total = len(passage["questions"])
+    letter = _LETTERS[question["answerIndex"]]
+    text_en = f"The answer to number {question_number}. is {letter}. {reason_en}"
+
+    part = _render_segment(engine, audio_dir, f"{passage_id}.a{question_number}.src", "narrator", text_en, "en")
+    merged, durations = _merge(audio_dir, f"{passage_id}.a{question_number}.wav", [part])
+    cues_en = _sequential_cues([text_en], durations)
+    cues_ja = _sequential_cues([question["explanation"]], durations)
     duration = cues_en[-1]["end"] + _SLIDE_TAIL_SECONDS
     return {
         "kind": "explanation",
         "passageId": passage_id,
-        "questions": [
-            {"answerLabel": letter, "explanation": q["explanation"]} for letter, q in zip(letters, questions)
-        ],
+        "questionNumber": question_number,
+        "totalQuestions": total,
+        "answerLabel": letter,
+        "explanation": question["explanation"],
         "soundPath": str(merged),
         "durationSeconds": round(duration, 3),
         "captionsEn": cues_en,
@@ -147,7 +147,7 @@ def _pronunciation_slide(passage: dict, content: dict, audio_dir: Path, engine: 
         _render_segment(engine, audio_dir, f"{passage_id}.pron{i}", "narrator", text, "en")
         for i, text in enumerate(texts_en)
     ]
-    merged, durations = _merge(audio_dir, f"{passage_id}.slide3.wav", parts)
+    merged, durations = _merge(audio_dir, f"{passage_id}.pronunciation.wav", parts)
     cues_en = _sequential_cues(texts_en, durations)
     cues_ja = _sequential_cues(
         [content.get("pronunciation_intro_ja", content["pronunciation_intro_en"])]
@@ -173,7 +173,7 @@ def _shadowing_slide(passage: dict, audio_dir: Path, engine: TTSEngine) -> dict:
         _render_segment(engine, audio_dir, f"{passage_id}.sh{i}", line["speaker"], line["text"], "en")
         for i, line in enumerate(transcript)
     ]
-    merged, durations = _merge(audio_dir, f"{passage_id}.slide4.wav", parts)
+    merged, durations = _merge(audio_dir, f"{passage_id}.shadowing.wav", parts)
     cues_en = _sequential_cues([line["text"] for line in transcript], durations)
     duration = cues_en[-1]["end"] + _SLIDE_TAIL_SECONDS
     return {
@@ -200,6 +200,9 @@ def build_slides_listening(
     content_by_passage_id: `{passageId: {reason_en: [設問ごとの英語ナレーション],
     pronunciation_intro_en, pronunciation_points: [{phrase, note_en, note_ja}]}}`
     — Claudeが1パッセージずつ書いたもの(reason_enとpronunciationは機械的には書けない)。
+
+    1パッセージにつき Q1, A1, Q2, A2, ... , Pronunciation, Shadowing の順で返す
+    (設問ごとに即座に解説することでスライド1枚あたりの密度を抑える)。
     """
     audio_dir.mkdir(parents=True, exist_ok=True)
     slides: list[dict] = []
@@ -211,12 +214,18 @@ def build_slides_listening(
             raise ReviewSlideError(f"{passage_id} の authored content がありません。")
         _validate_content(passage_id, content, len(passage["questions"]))
 
-        question_slide, _ = _question_slide(passage, audio_dir, engine)
-        explanation_slide = _explanation_slide(passage, content, audio_dir, engine)
-        pronunciation_slide = _pronunciation_slide(passage, content, audio_dir, engine)
-        shadowing_slide = _shadowing_slide(passage, audio_dir, engine)
+        passage_slides: list[dict] = []
+        for question_number, (question, reason_en) in enumerate(
+            zip(passage["questions"], content["reason_en"]), start=1
+        ):
+            passage_slides.append(_question_slide(passage, question_number, question, audio_dir, engine))
+            passage_slides.append(
+                _explanation_slide(passage, question_number, question, reason_en, audio_dir, engine)
+            )
+        passage_slides.append(_pronunciation_slide(passage, content, audio_dir, engine))
+        passage_slides.append(_shadowing_slide(passage, audio_dir, engine))
 
-        for slide in (question_slide, explanation_slide, pronunciation_slide, shadowing_slide):
+        for slide in passage_slides:
             slide["index"] = index
             slides.append(slide)
 

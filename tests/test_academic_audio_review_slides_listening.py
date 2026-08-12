@@ -1,9 +1,10 @@
 """間違えたTOEICリスニング問題からFrameScript用のスライド配列を組み立てる。
 
 Part5用(review_slides.py)とは別テンプレート — 会話台本の再現とシャドーイングが
-要る点が違うので、器も分ける。1会話(パッセージ) = 常に4枚固定
-(質問/解説/発音/シャドーイング)。「該当する時だけ出す」可変枚数にはしない、と
-本人が明言している(発音スライドは毎回出す)。
+要る点が違うので、器も分ける。1問=質問1枚+解説1枚(Q1/A1/Q2/A2/...)、最後に
+発音1枚+シャドーイング1枚(2026-08-12: 全設問を1枚に乗せると字幕と重なるほど
+密度過多という指摘を受けて、Part5と同じ1問=1枚方式に変更)。発音スライドは
+「該当する時だけ」ではなく毎回出す、という明示の指示への対応。
 """
 
 import pytest
@@ -60,27 +61,40 @@ def audio_dir(tmp_path):
     return tmp_path / "audio"
 
 
-def test_a_passage_becomes_four_slides(audio_dir):
+def test_a_two_question_passage_becomes_six_slides(audio_dir):
+    """Q1/A1/Q2/A2/発音/シャドーイング = 6枚。"""
     slides = build_slides_listening([PASSAGE], CONTENT, audio_dir, WavEngine())
-    assert [s["kind"] for s in slides] == ["question", "explanation", "pronunciation", "shadowing"]
+    assert [s["kind"] for s in slides] == [
+        "question", "explanation", "question", "explanation", "pronunciation", "shadowing",
+    ]
 
 
-def test_the_question_slide_lists_every_grouped_question(audio_dir):
+def test_each_question_slide_carries_exactly_one_question(audio_dir):
     slides = build_slides_listening([PASSAGE], CONTENT, audio_dir, WavEngine())
-    question = slides[0]
-    assert question["passageId"] == PASSAGE["passageId"]
-    assert len(question["questions"]) == 2
-    assert question["questions"][0]["choices"][0] == "Incorrect labels were printed."
-    assert (audio_dir / f"{PASSAGE['passageId']}.slide1.wav").exists()
+    q1, q2 = slides[0], slides[2]
+    assert q1["questionNumber"] == 1
+    assert q1["totalQuestions"] == 2
+    assert q1["choices"] == ["Incorrect labels were printed.", "A printer broke down.", "Boxes were damaged.", "A shipment was late."]
+    assert q1["reviewId"] == "toeic.listening.part3.20260809.0001.1"
+    assert q2["questionNumber"] == 2
+    assert (audio_dir / f"{PASSAGE['passageId']}.q1.wav").exists()
+    assert (audio_dir / f"{PASSAGE['passageId']}.q2.wav").exists()
 
 
-def test_the_explanation_slide_reveals_answers_and_reasons(audio_dir):
+def test_the_intro_line_is_only_spoken_once_on_the_first_question(audio_dir):
     slides = build_slides_listening([PASSAGE], CONTENT, audio_dir, WavEngine())
-    explanation = slides[1]
-    assert explanation["questions"][0]["answerLabel"] == "A"
-    assert explanation["questions"][1]["answerLabel"] == "C"
-    ja_text = "".join(cue["text"] for cue in explanation["captionsJa"])
-    assert "間違ったラベル" in ja_text
+    q1, q2 = slides[0], slides[2]
+    assert q1["captionsEn"][0]["text"] == PASSAGE["introEn"]
+    assert all(cue["text"] != PASSAGE["introEn"] for cue in q2["captionsEn"])
+
+
+def test_each_explanation_slide_reveals_its_own_answer_and_reason(audio_dir):
+    slides = build_slides_listening([PASSAGE], CONTENT, audio_dir, WavEngine())
+    a1, a2 = slides[1], slides[3]
+    assert a1["answerLabel"] == "A"
+    assert a2["answerLabel"] == "C"
+    assert "間違ったラベル" in a1["captionsJa"][0]["text"]
+    assert (audio_dir / f"{PASSAGE['passageId']}.a1.wav").exists()
 
 
 def test_the_pronunciation_slide_is_always_present_even_without_extra_authoring(audio_dir):
@@ -99,9 +113,10 @@ def test_the_pronunciation_slide_is_always_present_even_without_extra_authoring(
 
 def test_the_shadowing_slide_replays_the_original_transcript_verbatim(audio_dir):
     slides = build_slides_listening([PASSAGE], CONTENT, audio_dir, WavEngine())
-    shadowing = slides[3]
+    shadowing = slides[-1]
+    assert shadowing["kind"] == "shadowing"
     assert shadowing["transcript"] == PASSAGE["transcript"]
-    assert (audio_dir / f"{PASSAGE['passageId']}.slide4.wav").exists()
+    assert (audio_dir / f"{PASSAGE['passageId']}.shadowing.wav").exists()
 
 
 def test_a_pause_is_added_after_the_audio_ends_before_the_next_slide(audio_dir):
@@ -135,4 +150,4 @@ def test_passage_numbers_are_sequential_across_passages(audio_dir):
     content2 = {**CONTENT, "toeic.listening.part3.20260809.0002": CONTENT[PASSAGE["passageId"]]}
     slides = build_slides_listening([PASSAGE, passage2], content2, audio_dir, WavEngine())
     assert slides[0]["index"] == 1
-    assert slides[4]["index"] == 2
+    assert slides[6]["index"] == 2
