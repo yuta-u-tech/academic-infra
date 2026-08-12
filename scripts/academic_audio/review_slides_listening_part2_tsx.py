@@ -48,7 +48,7 @@ type PronunciationSlide = {
   kind: "pronunciation"
   reviewId: string
   index: number
-  points: { phrase: string; note_en: string; note_ja: string }[]
+  points: { phrase: string; note_en: string; note_ja: string; example_en: string }[]
   soundPath: string
   durationSeconds: number
   captionsEn: CaptionCue[]
@@ -154,6 +154,9 @@ const PronunciationScene = ({ slide, index, total }: { slide: PronunciationSlide
             <Glass style={{ padding: "22px 30px" }}>
               <div style={{ fontSize: 28, fontWeight: 900, color: ACCENT, marginBottom: 8 }}>{point.phrase}</div>
               <div style={{ fontSize: 20, color: INK, lineHeight: 1.5 }}>{point.note_ja}</div>
+              <div style={{ fontSize: 18, color: MUTED, lineHeight: 1.4, marginTop: 8, fontStyle: "italic" }}>
+                例: {point.example_en}
+              </div>
             </Glass>
           </Motion>
         ))

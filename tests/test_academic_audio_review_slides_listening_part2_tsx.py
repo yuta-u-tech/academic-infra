@@ -32,7 +32,9 @@ PRONUNCIATION_SLIDE = {
     "kind": "pronunciation",
     "reviewId": "toeic.listening.part2.20260809.0001",
     "index": 1,
-    "points": [{"phrase": "moved to", "note_en": "links together", "note_ja": "つながります"}],
+    "points": [
+        {"phrase": "moved to", "note_en": "links together", "note_ja": "つながります", "example_en": "It was moved to Thursday."}
+    ],
     "soundPath": "/home/user/academic-infra/.academic-audio/jobs/x/slide3.wav",
     "durationSeconds": 10.0,
     "captionsEn": [{"start": 0, "end": 5, "text": "Notice."}],
@@ -66,3 +68,9 @@ def test_the_layout_keeps_the_approved_part5_centering(tmp_path):
     (padding: 80均等ではない)。"""
     tsx = render_project_tsx(ALL_SLIDES, framescript_root=tmp_path)
     assert 'justifyContent: "center"' in tsx
+
+
+def test_pronunciation_card_shows_the_example_sentence(tmp_path):
+    """2026-08-12「例文で実際にどう発音されるか」の指摘への対応。"""
+    tsx = render_project_tsx(ALL_SLIDES, framescript_root=tmp_path)
+    assert "point.example_en" in tsx

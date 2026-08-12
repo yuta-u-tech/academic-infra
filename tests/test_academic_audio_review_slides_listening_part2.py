@@ -43,6 +43,7 @@ CONTENT = {
                 "phrase": "moved to",
                 "note_en": "moved to links into one sound, like moove-tuh.",
                 "note_ja": "moved to は d が次の母音とつながります。",
+                "example_en": "The meeting was moved to Thursday.",
             }
         ],
     }
@@ -94,6 +95,15 @@ def test_the_pronunciation_slide_is_always_present(audio_dir):
     pronunciation = [s for s in slides if s["kind"] == "pronunciation"]
     assert len(pronunciation) == 1
     assert pronunciation[0]["points"] == []
+
+
+def test_pronunciation_points_are_narrated_with_their_example_sentence(audio_dir):
+    """発音ポイントはフレーズの説明だけでなく、例文でどう発音されるかも音声つきで
+    示してほしいという指摘(2026-08-12)への対応。"""
+    slides = build_slides_listening_part2([ITEM], CONTENT, audio_dir, WavEngine())
+    pronunciation = next(s for s in slides if s["kind"] == "pronunciation")
+    joined_en = " ".join(cue["text"] for cue in pronunciation["captionsEn"])
+    assert "The meeting was moved to Thursday." in joined_en
 
 
 def test_no_shadowing_slide_is_produced(audio_dir):

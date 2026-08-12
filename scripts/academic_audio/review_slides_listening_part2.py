@@ -109,9 +109,14 @@ def _explanation_slide(item: dict, content: dict, audio_dir: Path, engine: TTSEn
 
 
 def _pronunciation_slide(item: dict, content: dict, audio_dir: Path, engine: TTSEngine) -> dict:
+    """points[i]["example_en"]: そのフレーズを実際に使った例文。説明だけでなく
+    実際の例文でどう聞こえるかを音声つきで示してほしいという指摘(2026-08-12)への
+    対応(review_slides_listening.pyのPart3/4と同じ)。"""
     review_id = item["reviewId"]
     points = content["pronunciation_points"]
-    texts_en = [content["pronunciation_intro_en"]] + [p["note_en"] for p in points]
+    texts_en = [content["pronunciation_intro_en"]] + [
+        f"{p['note_en']} For example: {p['example_en']}" for p in points
+    ]
     texts_ja = [content["pronunciation_intro_ja"]] + [
         p["note_ja"] for p in points
     ]
