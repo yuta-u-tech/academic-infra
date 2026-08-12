@@ -60,9 +60,9 @@ def test_no_shadowing_type_is_defined(tmp_path):
     assert "ShadowingScene" not in tsx
 
 
-def test_the_layout_matches_the_approved_part5_base(tmp_path):
-    """2026-08-12: Part5(review_slides_tsx.py)と同じcenter + 均等paddingの
-    土台を使う。独自レイアウトを考えるのではなく承認済みのものを踏襲する。"""
+def test_the_layout_keeps_the_approved_part5_centering(tmp_path):
+    """2026-08-12: Part5(review_slides_tsx.py)と同じcenter揃えを使う。ただし
+    構造化ポイント+長めの字幕が実測で字幕帯と重なったため、下だけ余白を広げている
+    (padding: 80均等ではない)。"""
     tsx = render_project_tsx(ALL_SLIDES, framescript_root=tmp_path)
     assert 'justifyContent: "center"' in tsx
-    assert "padding: 80" in tsx

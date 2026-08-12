@@ -57,11 +57,13 @@ type PronunciationSlide = {
 
 type Slide = QuestionSlide | ExplanationSlide | PronunciationSlide
 
-// Part5のQuestionScene/AnswerSceneと同じ土台(center + 均等padding: 80)。
+// 実測(2026-08-12): 解説スライドは構造化ポイント+文分割済みの長めの字幕が
+// 同時に乗るため、Part5と同じpadding: 80均等では字幕帯と実際に重なった
+// (スクリーンショットで確認)。centerは維持しつつ、下だけ字幕2段ぶんの高さを確保する。
 const SlideFrame = ({
   index, total, children,
 }: { index: number; total: number; children: React.ReactNode }) => (
-  <FillFrame style={{ alignItems: "center", justifyContent: "center", padding: 80 }}>
+  <FillFrame style={{ alignItems: "center", justifyContent: "center", padding: "70px 90px 250px" }}>
     <Background index={index} total={total} />
     {children}
   </FillFrame>
