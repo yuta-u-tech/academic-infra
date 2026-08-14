@@ -155,8 +155,57 @@ class GrammarItem(_Strict):
             return False
 
 
+class ReadingBlankItem(_Strict):
+    """長文中の空所補充（TOEIC Part 6 の形）。
+
+    GrammarItem（Part5）の point/pattern による誤答傾向追跡と、ReadingItem（Part7）の
+    passageグルーピングを合成したもの。1つのpassageに空所が4つぶら下がり、うち1つは
+    単語/句選択ではなく「文挿入」（blank_type="sentence"）になる。文挿入はA/B/Cの
+    誤答パターン分類が馴染まないため pattern/pattern_note は省略可にしてある。
+    """
+
+    kind: Literal["reading_blank"] = "reading_blank"
+    domain: Literal["reading"] = "reading"
+    sub_skill: Literal["comprehension", "syntax_parsing", "vocabulary", "reading_speed"] = (
+        "comprehension"
+    )
+    passage: str = Field(min_length=1, max_length=4000, description="空所は [1]〜[4] で示す")
+    blank_number: int = Field(ge=1, le=4)
+    blank_type: Literal["word", "sentence"] = "word"
+    choices: list[str] = Field(min_length=3, max_length=5)
+    answer_index: int = Field(ge=0)
+    explanation: str = Field(min_length=1, max_length=2000)
+    point: str = Field(min_length=1, max_length=120, description="問われている文法/語彙項目")
+    pattern: Literal["A", "B", "C"] | None = Field(
+        default=None,
+        description="誤答選択肢の作り方（english/prompts/grammar.md参照）。blank_type=wordのみ必須",
+    )
+    pattern_note: str | None = Field(default=None, max_length=300)
+
+    @model_validator(mode="after")
+    def _blank_marker_and_answer_are_consistent(self) -> "ReadingBlankItem":
+        marker = f"[{self.blank_number}]"
+        if marker not in self.passage:
+            raise ValueError(f"passage に空所マーカー '{marker}' がありません。")
+        if self.answer_index >= len(self.choices):
+            raise ValueError(
+                f"answer_index={self.answer_index} は choices({len(self.choices)}件)の範囲外です。"
+            )
+        return self
+
+    def prompt(self) -> str:
+        return f"{self.passage}\n\n[{self.blank_number}]"
+
+    def check(self, response: str) -> bool:
+        try:
+            return int(response) == self.answer_index
+        except (TypeError, ValueError):
+            return False
+
+
 Item = Annotated[
-    Union[VocabItem, ReadingItem, GrammarItem, ListeningItem], Field(discriminator="kind")
+    Union[VocabItem, ReadingItem, GrammarItem, ListeningItem, ReadingBlankItem],
+    Field(discriminator="kind"),
 ]
 
 

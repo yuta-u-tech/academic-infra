@@ -13,7 +13,8 @@ from academic_audio.items import ListeningSet, PassageSet
 from .generate import ingest, upsert_material
 from .items import GrammarItem
 from .sources import ExternalMaterial
-from .sources import studyforge, ted, toeic_listening, toeic_part5, toeic_part7, voa
+from .sources import studyforge, ted, toeic_listening, toeic_part5, toeic_part6, toeic_part7, voa
+from .sources.toeic_part6 import Part6Passage
 from .sources.toeic_part7 import Part7Passage
 
 
@@ -90,6 +91,30 @@ def import_toeic_part7(connection: sqlite3.Connection, set_id: str, passages: li
         ingest(
             connection,
             toeic_part7.build_result(material, item, f"TOEIC Part7 セット {set_id} からの取り込み"),
+        )
+        imported += 1
+    return imported
+
+
+def import_toeic_part6(connection: sqlite3.Connection, set_id: str, passages: list[Part6Passage]) -> int:
+    """TOEIC Part6（長文穴埋め）のセットを学習ループへ取り込む。
+
+    `import_toeic_part7` と同じ理由・同じ冪等性の作り方だが、`kind='reading_blank'`で
+    存在チェックする（Part7の`kind='reading'`とは別種のためカードが混ざらない）。
+    """
+    imported = 0
+    for material, item in toeic_part6.iter_materials(set_id, passages):
+        upsert_material(connection, material)
+        existing = connection.execute(
+            "SELECT 1 FROM generated_item WHERE review_id = ? AND kind = 'reading_blank'"
+            " AND retired_at IS NULL LIMIT 1",
+            (material.review_id,),
+        ).fetchone()
+        if existing:
+            continue
+        ingest(
+            connection,
+            toeic_part6.build_result(material, item, f"TOEIC Part6 セット {set_id} からの取り込み"),
         )
         imported += 1
     return imported

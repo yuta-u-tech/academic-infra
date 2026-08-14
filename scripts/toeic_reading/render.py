@@ -14,9 +14,18 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from academic_audio.worksheet import build_pdf, escape  # noqa: E402
 from acenglish.items import GrammarItem  # noqa: E402
+from acenglish.sources.toeic_part6 import Part6Passage  # noqa: E402
 from acenglish.sources.toeic_part7 import Part7Passage  # noqa: E402
 
-__all__ = ["build_pdf", "render_md", "render_reading_md", "render_reading_tex", "render_tex"]
+__all__ = [
+    "build_pdf",
+    "render_md",
+    "render_part6_md",
+    "render_part6_tex",
+    "render_reading_md",
+    "render_reading_tex",
+    "render_tex",
+]
 
 _PREAMBLE = r"""\documentclass[a4paper,11pt]{ltjsarticle}
 \usepackage{luatexja}
@@ -217,5 +226,105 @@ def render_reading_md(title: str, passages: list[Part7Passage]) -> str:
             lines.append("")
             lines.append(f"   {question.explanation}")
             lines.append("")
+
+    return "\n".join(lines) + "\n"
+
+
+def _part6_escape_passage(passage: str) -> str:
+    """空所マーカー [1]〜[4] は太字にし、それ以外はエスケープする。"""
+    escaped = escape(passage)
+    for number in range(1, 5):
+        marker = f"[{number}]"
+        escaped = escaped.replace(marker, r"\textbf{" + marker + r"}")
+    return escaped.replace("\n", r"\par ")
+
+
+def render_part6_tex(title: str, passages: list[Part6Passage], form_url: str | None = None) -> str:
+    """Part7と違い、1passage内の設問(空所)は本文中のマーカー順(blank_number)で並べる。"""
+    lines = [
+        _PREAMBLE,
+        r"\title{" + escape(title) + "}",
+        r"\date{}",
+        r"\begin{document}",
+        r"\maketitle",
+        r"\section*{Part 6 — 長文穴埋め}",
+        "",
+        *_form_line(form_url),
+        "文書中の空所 [1]〜[4] に入れるのに最も適切な語句・文を (A)〜(D) から1つ選びなさい。",
+        "",
+    ]
+
+    for passage in passages:
+        lines.append(r"\par\noindent " + _part6_escape_passage(passage.passage))
+        lines.append("")
+        questions = sorted(passage.questions, key=lambda q: q.blank_number)
+        lines.append(r"\begin{enumerate}[label={}]")
+        for question in questions:
+            lines.append(r"  \item[\textbf{[" + str(question.blank_number) + r"]}]")
+            lines.append(r"    \begin{enumerate}[label=(\Alph*)]")
+            for choice in question.choices:
+                lines.append(r"      \item " + escape(choice))
+            lines.append(r"    \end{enumerate}")
+        lines.append(r"\end{enumerate}")
+        lines.append(r"\clearpage")
+
+    lines.extend([r"\section*{解答と解説}", ""])
+    for passage_index, passage in enumerate(passages, start=1):
+        questions = sorted(passage.questions, key=lambda q: q.blank_number)
+        for question in questions:
+            label = _LABELS[question.answer_index] if question.answer_index < len(_LABELS) else "?"
+            heading = f"パッセージ{passage_index} [{question.blank_number}]. 正解: {label}（{question.point}"
+            heading += f"・パターン{question.pattern}）" if question.pattern else "）"
+            lines.append(r"\par\noindent \textbf{" + escape(heading) + r"}")
+            lines.append(r"\par " + escape(question.explanation))
+            if question.pattern_note:
+                lines.append(
+                    r"\par\smallskip " + escape(f"[パターン{question.pattern}の理由] {question.pattern_note}")
+                )
+            lines.append("")
+
+    lines.extend(["", r"\clearpage", r"\section*{パターンについて}", ""])
+    lines.append(r"\begin{description}")
+    for label, description in _PATTERN_LEGEND:
+        lines.append(r"  \item[" + escape(label) + r"] " + escape(description))
+    lines.append(r"\end{description}")
+
+    lines.append(r"\end{document}")
+    return "\n".join(lines) + "\n"
+
+
+def render_part6_md(title: str, passages: list[Part6Passage]) -> str:
+    """ChatGPTにfree-formで解かせるためのMarkdown版（render_part6_tex()と同内容）。"""
+    lines = [f"# {title}", "", "## Part 6 — 長文穴埋め", "",
+              "文書中の空所 [1]〜[4] に入れるのに最も適切な語句・文を (A)〜(D) から1つ選びなさい。", ""]
+
+    for passage_index, passage in enumerate(passages, start=1):
+        lines.append(f"### パッセージ {passage_index}（{passage.passage_type}）")
+        lines.append("")
+        lines.append(passage.passage)
+        lines.append("")
+        for question in sorted(passage.questions, key=lambda q: q.blank_number):
+            lines.append(f"[{question.blank_number}]")
+            for label, choice in zip(_LABELS, question.choices):
+                lines.append(f"   - ({label}) {choice}")
+            lines.append("")
+
+    lines.extend(["---", "", "## 解答と解説", ""])
+    for passage_index, passage in enumerate(passages, start=1):
+        for question in sorted(passage.questions, key=lambda q: q.blank_number):
+            label = _LABELS[question.answer_index] if question.answer_index < len(_LABELS) else "?"
+            pattern_suffix = f"・パターン{question.pattern}" if question.pattern else ""
+            lines.append(f"パッセージ{passage_index} [{question.blank_number}]. **正解: {label}**（{question.point}{pattern_suffix}）")
+            lines.append("")
+            lines.append(f"   {question.explanation}")
+            lines.append("")
+            if question.pattern_note:
+                lines.append(f"   [パターン{question.pattern}の理由] {question.pattern_note}")
+                lines.append("")
+
+    lines.extend(["---", "", "## パターンについて", ""])
+    for label, description in _PATTERN_LEGEND:
+        lines.append(f"- **{label}**: {description}")
+    lines.append("")
 
     return "\n".join(lines) + "\n"

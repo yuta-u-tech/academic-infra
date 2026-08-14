@@ -26,13 +26,25 @@ _BEGIN_MARKER = "<!-- AUTO-GENERATED:BEGIN -->"
 _END_MARKER = "<!-- AUTO-GENERATED:END -->"
 _MARKER_PATTERN = re.compile(re.escape(_BEGIN_MARKER) + r".*?" + re.escape(_END_MARKER), re.DOTALL)
 
-_DOMAIN_ORDER = ("grammar", "reading", "listening", "vocabulary")
-_DOMAIN_TITLES = {
+_SECTION_ORDER = ("grammar", "reading_part6", "reading_part7", "listening", "vocabulary")
+_SECTION_TITLES = {
     "grammar": "Part5（文法）",
-    "reading": "Part7（読解）",
+    "reading_part6": "Part6（長文穴埋め）",
+    "reading_part7": "Part7（読解）",
     "listening": "リスニング",
     "vocabulary": "語彙",
 }
+
+
+def _section_key(row: dict) -> str:
+    """domain='reading'にはPart6(reading_blank)とPart7(reading)が両方乗るので、
+    kindで節を分ける（節見出しが「Part7」固定のままPart6が混ざるのを防ぐ）。
+    """
+    domain = row["domain"]
+    if domain != "reading":
+        return domain
+    payload = json.loads(row["payload"])
+    return "reading_part6" if payload.get("kind") == "reading_blank" else "reading_part7"
 
 _DEFAULT_HEADER = """# TOEIC 復習ノート
 
@@ -108,6 +120,15 @@ def _format_item(row: dict) -> str:
         lines.append(f"  - 設問: {payload['question']}")
         lines.append(_choice_line(payload))
         lines.append(f"  - 解説: {payload['explanation']}")
+    elif kind == "reading_blank":
+        passage = payload["passage"]
+        if len(passage) > 500:
+            passage = passage[:500] + "…"
+        lines.append(f"  - パッセージ: {passage}")
+        lines.append(f"  - 空所: [{payload['blank_number']}]（{payload.get('blank_type', 'word')}）")
+        lines.append(_choice_line(payload))
+        lines.append(f"  - 論点: {payload.get('point', '-')}")
+        lines.append(f"  - 解説: {payload['explanation']}")
     elif kind == "listening":
         lines.append(f"  - 設問: {payload['question']}")
         lines.append(_choice_line(payload))
@@ -125,16 +146,16 @@ def render_body(items: list[dict]) -> str:
     if not items:
         return "現在、間違えたまま残っている問題はありません。"
 
-    by_domain: dict[str, list[dict]] = {}
+    by_section: dict[str, list[dict]] = {}
     for item in items:
-        by_domain.setdefault(item["domain"], []).append(item)
+        by_section.setdefault(_section_key(item), []).append(item)
 
     sections = []
-    for domain in _DOMAIN_ORDER:
-        rows = by_domain.get(domain)
+    for section in _SECTION_ORDER:
+        rows = by_section.get(section)
         if not rows:
             continue
-        sections.append(f"### {_DOMAIN_TITLES[domain]}（{len(rows)}問）\n\n" + "\n\n".join(_format_item(r) for r in rows))
+        sections.append(f"### {_SECTION_TITLES[section]}（{len(rows)}問）\n\n" + "\n\n".join(_format_item(r) for r in rows))
     return "\n\n".join(sections)
 
 
@@ -212,6 +233,17 @@ def _tex_item(row: dict, escape) -> list[str]:
         lines.append(r"    \par\noindent 設問: " + escape(payload["question"]))
         lines.extend(_tex_choice_lines(payload, escape))
         lines.append(r"    \par\smallskip\noindent " + escape(payload["explanation"]))
+    elif kind == "reading_blank":
+        passage = payload["passage"]
+        if len(passage) > 500:
+            passage = passage[:500] + "…"
+        lines.append(r"    \par\noindent パッセージ: " + escape(passage))
+        lines.append(
+            r"    \par\noindent 空所: " + escape(f"[{payload['blank_number']}]（{payload.get('blank_type', 'word')}）")
+        )
+        lines.extend(_tex_choice_lines(payload, escape))
+        lines.append(r"    \par\noindent 論点: " + escape(payload.get("point", "-")))
+        lines.append(r"    \par\smallskip\noindent " + escape(payload["explanation"]))
     elif kind == "listening":
         lines.append(r"    \par\noindent 設問: " + escape(payload["question"]))
         lines.extend(_tex_choice_lines(payload, escape))
@@ -238,15 +270,15 @@ def render_tex(items: list[dict], playlist_url: str | None = None) -> str:
         lines.append(r"\end{document}")
         return "\n".join(lines) + "\n"
 
-    by_domain: dict[str, list[dict]] = {}
+    by_section: dict[str, list[dict]] = {}
     for item in items:
-        by_domain.setdefault(item["domain"], []).append(item)
+        by_section.setdefault(_section_key(item), []).append(item)
 
-    for domain in _DOMAIN_ORDER:
-        rows = by_domain.get(domain)
+    for section in _SECTION_ORDER:
+        rows = by_section.get(section)
         if not rows:
             continue
-        lines.append(r"\section*{" + escape(f"{_DOMAIN_TITLES[domain]}（{len(rows)}問）") + "}")
+        lines.append(r"\section*{" + escape(f"{_SECTION_TITLES[section]}（{len(rows)}問）") + "}")
         lines.append(r"\begin{enumerate}[label=\textbf{\arabic*.}]")
         for row in rows:
             lines.extend(_tex_item(row, escape))

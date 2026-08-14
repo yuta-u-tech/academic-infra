@@ -29,11 +29,20 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from acenglish.db import connect  # noqa: E402
-from acenglish.fetch import import_toeic_part5, import_toeic_part7  # noqa: E402
+from acenglish.fetch import import_toeic_part5, import_toeic_part6, import_toeic_part7  # noqa: E402
 from acenglish.items import GrammarItem  # noqa: E402
+from acenglish.sources.toeic_part6 import load_part6_items  # noqa: E402
 from acenglish.sources.toeic_part7 import load_part7_items  # noqa: E402
 from pydantic import ValidationError  # noqa: E402
-from toeic_reading.render import build_pdf, render_md, render_reading_md, render_reading_tex, render_tex  # noqa: E402
+from toeic_reading.render import (  # noqa: E402
+    build_pdf,
+    render_md,
+    render_part6_md,
+    render_part6_tex,
+    render_reading_md,
+    render_reading_tex,
+    render_tex,
+)
 
 DEFAULT_DRIVE_FOLDER_NAME = "TOEIC/reading/part5"
 
@@ -169,6 +178,99 @@ def _cmd_ingest_part7(args: argparse.Namespace) -> int:
     print(json.dumps(
         {"set_id": args.set_id, "count": question_count, "imported": imported},
         ensure_ascii=False, indent=2))
+    return 0
+
+
+def _cmd_shuffle_part6(args: argparse.Namespace) -> int:
+    """items.json（passagesグルーピング形）のpassage順序と、各設問の選択肢順序をシャッフルする。
+
+    Part6には「通常＋苦手重点」のpassage単位の重点復習枠がある（Part5の30+20と同じ発想）ので、
+    Part7と違いpassage順序も崩す（出題順から重点復習だと分かってしまうのを防ぐ）。
+    選択肢シャッフルの理由はPart5/Part7と同じ（作問側が正解をAに置く癖への対策）。
+    """
+    payload = json.loads(args.items.read_text(encoding="utf-8"))
+    passages = payload.get("passages")
+    if not passages:
+        raise SystemExit("passages が空か、'passages' キーがありません。")
+    random.shuffle(passages)
+    question_count = 0
+    for passage in passages:
+        for question in passage.get("questions", []):
+            _shuffle_choices(question)
+            question_count += 1
+    payload["passages"] = passages
+
+    out_path = args.out or args.items
+    out_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    print(json.dumps(
+        {"shuffled_passages": len(passages), "shuffled_questions": question_count, "out": str(out_path)},
+        ensure_ascii=False, indent=2))
+    return 0
+
+
+def _cmd_worksheet_part6(args: argparse.Namespace) -> int:
+    title, passages = load_part6_items(args.items)
+    args.out.mkdir(parents=True, exist_ok=True)
+    question_count = sum(len(p.questions) for p in passages)
+    tex_path = args.out / "worksheet.tex"
+    tex_path.write_text(render_part6_tex(title, passages, form_url=args.form_url), encoding="utf-8")
+    pdf_path = build_pdf(tex_path)
+    md_path = args.out / "worksheet.md"
+    md_path.write_text(render_part6_md(title, passages), encoding="utf-8")
+    print(json.dumps(
+        {
+            "pdf": str(pdf_path),
+            "md": str(md_path),
+            "passages": len(passages),
+            "questions": question_count,
+        },
+        ensure_ascii=False, indent=2))
+    return 0
+
+
+def _cmd_ingest_part6(args: argparse.Namespace) -> int:
+    _title, passages = load_part6_items(args.items)
+    question_count = sum(len(p.questions) for p in passages)
+    with connect(args.db) as connection:
+        imported = import_toeic_part6(connection, args.set_id, passages)
+    print(json.dumps(
+        {"set_id": args.set_id, "count": question_count, "imported": imported},
+        ensure_ascii=False, indent=2))
+    return 0
+
+
+def _cmd_weak_points_part6(args: argparse.Namespace) -> int:
+    """直近の誤答（Part6）を point/pattern 付きで並べる。`_cmd_weak_points`のPart6版。"""
+    with connect(args.db) as connection:
+        rows = connection.execute(
+            """
+            SELECT a.review_id, a.created_at, a.error_cause, g.payload
+            FROM attempt a
+            JOIN generated_item g ON a.review_id = g.review_id
+            WHERE a.correct = 0 AND a.review_id LIKE 'toeic.part6.%'
+            ORDER BY a.created_at DESC
+            LIMIT ?
+            """,
+            (args.limit,),
+        ).fetchall()
+
+    results = []
+    for row in rows:
+        payload = json.loads(row["payload"])
+        results.append({
+            "review_id": row["review_id"],
+            "created_at": row["created_at"],
+            "error_cause": row["error_cause"],
+            "passage": payload.get("passage"),
+            "blank_number": payload.get("blank_number"),
+            "blank_type": payload.get("blank_type"),
+            "choices": payload.get("choices"),
+            "answer_index": payload.get("answer_index"),
+            "point": payload.get("point"),
+            "pattern": payload.get("pattern"),
+            "pattern_note": payload.get("pattern_note"),
+        })
+    print(json.dumps({"count": len(results), "wrong_attempts": results}, ensure_ascii=False, indent=2))
     return 0
 
 
@@ -324,6 +426,35 @@ def build_parser() -> argparse.ArgumentParser:
     weak_points.add_argument("--limit", type=int, default=30, help="取得件数の上限（既定30）")
     weak_points.add_argument("--db", type=Path, default=None, help="既定: ~/.academic-english/english.db")
     weak_points.set_defaults(func=_cmd_weak_points)
+
+    shuffle_part6 = sub.add_parser(
+        "shuffle-part6",
+        help="items.json（passages形）のpassage順序と各設問の選択肢順序を機械的にシャッフルする（Form作成より前に実行）",
+    )
+    shuffle_part6.add_argument("--items", type=Path, required=True)
+    shuffle_part6.add_argument("--out", type=Path, help="既定: --items を上書き")
+    shuffle_part6.set_defaults(func=_cmd_shuffle_part6)
+
+    worksheet_part6 = sub.add_parser("worksheet-part6", help="items.json（passages形）から Part6 問題冊子PDFを組む")
+    worksheet_part6.add_argument("--items", type=Path, required=True, help="passages グルーピング形の items.json")
+    worksheet_part6.add_argument("--out", type=Path, required=True, help="出力先ディレクトリ")
+    worksheet_part6.add_argument(
+        "--form-url", help="toeic_forms_cli.py create で作成済みの回答フォームURL（先にForm作成が必須）"
+    )
+    worksheet_part6.set_defaults(func=_cmd_worksheet_part6)
+
+    ingest_part6 = sub.add_parser("ingest-part6", help="items.json（passages形）を acenglish の学習ループへ取り込む")
+    ingest_part6.add_argument("--items", type=Path, required=True, help="passages グルーピング形の items.json")
+    ingest_part6.add_argument("--set-id", required=True, help="このセットの識別子（review_idに使う）")
+    ingest_part6.add_argument("--db", type=Path, default=None, help="既定: ~/.academic-english/english.db")
+    ingest_part6.set_defaults(func=_cmd_ingest_part6)
+
+    weak_points_part6 = sub.add_parser(
+        "weak-points-part6", help="Part6の直近の誤答を point/pattern 付きで並べる（集計はしない）"
+    )
+    weak_points_part6.add_argument("--limit", type=int, default=30, help="取得件数の上限（既定30）")
+    weak_points_part6.add_argument("--db", type=Path, default=None, help="既定: ~/.academic-english/english.db")
+    weak_points_part6.set_defaults(func=_cmd_weak_points_part6)
 
     publish = sub.add_parser("publish", help="問題冊子PDFを Drive へ上げる")
     publish.add_argument("--pdf", type=Path, required=True)
