@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import random
 import re
 import sys
 from dataclasses import asdict
@@ -401,6 +402,59 @@ def _cmd_listening_request(args: argparse.Namespace) -> int:
     return 0
 
 
+def _shuffle_flat_item_choices(item: dict) -> None:
+    """Part2形式(1問=parts配列)の choice role パートをシャッフルし、answer_index を追従させる。
+
+    音声合成(`items.py: to_script()`)はこの result.json をそのまま読むので、ここで
+    シャッフルしておけば音声の読み上げ順と表示順が自動的に一致する
+    (2026-08-14、Part5の正解位置がAに92%偏っていた件と同じ作問側の癖への対策)。
+    """
+    parts = item.get("parts")
+    answer_index = item.get("answer_index")
+    if not parts or answer_index is None:
+        return
+    choice_positions = [i for i, part in enumerate(parts) if part.get("role") == "choice"]
+    if not choice_positions:
+        return
+    choice_parts = [parts[i] for i in choice_positions]
+    order = list(range(len(choice_parts)))
+    random.shuffle(order)
+    for position, source_index in zip(choice_positions, order):
+        parts[position] = choice_parts[source_index]
+    item["answer_index"] = order.index(answer_index)
+
+
+def _shuffle_passage_item_choices(item: dict) -> None:
+    """Part3/4形式(1問=questions配列)の各設問の choices をシャッフルする。"""
+    for question in item.get("questions", []):
+        choices = question.get("choices")
+        answer_index = question.get("answer_index")
+        if not choices or answer_index is None:
+            continue
+        order = list(range(len(choices)))
+        random.shuffle(order)
+        question["choices"] = [choices[i] for i in order]
+        question["answer_index"] = order.index(answer_index)
+
+
+def _cmd_listening_shuffle_choices(args: argparse.Namespace) -> int:
+    listening_format = load_format(args.format)
+    payload = json.loads(args.file.read_text(encoding="utf-8"))
+    items = payload.get("items")
+    if not items:
+        raise SystemExit("items がありません。")
+    if listening_format.grouping == "passage":
+        for item in items:
+            _shuffle_passage_item_choices(item)
+    else:
+        for item in items:
+            _shuffle_flat_item_choices(item)
+    out_path = args.out or args.file
+    out_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    print(json.dumps({"shuffled": len(items), "out": str(out_path)}, ensure_ascii=False, indent=2))
+    return 0
+
+
 def _cmd_listening_ingest(args: argparse.Namespace) -> int:
     """Validate Claude's items, then derive the script, the answer key and the worksheet.
 
@@ -757,6 +811,14 @@ def main() -> int:
     listening_request.add_argument("--vocab-deck", choices=vocab.DECKS, help="study-forge の単語デッキ（金フレ由来）から語彙を混ぜる")
     listening_request.add_argument("--vocab-count", type=int, default=5, help="混ぜる語数")
     listening_request.set_defaults(func=_cmd_listening_request)
+
+    listening_shuffle = listening_sub.add_parser(
+        "shuffle-choices", help="result.json内の各設問の選択肢順序を機械的にシャッフルする（ingestより前に実行）"
+    )
+    listening_shuffle.add_argument("--file", type=Path, required=True, help="request の後にClaudeが書いた result.json")
+    listening_shuffle.add_argument("--format", required=True)
+    listening_shuffle.add_argument("--out", type=Path, help="既定: --file を上書き")
+    listening_shuffle.set_defaults(func=_cmd_listening_shuffle_choices)
 
     listening_ingest = listening_sub.add_parser("ingest", help="作問結果を検証して台本・解答・問題冊子を出す")
     listening_ingest.add_argument("--file", type=Path, required=True)

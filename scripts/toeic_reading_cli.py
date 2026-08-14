@@ -118,6 +118,29 @@ def _cmd_ingest(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_shuffle_part7(args: argparse.Namespace) -> int:
+    """items.json(passagesグルーピング形)の各設問の選択肢順序を機械的にシャッフルする。
+
+    Part7には「通常＋苦手重点」の前半/後半構成が無いのでpassage/設問の出題順シャッフルは
+    不要だが、選択肢内の正解位置の偏り(Part5で92%がAだった)はPart7でも同じ作問側の癖で
+    起こりうるため、ここでも矯正する（2026-08-14）。
+    """
+    payload = json.loads(args.items.read_text(encoding="utf-8"))
+    passages = payload.get("passages")
+    if not passages:
+        raise SystemExit("passages が空か、'passages' キーがありません。")
+    question_count = 0
+    for passage in passages:
+        for question in passage.get("questions", []):
+            _shuffle_choices(question)
+            question_count += 1
+
+    out_path = args.out or args.items
+    out_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    print(json.dumps({"shuffled_questions": question_count, "out": str(out_path)}, ensure_ascii=False, indent=2))
+    return 0
+
+
 def _cmd_worksheet_part7(args: argparse.Namespace) -> int:
     title, passages = load_part7_items(args.items)
     args.out.mkdir(parents=True, exist_ok=True)
@@ -275,6 +298,13 @@ def build_parser() -> argparse.ArgumentParser:
     ingest.add_argument("--set-id", required=True, help="このセットの識別子（review_idに使う）")
     ingest.add_argument("--db", type=Path, default=None, help="既定: ~/.academic-english/english.db")
     ingest.set_defaults(func=_cmd_ingest)
+
+    shuffle_part7 = sub.add_parser(
+        "shuffle-part7", help="items.json（passages形）の各設問の選択肢順序を機械的にシャッフルする（Form作成より前に実行）"
+    )
+    shuffle_part7.add_argument("--items", type=Path, required=True)
+    shuffle_part7.add_argument("--out", type=Path, help="既定: --items を上書き")
+    shuffle_part7.set_defaults(func=_cmd_shuffle_part7)
 
     worksheet_part7 = sub.add_parser("worksheet-part7", help="items.json（passages形）から Part7 問題冊子PDFを組む")
     worksheet_part7.add_argument("--items", type=Path, required=True, help="passages グルーピング形の items.json")
