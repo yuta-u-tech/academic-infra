@@ -182,6 +182,31 @@ def upload_file(service, parent_id: str, path: Path, mime_type: str, name: str |
     return created["id"]
 
 
+def grant_anyone_reader(service, file_id: str) -> None:
+    """`file_id`(通常はフォルダ)を「リンクを知っている全員が閲覧可」にする。
+
+    このプロジェクトの既定方針は「リンク共有は絶対にしない」（許可アカウントのみに
+    限定共有）だが、TOEIC Part1の写真をGoogle FormsのquestionItem.imageに表示するには
+    GoogleのサーバーがフェッチできるURLが要る。**そのためだけ**の例外として、
+    Part1画像専用フォルダ（`TOEIC/listening/part1-images/`）1つに限りこの関数を呼ぶ
+    （2026-08-14、ユーザー承認）。他の用途では絶対に呼ばないこと。
+    冪等: 既に`type=anyone`の権限があれば何もしない（呼ぶたびに重複追加しない）。
+    """
+    permissions = (
+        service.permissions()
+        .list(fileId=file_id, fields="permissions(id,type,role)", supportsAllDrives=True)
+        .execute()
+        .get("permissions", [])
+    )
+    if any(permission.get("type") == "anyone" for permission in permissions):
+        return
+    service.permissions().create(
+        fileId=file_id,
+        body={"type": "anyone", "role": "reader"},
+        supportsAllDrives=True,
+    ).execute()
+
+
 def find_course_pdf_file_id(service, parent_folder_id: str, course: CourseEntry) -> str:
     course_folder_id = find_child(service, parent_folder_id, course.drive_folder, _FOLDER_MIME)
     if course_folder_id is None:

@@ -84,7 +84,7 @@ class ListeningItem(_Strict):
 
     kind: Literal["listening"] = "listening"
     domain: Literal["listening"] = "listening"
-    sub_skill: Literal["part2", "part3", "part4"] = "part2"
+    sub_skill: Literal["part1", "part2", "part3", "part4"] = "part2"
     question: str = Field(min_length=1, max_length=1000)
     choices: list[str] = Field(min_length=2, max_length=6)
     answer_index: int = Field(ge=0)
@@ -93,6 +93,9 @@ class ListeningItem(_Strict):
     # PassageQuestion/ListeningItem.pronunciation_note をそのまま持ち込む。
     # 過去に取り込んだセットには無いので省略可。
     pronunciation_note: str | None = Field(default=None, max_length=1000)
+    # Part1(写真描写)専用。写真1枚のローカルパスとDrive公開URL。他Partでは省略(None)のまま。
+    image_path: str | None = Field(default=None, max_length=1000)
+    image_url: str | None = Field(default=None, max_length=2000)
 
     @model_validator(mode="after")
     def _answer_in_range(self) -> "ListeningItem":

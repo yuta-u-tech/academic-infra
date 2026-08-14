@@ -33,7 +33,13 @@ def iter_materials(
         review_id = f"toeic.listening.{part}.{set_id}.{index:04d}"
         questions = item.parts_with_role("question")
         choices = [choice.text for choice in item.parts_with_role("choice")]
-        question_text = questions[0].text if questions else "(音声のみ。設問文は台本を参照)"
+        if questions:
+            question_text = questions[0].text
+        elif item.image_path:
+            # Part1(写真描写)には質問文が無く、写真そのものが問題文にあたる。
+            question_text = "写真を見て、最もよく描写している文を選ぶ。"
+        else:
+            question_text = "(音声のみ。設問文は台本を参照)"
         material = ExternalMaterial(
             review_id=review_id,
             source=SOURCE,
@@ -50,6 +56,8 @@ def iter_materials(
             answer_index=item.answer_index,
             explanation=item.explanation,
             pronunciation_note=item.pronunciation_note or None,
+            image_path=item.image_path or None,
+            image_url=item.image_url or None,
         )
         yield material, listening_item
 

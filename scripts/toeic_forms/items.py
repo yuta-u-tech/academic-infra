@@ -24,6 +24,9 @@ class ChoiceFormItem(_Strict):
     choices: list[str] = Field(min_length=2, max_length=6)
     answer_index: int = Field(ge=0)
     explanation: str = Field(min_length=1, max_length=2000)
+    # TOEIC Part1(写真描写)専用。設問の上に写真を表示する(Google Forms公開URL、
+    # `academic_audio.part1_images.publish_to_drive()`が発行したもの)。他の形式では省略。
+    image_url: str | None = Field(default=None, max_length=2000)
 
     @model_validator(mode="after")
     def _answer_in_range(self) -> "ChoiceFormItem":

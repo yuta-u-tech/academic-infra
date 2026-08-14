@@ -40,6 +40,12 @@ class ListeningItem:
     # (2026-08-12「texなどから発音部分の抽出をして、今度からjsonにも取り入れて」)。
     # 省略可(過去のセットには無い)。
     pronunciation_note: str = ""
+    # Part1(写真描写)専用。写真1枚のローカルパス。他の形式では空文字のまま
+    # (grouping: flatのitem定義に"question"役割が無い形式=Part1のみ画像を持つ)。
+    image_path: str = ""
+    # Driveへ公開アップロード後のURL(`listening attach-image-urls`が書き込む)。
+    # Forms/PDFへの埋め込みに使う。生成直後のresult.jsonにはまだ無く空文字のまま。
+    image_url: str = ""
 
     def parts_with_role(self, role: str) -> list[ItemPart]:
         return [part for part in self.parts if part.role == role]
@@ -107,6 +113,9 @@ def _build_item(raw: Any, index: int, listening_format: ListeningFormat) -> List
     _validate_against_format(parts, where, listening_format)
     answer_index = _validate_answer(raw, where, parts, listening_format)
 
+    if listening_format.id == "toeic-part1" and not raw.get("image_path"):
+        raise ItemValidationError(f"{where} に image_path がありません（Part1は写真が必須）。")
+
     return ListeningItem(
         item_id=str(raw.get("item_id") or f"item-{index:03d}"),
         parts=parts,
@@ -114,6 +123,8 @@ def _build_item(raw: Any, index: int, listening_format: ListeningFormat) -> List
         explanation=str(raw["explanation"]).strip(),
         reason=str(raw.get("reason", "")).strip(),
         pronunciation_note=str(raw.get("pronunciation_note", "")).strip(),
+        image_path=str(raw.get("image_path", "")).strip(),
+        image_url=str(raw.get("image_url", "")).strip(),
     )
 
 
@@ -171,21 +182,23 @@ _CHOICE_LABELS = ("A", "B", "C", "D")
 def to_script(listening_set: ListeningSet, listening_format: ListeningFormat) -> DialogueScript:
     """Flatten items into the segment list the renderer consumes.
 
-    1問につき3つの発話にまとめる:
+    1問につき3つの発話にまとめる（Part1は質問文が存在しないため2つ）:
       1. "Number N."（speaker="narrator"）— 単独の発話にし、直後に短い間を置く。
          質問文と1回の合成にまとめると発話開始直後に質問が始まってしまい、
          「Number N.」を認識する間もなく聞き逃す、という指摘を受けて分離した。
-      2. 質問文（speaker="narrator"）。
-      3. 3つの応答をまとめて1回の合成にする（speaker="respondent"）— 応答ごとに別々に
-         合成して無音でつなぐと、文と文のつながりの抑揚が失われ棒読みに聞こえる。
-         1回の合成にまとめることで Piper 自身の文末ポーズ・抑揚がそのまま活きる。
-         各応答の前に "A." "B." "C." を読み上げる（本番同様、区切りが分かるようにする）。
+      2. 質問文（speaker="narrator"）。**Part1にはこの発話が無い**（本番同様、写真を見て
+         描写文だけを聞く形式。`item.parts_with_role("question")`が空なら省略する）。
+      3. 3つ（Part1は4つ）の応答をまとめて1回の合成にする（speaker="respondent"）—
+         応答ごとに別々に合成して無音でつなぐと、文と文のつながりの抑揚が失われ棒読みに
+         聞こえる。1回の合成にまとめることで Piper 自身の文末ポーズ・抑揚がそのまま活きる。
+         各応答の前に "A." "B." "C."（Part1は"D."も）を読み上げる（本番同様、区切りが
+         分かるようにする）。
     質問と応答を別の声にするのは、本番より聴き取りやすくするための意図的な脚色
     （本番は全て同じナレーターが読む）。どちらの発話かが声で分かるようにする。
     """
     segments: list[DialogueSegment] = []
     for item_index, item in enumerate(listening_set.items, start=1):
-        question_text = item.parts_with_role("question")[0].text
+        question_parts = item.parts_with_role("question")
         segments.append(
             DialogueSegment(
                 id=f"seg-{len(segments) + 1:03d}",
@@ -200,20 +213,21 @@ def to_script(listening_set: ListeningSet, listening_format: ListeningFormat) ->
                 role="question",
             )
         )
-        segments.append(
-            DialogueSegment(
-                id=f"seg-{len(segments) + 1:03d}",
-                speaker="narrator",
-                text=question_text,
-                language=listening_format.language,
-                emotion="Neutral",
-                speed=1.0,
-                pause=_PART2_QUESTION_PAUSE,
-                source_section=listening_set.source_id,
-                item_id=item.item_id,
-                role="question",
+        if question_parts:
+            segments.append(
+                DialogueSegment(
+                    id=f"seg-{len(segments) + 1:03d}",
+                    speaker="narrator",
+                    text=question_parts[0].text,
+                    language=listening_format.language,
+                    emotion="Neutral",
+                    speed=1.0,
+                    pause=_PART2_QUESTION_PAUSE,
+                    source_section=listening_set.source_id,
+                    item_id=item.item_id,
+                    role="question",
+                )
             )
-        )
         choices = item.parts_with_role("choice")
         choices_text = " ".join(f"{label}. {choice.text}" for label, choice in zip(_CHOICE_LABELS, choices))
         segments.append(
@@ -258,6 +272,8 @@ def to_answers(listening_set: ListeningSet) -> dict[str, Any]:
                 "explanation": item.explanation,
                 "pronunciation_note": item.pronunciation_note,
                 "reason": item.reason,
+                "image_path": item.image_path or None,
+                "image_url": item.image_url or None,
             }
             for item in listening_set.items
         ],
@@ -555,18 +571,21 @@ def to_form_items(
             question_text = item.parts_with_role("question")[0].text
             question_title = f"Number {index}. {question_text}"
             choices = [choice_part.text for choice_part in choice_parts]
-        items.append(
-            {
-                "kind": "choice",
-                "review_id": f"toeic.listening.{part_slug}.{set_id}.{index:04d}",
-                "topic": listening_set.format_id,
-                "difficulty": 3,
-                "question": question_title,
-                "choices": choices,
-                "answer_index": item.answer_index,
-                "explanation": item.explanation,
-            }
-        )
+        form_item = {
+            "kind": "choice",
+            "review_id": f"toeic.listening.{part_slug}.{set_id}.{index:04d}",
+            "topic": listening_set.format_id,
+            "difficulty": 3,
+            "question": question_title,
+            "choices": choices,
+            "answer_index": item.answer_index,
+            "explanation": item.explanation,
+        }
+        if item.image_url:
+            # Part1(写真描写)は写真を見ながら解く形式なので、Formsにも画像を出す
+            # (`listening attach-image-urls`で事前にDriveへ公開アップロード済みのURL)。
+            form_item["image_url"] = item.image_url
+        items.append(form_item)
     return items
 
 

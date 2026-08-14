@@ -54,6 +54,7 @@ from academic_audio.jobs import default_state_dir, job_path, new_job_id, read_jo
 from academic_audio.listening import create_listening_script  # noqa: E402
 from academic_audio.metadata import describe as describe_video_metadata  # noqa: E402
 from academic_audio.models import AudioJob  # noqa: E402
+from academic_audio import part1_images  # noqa: E402
 from academic_audio.planner import create_dialogue  # noqa: E402
 from academic_audio.publications import read_publication  # noqa: E402
 from academic_audio.publisher import DEFAULT_VISIBILITY, LocalPublisher, PublishError, YouTubePublisher  # noqa: E402
@@ -552,6 +553,36 @@ def _cmd_listening_ingest_db(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_listening_attach_image_urls(args: argparse.Namespace) -> int:
+    """result.json内の各itemのimage_path(ローカル写真)をDriveへ公開アップロードし、
+    公開URLをimage_urlとして書き戻す(TOEIC Part1専用)。
+
+    forms-items/ingest-db/worksheetのいずれよりも先に実行すること
+    （image_urlが無いとForms/PDFに写真が出ない）。review_idの採番規則
+    （`toeic.listening.part1.<set-id>.NNNN`）を`to_form_items`と一致させるため、
+    `--set-id`は同じ値を渡す。既にimage_urlが付いているitemはスキップする
+    （再実行しても同じDriveファイルを上書きするだけで安全だが、通信を省く）。
+    """
+    payload = json.loads(args.file.read_text(encoding="utf-8"))
+    items = payload.get("items")
+    if not items:
+        raise SystemExit("items がありません。")
+
+    attached = 0
+    for index, item in enumerate(items, start=1):
+        if item.get("image_url") or not item.get("image_path"):
+            continue
+        review_id = f"toeic.listening.part1.{args.set_id}.{index:04d}"
+        result = part1_images.publish_to_drive(Path(item["image_path"]), review_id)
+        item["image_url"] = result["url"]
+        attached += 1
+
+    out_path = args.out or args.file
+    out_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    print(json.dumps({"attached": attached, "out": str(out_path)}, ensure_ascii=False, indent=2))
+    return 0
+
+
 def _cmd_listening_forms_items(args: argparse.Namespace) -> int:
     """result.json を toeic_forms_cli.py create にそのまま渡せる items.json へ機械的に変換する。
 
@@ -840,6 +871,17 @@ def main() -> int:
     listening_ingest_db.add_argument("--set-id", required=True, help="このセットの識別子（review_idに使う）")
     listening_ingest_db.add_argument("--db", type=Path, help="既定: ~/.academic-english/english.db")
     listening_ingest_db.set_defaults(func=_cmd_listening_ingest_db)
+
+    listening_attach_image_urls = listening_sub.add_parser(
+        "attach-image-urls",
+        help="result.json内のimage_path(写真)をDriveへ公開アップロードし、image_urlを書き戻す(Part1専用)",
+    )
+    listening_attach_image_urls.add_argument("--file", type=Path, required=True, help="Claudeが書いたresult.json")
+    listening_attach_image_urls.add_argument(
+        "--set-id", required=True, help="forms-items/ingest-dbと同じ値(review_idの採番に使う)"
+    )
+    listening_attach_image_urls.add_argument("--out", type=Path, help="既定: --file を上書き")
+    listening_attach_image_urls.set_defaults(func=_cmd_listening_attach_image_urls)
 
     listening_forms_items = listening_sub.add_parser(
         "forms-items", help="result.json を toeic_forms_cli.py create 用の items.json へ機械的に変換する"

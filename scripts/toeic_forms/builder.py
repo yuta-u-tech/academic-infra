@@ -62,30 +62,34 @@ def build_choice_quiz_requests(
             "choices": list(item.choices),
             "answer_index": item.answer_index,
         }
+        question_item: dict = {
+            "question": {
+                "required": True,
+                "choiceQuestion": {
+                    "type": "RADIO",
+                    "options": [{"value": choice} for choice in item.choices],
+                    "shuffle": False,
+                },
+                "grading": {
+                    "pointValue": 1,
+                    "correctAnswers": {
+                        "answers": [{"value": item.choices[item.answer_index]}]
+                    },
+                    "whenRight": {"text": "正解です。"},
+                    "whenWrong": {"text": item.explanation},
+                },
+            }
+        }
+        if item.image_url:
+            # QuestionItem.image: 設問の上に表示される画像（TOEIC Part1専用）。
+            question_item["image"] = {"sourceUri": item.image_url, "altText": item.review_id}
         requests.append(
             {
                 "createItem": {
                     "item": {
                         "itemId": item_id,
                         "title": item.question,
-                        "questionItem": {
-                            "question": {
-                                "required": True,
-                                "choiceQuestion": {
-                                    "type": "RADIO",
-                                    "options": [{"value": choice} for choice in item.choices],
-                                    "shuffle": False,
-                                },
-                                "grading": {
-                                    "pointValue": 1,
-                                    "correctAnswers": {
-                                        "answers": [{"value": item.choices[item.answer_index]}]
-                                    },
-                                    "whenRight": {"text": "正解です。"},
-                                    "whenWrong": {"text": item.explanation},
-                                },
-                            }
-                        },
+                        "questionItem": question_item,
                     },
                     "location": {"index": index},
                 }

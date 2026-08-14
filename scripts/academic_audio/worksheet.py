@@ -20,6 +20,7 @@ _PREAMBLE = r"""\documentclass[a4paper,11pt]{ltjsarticle}
 \usepackage{amssymb}
 \usepackage{enumitem}
 \usepackage{hyperref}
+\usepackage{graphicx}
 \hypersetup{hidelinks}
 \setlist[enumerate]{itemsep=2pt,topsep=4pt}
 \renewcommand{\thesection}{}
@@ -85,7 +86,12 @@ def render_tex(
     lines.append(r"\begin{enumerate}[label=\textbf{\arabic*.}]")
     for item in listening_set.items:
         lines.append(r"  \item")
-        if listening_format.answer_in_audio:
+        if listening_format.id == "toeic-part1" and item.image_path:
+            # Part1(写真描写)は選択肢こそ音声のみだが、写真は見ながら解く形式なので
+            # 冊子には写真だけを印刷する（Part2は本当に何も印刷しないが、Part1は
+            # 「音声のみ」なのは描写文の方だけで、写真は視覚情報として必須）。
+            lines.append(r"    \includegraphics[width=0.8\linewidth]{" + item.image_path + "}")
+        elif listening_format.answer_in_audio:
             # 本番の Part 2 は冊子に何も印刷されない（質問文も選択肢も音声のみ）。
             # それに合わせ、設問ページは空欄にする。
             lines.append(r"    \hfill")
@@ -118,6 +124,11 @@ def render_tex(
 
 
 def _instructions(listening_format: ListeningFormat) -> str:
+    if listening_format.id == "toeic-part1":
+        return (
+            "写真を見て、それを最もよく描写している文を音声で聴いた "
+            r"(A)〜(D) から1つ選びなさい。文自体は音声のみで、冊子には印刷されません。"
+        )
     if listening_format.id.startswith("toeic-part2"):
         return (
             "音声を聴き、質問または発言に対する応答として最も適切なものを "
