@@ -114,7 +114,12 @@ Form作成のいずれよりも前に、必ず `toeic_reading_cli.py shuffle --i
   `respective`/`respectable`/`respectful`/`respected`（2026-08-09追加）,
   `methodical`/`methodological`, `overview`/`oversight`, `secure`/`secured`,
   `lengthy`/`length`/`lengthen`, `discrepancy`/`discretion`, `reassure`/`assure`/`ensure`/`insure`,
-  `remarkable`/`remarkably`, `divergent`/`diverse`（2026-08-10追加）
+  `remarkable`/`remarkably`, `divergent`/`diverse`（2026-08-10追加）,
+  `imminent`/`eminent`, `sensible`/`sensitive`, `compliant`/`complaint`/`complimentary`,
+  `beneficial`/`beneficiary`, `responsive`/`responsible`/`respondent`,
+  `competent`/`competitive`, `dependent`/`dependable`, `adverse`/`averse`,
+  `reputable`/`reputed`, `proactive`/`productive`/`progressive`, `feasible`/`plausible`,
+  `viable`/`valuable`/`variable`（2026-08-15追加）
 - パターンC（コロケーション）: `raise concerns`, `meet the deadline`, `place an order`,
   `conduct a survey`, `reach a consensus`, `submit an application`, `issue a refund`,
   `extend an invitation`, `address a complaint`, `renew a contract`, `postpone`（文脈適合）,
@@ -124,7 +129,12 @@ Form作成のいずれよりも前に、必ず `toeic_reading_cli.py shuffle --i
   `raise funds`, `draw attention`,
   `convene a meeting with`, `draft a proposal`, `secure funding`, `waive a fee`,
   `honor a warranty`, `void a contract`, `streamline a workflow`, `mitigate a risk`,
-  `expedite a shipment`, `curb spending`（2026-08-10追加）
+  `expedite a shipment`, `curb spending`（2026-08-10追加）,
+  `uphold a decision`, `audit the books`, `settle a dispute`, `amend a contract`,
+  `withdraw an offer`, `finalize a merger`, `confirm a reservation`, `negotiate a discount`,
+  `validate a claim`, `endorse a candidate`, `ratify an agreement`, `reconcile accounts`,
+  `redeem a coupon`, `defer payment`, `revoke a license`, `absorb a cost`, `lift a ban`
+  （2026-08-15追加）
 
 ## sentence
 
