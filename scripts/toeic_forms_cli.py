@@ -9,6 +9,12 @@
         --title "Part2 2026-08-09" --out .toeic-forms/sets/20260809-part2 \
         --allowed-email friend@example.com
 
+    # 自分以外のアカウントがこのFormに対して record を実行できるようにする
+    # （--allowed-email は回答者用のreader権限、--editor-email はresponses.list()に要るeditor権限）
+    python3 scripts/toeic_forms_cli.py create --items items.json --type choice \
+        --title "Part2 2026-08-09" --out .toeic-forms/sets/20260809-part2 \
+        --editor-email other-admin@example.com
+
 items.json の形式:
     {"items": [{"kind": "choice", "review_id": "...", "topic": "...", "difficulty": 3,
                 "question": "...", "choices": ["...", "..."], "answer_index": 0,
@@ -41,6 +47,7 @@ from toeic_forms.client import (  # noqa: E402
     apply_requests,
     create_form,
     edit_url,
+    grant_editor_access,
     list_responses,
     resolve_question_ids,
     restrict_access,
@@ -87,10 +94,13 @@ def _cmd_create(args: argparse.Namespace) -> int:
         if "self_grade_item_id" in mapping:
             mapping["self_grade_item_id"] = question_ids[mapping["self_grade_item_id"]]
 
-    if args.allowed_email:
+    if args.allowed_email or args.editor_email:
         drive_credentials = _drive_common.resolve_credentials()
         drive_service = _drive_common.build_service(drive_credentials)
-        restrict_access(drive_service, form_id, args.allowed_email)
+        if args.allowed_email:
+            restrict_access(drive_service, form_id, args.allowed_email)
+        if args.editor_email:
+            grant_editor_access(drive_service, form_id, args.editor_email)
 
     args.out.mkdir(parents=True, exist_ok=True)
     out_path = args.out / "form_map.json"
@@ -174,6 +184,14 @@ def _build_parser() -> argparse.ArgumentParser:
         action="append",
         default=[],
         help="回答を許可するGoogleアカウント（複数指定可）。未指定なら共有設定を変更しない",
+    )
+    create.add_argument(
+        "--editor-email",
+        action="append",
+        default=[],
+        help="このFormのeditor権限を付与するGoogleアカウント（複数指定可）。"
+        "自分以外がこのFormに対してrecordを実行できるようにするために使う"
+        "（--allowed-emailのreader権限とは別）",
     )
     create.set_defaults(func=_cmd_create)
 

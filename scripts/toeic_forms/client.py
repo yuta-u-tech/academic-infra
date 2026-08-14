@@ -66,6 +66,21 @@ def edit_url(form_id: str) -> str:
     return f"https://docs.google.com/forms/d/{form_id}/edit"
 
 
+def grant_editor_access(drive_service, form_id: str, editor_emails: list[str]) -> None:
+    """指定アカウントにFormのeditor権限を付与する。
+
+    restrict_access が付与するreader権限（回答用）とは別物。Forms APIの
+    `forms.responses.list()` はeditor権限を持つアカウントでないと呼べないため、
+    「作った人以外がrecordを実行できるようにする」にはこちらが必要。
+    """
+    for email in editor_emails:
+        drive_service.permissions().create(
+            fileId=form_id,
+            body={"type": "user", "role": "writer", "emailAddress": email},
+            sendNotificationEmail=False,
+        ).execute()
+
+
 def restrict_access(drive_service, form_id: str, allowed_emails: list[str]) -> None:
     """特定のGoogleアカウントのみ回答可にする。
 
