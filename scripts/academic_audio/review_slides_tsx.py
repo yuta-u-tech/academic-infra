@@ -14,8 +14,17 @@ from ._review_slides_tsx_shared import render_project_tsx as _render_project_tsx
 CHANNEL_LABEL = "TOEIC 復習"
 
 
-def render_project_tsx(slides: list[dict], framescript_root: Path, *, title: str = "toeic-review") -> str:
-    return _render_project_tsx(slides, framescript_root, _BODY, title=title)
+def render_project_tsx(
+    slides: list[dict],
+    framescript_root: Path,
+    *,
+    title: str = "toeic-review",
+    page_offset: int = 0,
+    page_total: int | None = None,
+) -> str:
+    return _render_project_tsx(
+        slides, framescript_root, _BODY, title=title, page_offset=page_offset, page_total=page_total
+    )
 
 
 _BODY = '''
@@ -130,9 +139,9 @@ const VisualTrack = () => (
     {SLIDES.map((slide, index) => (
       <Clip key={`${slide.reviewId}-${slide.kind}`} label={`${slide.reviewId}-${slide.kind}`} duration={seconds(slide.durationSeconds)}>
         {slide.kind === "question" ? (
-          <QuestionScene slide={slide} index={index} total={SLIDES.length} />
+          <QuestionScene slide={slide} index={PAGE_OFFSET + index} total={PAGE_TOTAL} />
         ) : (
-          <AnswerScene slide={slide} index={index} total={SLIDES.length} />
+          <AnswerScene slide={slide} index={PAGE_OFFSET + index} total={PAGE_TOTAL} />
         )}
       </Clip>
     ))}

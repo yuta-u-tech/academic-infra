@@ -26,13 +26,32 @@ def portable_slides(slides: list[dict], framescript_root: Path) -> list[dict]:
     return result
 
 
-def render_project_tsx(slides: list[dict], framescript_root: Path, body: str, *, title: str) -> str:
+def render_project_tsx(
+    slides: list[dict],
+    framescript_root: Path,
+    body: str,
+    *,
+    title: str,
+    page_offset: int = 0,
+    page_total: int | None = None,
+) -> str:
+    """page_offset/page_total: 動画を複数バッチに分けてレンダリングする場合の通し番号。
+
+    レンダラーが長時間ジョブ(50問超)で終盤にハングする不具合(2026-08-14)を回避する
+    ためバッチ分割したところ、画面右上のページ番号(Background)が各バッチ内の番号
+    (例: 22/22)になり全体の通し番号にならなかった。page_offset(このバッチの開始位置)
+    と page_total(動画全体のスライド数)を渡すと、バッチをまたいでも正しい通し番号
+    （例: 45/110）になる。単一バッチ(通常時)は既定値のままでよい。
+    """
     if not slides:
         raise ValueError("slides が空です。")
     slides_json = json.dumps(portable_slides(slides, framescript_root), ensure_ascii=False, indent=2)
+    resolved_total = page_total if page_total is not None else len(slides)
     return (
         HEADER.replace("__TITLE__", json.dumps(title, ensure_ascii=False))
         + f"\nconst SLIDES: Slide[] = {slides_json}\n"
+        + f"const PAGE_OFFSET = {page_offset}\n"
+        + f"const PAGE_TOTAL = {resolved_total}\n"
         + body
     )
 
