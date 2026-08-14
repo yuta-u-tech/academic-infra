@@ -52,8 +52,16 @@ def review_path(home: Path | None = None) -> Path:
     return (home or notes_home()) / MISC_DIR / REVIEW_FILENAME
 
 
-def fetch_wrong_items(connection: sqlite3.Connection) -> list[dict]:
-    """今も間違えたままのTOEIC問題を返す（review_id単位、最新試行が不正解のものだけ）。"""
+def fetch_wrong_items(connection: sqlite3.Connection, *, since_date: str | None = None) -> list[dict]:
+    """今も間違えたままのTOEIC問題を返す（review_id単位、最新試行が不正解のものだけ）。
+
+    `since_date`（"YYYY-MM-DD"）を渡すと、その日以降に解答した試行だけに絞る。
+    復習ノート/PDF（試験前に見返す資料。一度マスターしたら自動的に外れる設計）は
+    全期間が正しいので既定のNoneのまま呼ぶ。**復習動画は「その日に間違えた問題」を
+    対象にする設計**（2026-08-14、間違えて全期間分（55問）を1本の動画にしてしまい、
+    レンダラーが長時間ジョブでハングする不具合を誘発した反省から明確化。動画生成の
+    呼び出し側は必ず`since_date=today`を渡すこと）。
+    """
     rows = connection.execute(
         """
         SELECT a.review_id, a.domain, a.created_at, a.error_cause, a.correct, g.payload
@@ -69,6 +77,8 @@ def fetch_wrong_items(connection: sqlite3.Connection) -> list[dict]:
         latest[row["review_id"]] = dict(row)  # 同じreview_idは後勝ち = 最新試行
 
     wrong = [row for row in latest.values() if not row["correct"]]
+    if since_date is not None:
+        wrong = [row for row in wrong if row["created_at"][:10] >= since_date]
     wrong.sort(key=lambda row: row["created_at"], reverse=True)
     return wrong
 
