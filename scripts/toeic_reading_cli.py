@@ -50,20 +50,42 @@ def _load_items(path: Path) -> tuple[str, list[GrammarItem]]:
     return title, items
 
 
-def _cmd_shuffle(args: argparse.Namespace) -> int:
-    """items.json 内の設問順序を機械的にシャッフルする。
+def _shuffle_choices(item: dict) -> None:
+    """1問内の選択肢の並びをシャッフルし、answer_index を追従させる（破壊的更新）。
 
-    「通常30問＋苦手重点20問」は書く順序上どうしても前半/後半に分かれるが、
+    作問（Claude が items.json を手で書く）は正解をA(index 0)に置く癖が強く、
+    2026-08-14時点の実績で文法233問中214問(92%)が正解Aだった。設問順のシャッフルだけ
+    では選択肢内の位置は変わらないため、ここで機械的に矯正する。
+    """
+    choices = item.get("choices")
+    answer_index = item.get("answer_index")
+    if not choices or answer_index is None:
+        return
+    order = list(range(len(choices)))
+    random.shuffle(order)
+    item["choices"] = [choices[i] for i in order]
+    item["answer_index"] = order.index(answer_index)
+
+
+def _cmd_shuffle(args: argparse.Namespace) -> int:
+    """items.json 内の設問順序と、各設問内の選択肢順序を機械的にシャッフルする。
+
+    設問順序: 「通常30問＋苦手重点20問」は書く順序上どうしても前半/後半に分かれるが、
     出題順がそのまま前半＝通常・後半＝苦手重点だと分かってしまう
     （復習であることが構成から見えてしまう）。worksheet/ingest/Form作成の
     前に必ずこのコマンドで順序を崩す。review_id は順序に基づいて
     割り当てられるため、ingestより前に実行すること。
+
+    選択肢順序: 作問側（Claude）は正解をAに置く癖が強く出るため、機械的に矯正する
+    （2026-08-14に発覚。全期間で正解Aが92%に偏っていた）。
     """
     payload = json.loads(args.items.read_text(encoding="utf-8"))
     items = payload.get("items")
     if not items:
         raise SystemExit("items が空か、'items' キーがありません。")
     random.shuffle(items)
+    for item in items:
+        _shuffle_choices(item)
     payload["items"] = items
 
     out_path = args.out or args.items
