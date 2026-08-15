@@ -41,6 +41,7 @@ from academic_audio.artifact import build_artifact, read_artifact, write_artifac
 from academic_audio.formats import FormatError, available_formats, load_format  # noqa: E402
 from academic_audio.items import (  # noqa: E402
     ItemValidationError,
+    check_answer_distribution,
     load_passage_result,
     load_result,
     passage_to_answers,
@@ -465,11 +466,19 @@ def _cmd_listening_ingest(args: argparse.Namespace) -> int:
     listening_format = load_format(args.format)
     if listening_format.grouping == "passage":
         item_set = load_passage_result(args.file, listening_format)
+        if not args.allow_skewed_answers:
+            check_answer_distribution(
+                [question.answer_index for item in item_set.items for question in item.questions]
+            )
         script = passage_to_script(item_set, listening_format)
         answers_payload = passage_to_answers(item_set)
         tex = render_passage_tex(item_set, listening_format, youtube_url=args.youtube_url, form_url=args.form_url)
     else:
         item_set = load_result(args.file, listening_format)
+        if not args.allow_skewed_answers:
+            check_answer_distribution(
+                [item.answer_index for item in item_set.items if item.answer_index is not None]
+            )
         script = to_script(item_set, listening_format)
         answers_payload = to_answers(item_set)
         tex = render_tex(item_set, listening_format, youtube_url=args.youtube_url, form_url=args.form_url)
@@ -860,6 +869,12 @@ def main() -> int:
     listening_ingest.add_argument("--youtube-url", help="既に YouTube へ投稿済みの場合、冊子にURLを載せる")
     listening_ingest.add_argument(
         "--form-url", help="既に toeic_forms_cli.py create で回答フォームを作成済みの場合、冊子にURLを載せる"
+    )
+    listening_ingest.add_argument(
+        "--allow-skewed-answers",
+        action="store_true",
+        help="全問の正解位置が同じでもingestを続行する（本来は shuffle-choices を先に実行すべき、"
+        "デバッグ・少数問題セット用の逃げ道）",
     )
     listening_ingest.set_defaults(func=_cmd_listening_ingest)
 

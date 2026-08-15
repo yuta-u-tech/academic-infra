@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import json
+from collections import Counter
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
@@ -94,6 +95,28 @@ def load_result(path: Path, listening_format: ListeningFormat) -> ListeningSet:
         source_commit=data.get("source_commit", "unknown"),
         items=items,
     )
+
+
+def check_answer_distribution(answer_indexes: list[int], *, min_items: int = 4) -> None:
+    """作問側が正解を選択肢の先頭に置く癖への機械的なガード。
+
+    2026-08-15、TOEIC Part1の初回セット(6問)で全問の正解がAのままDrive/YouTube/Formsまで
+    公開されてしまった事故を受けて追加。Part5/6/7には作問直後の`shuffle`実行が手順として
+    定着していたが、Part1/2/3/4（このListeningSet系）には無かったため、`shuffle-choices`の
+    実行漏れを`listening ingest`側で検知して止める。4問未満は判定しない（少数はたまたま
+    偏っても実害が小さく、誤検知の方が多くなるため）。
+    """
+    if len(answer_indexes) < min_items:
+        return
+    counts = Counter(answer_indexes)
+    most_common_index, most_common_count = counts.most_common(1)[0]
+    if most_common_count == len(answer_indexes):
+        raise ItemValidationError(
+            "ANSWER_INDEX_SKEWED: 全"
+            f"{len(answer_indexes)}問の正解が選択肢{most_common_index}番目に固定されています。"
+            "`listening shuffle-choices --file <result.json> --format <format>` を先に実行して"
+            "から ingest をやり直してください。"
+        )
 
 
 def _build_item(raw: Any, index: int, listening_format: ListeningFormat) -> ListeningItem:
