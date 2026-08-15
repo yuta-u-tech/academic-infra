@@ -200,6 +200,11 @@ _PART2_NUMBER_PAUSE = 0.5  # "Number N." の後、質問文が始まる前に置
 _PART2_QUESTION_PAUSE = 1.2  # 疑問文の後は「本当に尋ねている」間を置く
 _PART2_ANSWER_WINDOW = 5.0
 _CHOICE_LABELS = ("A", "B", "C", "D")
+# 選択肢同士の間の間（2026-08-15追加）。以前は4択（Part1）/3択（Part2）を1回のPiper合成に
+# まとめており、選択肢間の間はPiperが句点に対して置く自然なポーズ（短い）任せだった。
+# 「A, B, C, Dの間隔が短すぎる」という指摘を受け、選択肢ごとに別セグメントへ分割し、
+# 明示的にこの間を挟むようにした。
+_CHOICE_PAUSE = 0.8
 
 
 def to_script(listening_set: ListeningSet, listening_format: ListeningFormat) -> DialogueScript:
@@ -211,11 +216,13 @@ def to_script(listening_set: ListeningSet, listening_format: ListeningFormat) ->
          「Number N.」を認識する間もなく聞き逃す、という指摘を受けて分離した。
       2. 質問文（speaker="narrator"）。**Part1にはこの発話が無い**（本番同様、写真を見て
          描写文だけを聞く形式。`item.parts_with_role("question")`が空なら省略する）。
-      3. 3つ（Part1は4つ）の応答をまとめて1回の合成にする（speaker="respondent"）—
-         応答ごとに別々に合成して無音でつなぐと、文と文のつながりの抑揚が失われ棒読みに
-         聞こえる。1回の合成にまとめることで Piper 自身の文末ポーズ・抑揚がそのまま活きる。
-         各応答の前に "A." "B." "C."（Part1は"D."も）を読み上げる（本番同様、区切りが
-         分かるようにする）。
+      3. 3つ（Part1は4つ）の応答を、1つずつ別々のセグメントに分けて合成する
+         （speaker="respondent"）。各応答の前に "A." "B." "C."（Part1は"D."も）を
+         読み上げ、応答と応答の間に明示的な間（`_CHOICE_PAUSE`）を挟む（本番同様、
+         区切りが分かるようにする）。
+         2026-08-15追記: 以前は3〜4択を1回の合成にまとめていた（Piper自身の文末ポーズ・
+         抑揚を活かすため）が、「A, B, C, Dの間隔が短すぎる」との指摘を受け、選択肢ごとに
+         分割して間隔を制御できる形に変更した。
     質問と応答を別の声にするのは、本番より聴き取りやすくするための意図的な脚色
     （本番は全て同じナレーターが読む）。どちらの発話かが声で分かるようにする。
     """
@@ -252,21 +259,22 @@ def to_script(listening_set: ListeningSet, listening_format: ListeningFormat) ->
                 )
             )
         choices = item.parts_with_role("choice")
-        choices_text = " ".join(f"{label}. {choice.text}" for label, choice in zip(_CHOICE_LABELS, choices))
-        segments.append(
-            DialogueSegment(
-                id=f"seg-{len(segments) + 1:03d}",
-                speaker="respondent",
-                text=choices_text,
-                language=listening_format.language,
-                emotion="Neutral",
-                speed=1.0,
-                pause=_PART2_ANSWER_WINDOW,
-                source_section=listening_set.source_id,
-                item_id=item.item_id,
-                role="choice",
+        for choice_index, (label, choice) in enumerate(zip(_CHOICE_LABELS, choices)):
+            is_last_choice = choice_index == len(choices) - 1
+            segments.append(
+                DialogueSegment(
+                    id=f"seg-{len(segments) + 1:03d}",
+                    speaker="respondent",
+                    text=f"{label}. {choice.text}",
+                    language=listening_format.language,
+                    emotion="Neutral",
+                    speed=1.0,
+                    pause=_PART2_ANSWER_WINDOW if is_last_choice else _CHOICE_PAUSE,
+                    source_section=listening_set.source_id,
+                    item_id=item.item_id,
+                    role="choice",
+                )
             )
-        )
     return DialogueScript(
         title=listening_set.title,
         source_id=listening_set.source_id,
