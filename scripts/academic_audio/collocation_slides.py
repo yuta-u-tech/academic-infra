@@ -34,6 +34,12 @@ from .renderer import concatenate_wav
 _GAP_SECONDS = 0.45
 _COLLOCATION_GAP_SECONDS = 0.9
 _SLIDE_TAIL_SECONDS = 2.5
+# スライド音声の先頭(=代表単語)が無音の助走なしでt=0に直置きされていると、
+# FrameScriptの音声再生開始のわずかなウォームアップと競合し、代表単語の頭が
+# ちぎれて聞こえることがある(2026-08-18、ユーザー報告。後続ユニットは前に
+# 必ずgapがあるため影響を受けず、常に先頭の代表単語だけがたまに欠ける症状と一致)。
+# 先頭にだけ無音の助走を入れて回避する。
+_LEAD_IN_SECONDS = 0.3
 
 _REQUIRED_CONTENT_FIELDS = ("collocations", "example_en", "example_ja")
 
@@ -45,6 +51,18 @@ class CollocationSlideError(ValueError):
 def _wav_seconds(path: Path) -> float:
     with wave.open(str(path), "rb") as handle:
         return handle.getnframes() / handle.getframerate()
+
+
+def _write_silence_wav(reference: Path, seconds: float, out: Path) -> None:
+    """referenceと同じフォーマット(サンプルレート/チャンネル数/サンプル幅)の
+    無音WAVを書く。concatenate_wavの前に「助走」として差し込むために使う。"""
+    with wave.open(str(reference), "rb") as source:
+        params = source.getparams()
+    n_frames = int(params.framerate * seconds)
+    silence_frame = b"\x00" * params.sampwidth * params.nchannels
+    with wave.open(str(out), "wb") as dest:
+        dest.setparams(params)
+        dest.writeframes(silence_frame * n_frames)
 
 
 def persist_collocations(connection: sqlite3.Connection, review_id: str, collocations: list[dict]) -> None:
@@ -123,13 +141,16 @@ def build_slides(
             parts.append(out)
             gaps.append(gap)
 
+        lead_in = audio_dir / f"{review_id}.leadin.wav"
+        _write_silence_wav(parts[0], _LEAD_IN_SECONDS, lead_in)
+
         merged = audio_dir / f"{review_id}.slide.wav"
-        concatenate_wav(list(zip(parts, gaps)), merged)
+        concatenate_wav([(lead_in, 0.0), *zip(parts, gaps)], merged)
 
         durations = [_wav_seconds(p) for p in parts]
         captions_en: list[dict] = []
         captions_ja: list[dict] = []
-        cursor = 0.0
+        cursor = _LEAD_IN_SECONDS
         for (text, lang, gap), duration in zip(units, durations):
             cue = {"start": round(cursor, 3), "end": round(cursor + duration, 3), "text": text}
             (captions_en if lang == "en" else captions_ja).append(cue)
