@@ -22,6 +22,7 @@ from .engines import TTSEngine
 from .models import DialogueSegment
 from .pronunciation import normalize
 from .renderer import concatenate_wav
+from .review_points import labelled_points
 
 _LETTERS = "ABCD"
 _SLIDE_GAP_SECONDS = 0.6
@@ -59,6 +60,14 @@ def build_slides(
 
     content_by_review_id: `{review_id: {reason_en, points, question_ja, choices_ja,
     answer_ja?, example?}}` — Claudeが1問ずつ書いたもの。
+
+    `points`: `[{"kind": <review_points.POINT_KIND_LABELSのキー>, "text": str}, ...]`。
+    `kind`は自由記述禁止（`"reason"`/`"distractor"`/`"grammar"`/`"collocation"`/
+    `"vocab"`/`"note"`の固定値のみ）で、画面のバッジ文言はコード側
+    （`review_points.labelled_points()`）が決める。長い説明は`text`に書く
+    （2026-08-18、以前は`label`に「正解の理由」「headlineとの違い」のような
+    長文を自由記述させていたため、丸バッジ内で折り返されて動画が崩れる事故が
+    起きた。バッジ文言を有限個のkindからコードが選ぶ方式に変更して解消）。
     """
     audio_dir.mkdir(parents=True, exist_ok=True)
     slides: list[dict] = []
@@ -138,7 +147,7 @@ def build_slides(
                 "reviewId": review_id,
                 "answerLabel": letter,
                 "answerWord": answer,
-                "points": content["points"],
+                "points": labelled_points(content["points"]),
                 "example": content.get("example", ""),
                 "soundPath": str(slide2_wav),
                 "durationSeconds": round(slide2_duration, 3),

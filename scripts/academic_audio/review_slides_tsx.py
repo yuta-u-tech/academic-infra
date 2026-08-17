@@ -95,13 +95,14 @@ const AnswerPoint = ({ label, text, delay }: { label: string; text: string; dela
     <Glass style={{ padding: "20px 26px", display: "flex", gap: 18, alignItems: "flex-start" }}>
       <div
         style={{
-          flexShrink: 0, width: 40, height: 40, borderRadius: 999, background: ACCENT_SOFT, color: ACCENT,
-          fontSize: 18, fontWeight: 800, display: "flex", alignItems: "center", justifyContent: "center",
+          flexShrink: 0, minWidth: 40, padding: "8px 14px", borderRadius: 999, background: ACCENT_SOFT, color: ACCENT,
+          fontSize: 16, fontWeight: 800, display: "flex", alignItems: "center", justifyContent: "center",
+          whiteSpace: "nowrap", lineHeight: 1.2,
         }}
       >
         {label}
       </div>
-      <div style={{ fontSize: 26, lineHeight: 1.45, color: INK, fontWeight: 600 }}>{text}</div>
+      <div style={{ fontSize: 26, lineHeight: 1.45, color: INK, fontWeight: 600, flex: 1, minWidth: 0 }}>{text}</div>
     </Glass>
   </Motion>
 )

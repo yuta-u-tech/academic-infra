@@ -178,13 +178,14 @@ const ExplanationPoint = ({ label, text, delay }: { label: string; text: string;
     <Glass style={{ padding: "16px 22px", display: "flex", gap: 16, alignItems: "flex-start" }}>
       <div
         style={{
-          flexShrink: 0, width: 34, height: 34, borderRadius: 999, background: ACCENT_SOFT, color: ACCENT,
-          fontSize: 16, fontWeight: 800, display: "flex", alignItems: "center", justifyContent: "center",
+          flexShrink: 0, minWidth: 34, padding: "6px 12px", borderRadius: 999, background: ACCENT_SOFT, color: ACCENT,
+          fontSize: 14, fontWeight: 800, display: "flex", alignItems: "center", justifyContent: "center",
+          whiteSpace: "nowrap", lineHeight: 1.2,
         }}
       >
         {label}
       </div>
-      <div style={{ fontSize: 20, lineHeight: 1.4, color: INK, fontWeight: 600 }}>{text}</div>
+      <div style={{ fontSize: 20, lineHeight: 1.4, color: INK, fontWeight: 600, flex: 1, minWidth: 0 }}>{text}</div>
     </Glass>
   </Motion>
 )

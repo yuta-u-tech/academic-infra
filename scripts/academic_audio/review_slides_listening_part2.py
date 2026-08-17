@@ -19,6 +19,7 @@ from .engines import TTSEngine
 from .models import DialogueSegment
 from .pronunciation import normalize
 from .renderer import concatenate_wav
+from .review_points import labelled_points
 
 _LETTERS = "ABC"
 _SLIDE_GAP_SECONDS = 0.6
@@ -83,9 +84,10 @@ def _question_slide(item: dict, content: dict, audio_dir: Path, engine: TTSEngin
 
 
 def _explanation_slide(item: dict, content: dict, audio_dir: Path, engine: TTSEngine) -> dict:
-    """content["points"]: `[{label, text}]` — 正解の理由だけでなく他の選択肢が
-    なぜ違うかも含めた短い要点(Part5のAnswerSlide.pointsと同じ役割)。答えの
-    文字だけを大きく出すのは解説として粒度が低いという指摘(2026-08-12)への対応。"""
+    """content["points"]: `[{"kind": ..., "text": ...}]`（review_points.labelled_points()で
+    label化される） — 正解の理由だけでなく他の選択肢がなぜ違うかも含めた短い要点
+    (Part5のAnswerSlide.pointsと同じ役割)。答えの文字だけを大きく出すのは解説として
+    粒度が低いという指摘(2026-08-12)への対応。"""
     review_id = item["reviewId"]
     letter = _LETTERS[item["answerIndex"]]
     text_en = f"The answer is {letter}. {content['reason_en']}"
@@ -100,7 +102,7 @@ def _explanation_slide(item: dict, content: dict, audio_dir: Path, engine: TTSEn
         "kind": "explanation",
         "reviewId": review_id,
         "answerLabel": letter,
-        "points": content["points"],
+        "points": labelled_points(content["points"]),
         "soundPath": str(merged),
         "durationSeconds": round(duration, 3),
         "captionsEn": cues_en,
@@ -155,8 +157,11 @@ def build_slides_listening_part2(
     """items: `{reviewId, questionEn, choices, answerIndex, explanation}` の配列
     (academic-english-data の該当Part2セットから呼び出し側が組み立てる)。
 
-    content_by_review_id: `{reviewId: {reason_en, question_ja, points: [{label, text}]
-    (正解の理由だけでなく他の選択肢がなぜ違うかも含めた短い要点、画面に出す分),
+    content_by_review_id: `{reviewId: {reason_en, question_ja,
+    points: [{"kind": <review_points.POINT_KIND_LABELSのキー>, "text": str}, ...]
+    (正解の理由だけでなく他の選択肢がなぜ違うかも含めた短い要点、画面に出す分。
+    `kind`は自由記述禁止、バッジ文言はコード側`labelled_points()`が決める —
+    2026-08-18、自由記述のlabelで動画が崩れた事故を踏まえた設計),
     pronunciation_intro_en, pronunciation_intro_ja,
     pronunciation_points: [{phrase, note_en, note_ja}]}}` — Claudeが1問ずつ書いたもの。
     """

@@ -30,6 +30,7 @@ from .engines import TTSEngine
 from .models import DialogueSegment
 from .pronunciation import normalize
 from .renderer import concatenate_wav
+from .review_points import labelled_points
 
 _LETTERS = "ABCD"
 _SLIDE_GAP_SECONDS = 0.6
@@ -277,8 +278,11 @@ def build_slides_listening(
     (academic-english-data の dialogue.json/answers.json から呼び出し側が組み立てる)。
 
     content_by_passage_id: `{passageId: {reason_en: [設問ごとの英語ナレーション],
-    question_ja: [設問ごとの日本語訳], points: [設問ごとの [{label, text}]
-    (正解の理由だけでなく他の選択肢がなぜ違うかも含めた短い要点、画面に出す分)],
+    question_ja: [設問ごとの日本語訳], points: [設問ごとの
+    [{"kind": <review_points.POINT_KIND_LABELSのキー>, "text": str}, ...]]
+    (正解の理由だけでなく他の選択肢がなぜ違うかも含めた短い要点、画面に出す分。
+    `kind`は自由記述禁止、バッジ文言はコード側`labelled_points()`が決める —
+    2026-08-18、自由記述のlabelで動画が崩れた事故を踏まえた設計)],
     pronunciation_intro_en, pronunciation_intro_ja,
     pronunciation_points: [{phrase, note_en, note_ja}]}}` — Claudeが1パッセージずつ
     書いたもの(reason_en/question_ja/points/pronunciationは機械的には書けない)。
@@ -305,7 +309,9 @@ def build_slides_listening(
                 _question_slide(passage, question_number, question, question_ja, audio_dir, engine)
             )
             passage_slides.append(
-                _explanation_slide(passage, question_number, question, reason_en, points, audio_dir, engine)
+                _explanation_slide(
+                    passage, question_number, question, reason_en, labelled_points(points), audio_dir, engine
+                )
             )
         passage_slides.append(_pronunciation_slide(passage, content, audio_dir, engine))
         passage_slides.append(_shadowing_slide(passage, audio_dir, engine))
