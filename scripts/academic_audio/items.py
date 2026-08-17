@@ -205,6 +205,11 @@ _CHOICE_LABELS = ("A", "B", "C", "D")
 # 「A, B, C, Dの間隔が短すぎる」という指摘を受け、選択肢ごとに別セグメントへ分割し、
 # 明示的にこの間を挟むようにした。
 _CHOICE_PAUSE = 0.8
+# 選択肢ラベル（"A."等）と本文の間の間（2026-08-17追加）。ラベルと本文を1つの
+# セグメントにまとめて合成していたため、"A."と呼ばれた直後に本文が始まってしまい
+# 「Aと呼ばれてすぐ文章が読まれて聞き取りづらい」との指摘を受けた。ラベルと本文を
+# 別セグメントに分割し、この間を明示的に挟む。
+_LABEL_PAUSE = 1.0
 
 
 def to_script(listening_set: ListeningSet, listening_format: ListeningFormat) -> DialogueScript:
@@ -223,6 +228,9 @@ def to_script(listening_set: ListeningSet, listening_format: ListeningFormat) ->
          2026-08-15追記: 以前は3〜4択を1回の合成にまとめていた（Piper自身の文末ポーズ・
          抑揚を活かすため）が、「A, B, C, Dの間隔が短すぎる」との指摘を受け、選択肢ごとに
          分割して間隔を制御できる形に変更した。
+         2026-08-17追記: ラベル（"A."等）と本文をさらに別セグメントに分割し、その間にも
+         `_LABEL_PAUSE` を挟むようにした。以前はラベルと本文を1回の合成にまとめており、
+         "A."と呼ばれた直後に本文が始まってしまい聞き取りづらいとの指摘を受けたため。
     質問と応答を別の声にするのは、本番より聴き取りやすくするための意図的な脚色
     （本番は全て同じナレーターが読む）。どちらの発話かが声で分かるようにする。
     """
@@ -265,7 +273,21 @@ def to_script(listening_set: ListeningSet, listening_format: ListeningFormat) ->
                 DialogueSegment(
                     id=f"seg-{len(segments) + 1:03d}",
                     speaker="respondent",
-                    text=f"{label}. {choice.text}",
+                    text=f"{label}.",
+                    language=listening_format.language,
+                    emotion="Neutral",
+                    speed=1.0,
+                    pause=_LABEL_PAUSE,
+                    source_section=listening_set.source_id,
+                    item_id=item.item_id,
+                    role="choice",
+                )
+            )
+            segments.append(
+                DialogueSegment(
+                    id=f"seg-{len(segments) + 1:03d}",
+                    speaker="respondent",
+                    text=choice.text,
                     language=listening_format.language,
                     emotion="Neutral",
                     speed=1.0,

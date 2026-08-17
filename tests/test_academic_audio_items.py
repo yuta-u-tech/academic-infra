@@ -113,27 +113,42 @@ def test_items_become_segments_with_item_id_and_role(tmp_path: Path, toeic: List
 
     # "Number 1." は単独の発話にして直後に短い間を置く（質問文と同じ発話にまとめると
     # 番号を認識する間もなく質問が始まってしまうため分離した）。3つの応答はそれぞれ
-    # 別のセグメントに分け、各応答の前に "A." "B." "C." を読み上げ、応答同士の間に
-    # 明示的な間を挟む（2026-08-15: 以前は3つをまとめて1回の合成にしていたが、
-    # 「選択肢間の間隔が短すぎる」との指摘を受けて分割した）。
-    assert [segment.role for segment in script.segments] == ["question", "question", "choice", "choice", "choice"]
+    # ラベル("A."等)と本文を別のセグメントに分け、応答同士の間に明示的な間を挟む
+    # （2026-08-15: 以前は3つをまとめて1回の合成にしていたが、「選択肢間の間隔が
+    # 短すぎる」との指摘を受けて分割した。2026-08-17: ラベルと本文もさらに分割し、
+    # 「Aと呼ばれてすぐ本文が読まれて聞き取りづらい」との指摘を受けて間を挟んだ）。
+    assert [segment.role for segment in script.segments] == [
+        "question",
+        "question",
+        "choice",
+        "choice",
+        "choice",
+        "choice",
+        "choice",
+        "choice",
+    ]
     assert script.segments[0].text == "Number 1."
     assert script.segments[1].text == "When will you finish checking the truth table?"
-    assert script.segments[2].text == "A. By the end of this afternoon."
-    assert script.segments[3].text == "B. In the small lecture room."
-    assert script.segments[4].text == "C. The table was quite accurate."
+    assert script.segments[2].text == "A."
+    assert script.segments[3].text == "By the end of this afternoon."
+    assert script.segments[4].text == "B."
+    assert script.segments[5].text == "In the small lecture room."
+    assert script.segments[6].text == "C."
+    assert script.segments[7].text == "The table was quite accurate."
     assert all(segment.item_id == "item-001" for segment in script.segments)
     assert all(segment.language == "en" for segment in script.segments)
     # 質問と応答は別の声にする（本番はどちらもナレーターの声だが、聴き分けやすくするための脚色）。
     assert script.segments[0].speaker == "narrator"
     assert script.segments[1].speaker == "narrator"
-    assert script.segments[2].speaker == "respondent"
-    assert script.segments[3].speaker == "respondent"
-    assert script.segments[4].speaker == "respondent"
+    assert all(segment.speaker == "respondent" for segment in script.segments[2:])
+    # ラベル("A."等)の後は聞き取りやすさのための間(1.0秒)を置く。
+    assert script.segments[2].pause == pytest.approx(1.0)
+    assert script.segments[4].pause == pytest.approx(1.0)
+    assert script.segments[6].pause == pytest.approx(1.0)
     # 選択肢同士の間は明示的なpauseで区切り、最後の選択肢の後だけ解答時間分の長いpauseにする。
-    assert script.segments[2].pause == pytest.approx(0.8)
     assert script.segments[3].pause == pytest.approx(0.8)
-    assert script.segments[4].pause == pytest.approx(5.0)
+    assert script.segments[5].pause == pytest.approx(0.8)
+    assert script.segments[7].pause == pytest.approx(5.0)
     # "Number 1." の後は短い間(0.5秒)、疑問文の後は「本当に尋ねている」間(1.2秒)。
     assert script.segments[0].pause == 0.5
     assert script.segments[1].pause == 1.2
@@ -280,7 +295,7 @@ def test_cli_ingest_writes_script_answers_and_tex(tmp_path: Path) -> None:
 
     assert result.returncode == 0, result.stderr
     payload = json.loads(result.stdout)
-    assert payload["items"] == 1 and payload["segments"] == 5  # "Number 1." + 質問文 + 応答3つをそれぞれ別発話
+    assert payload["items"] == 1 and payload["segments"] == 8  # "Number 1." + 質問文 + 応答3つ(ラベル+本文をそれぞれ別発話)
     assert (out_dir / "dialogue.json").exists()
     assert (out_dir / "answers.json").exists()
     assert (out_dir / "worksheet.tex").exists()
