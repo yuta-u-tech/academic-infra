@@ -34,12 +34,13 @@ from .renderer import concatenate_wav
 _GAP_SECONDS = 0.45
 _COLLOCATION_GAP_SECONDS = 0.9
 _SLIDE_TAIL_SECONDS = 2.5
-# スライド音声の先頭(=代表単語)が無音の助走なしでt=0に直置きされていると、
-# FrameScriptの音声再生開始のわずかなウォームアップと競合し、代表単語の頭が
-# ちぎれて聞こえることがある(2026-08-18、ユーザー報告。後続ユニットは前に
-# 必ずgapがあるため影響を受けず、常に先頭の代表単語だけがたまに欠ける症状と一致)。
-# 先頭にだけ無音の助走を入れて回避する。
-_LEAD_IN_SECONDS = 0.3
+# Piperのレンダリングは、稀に短い発話の頭(アタック)を十分に発音しきらないことが
+# ある(2026-08-18、ユーザー報告: 最初は代表単語の頭切れとして気づいたが、日本語の
+# ユニットでも稀に起きるとのこと)。ユニットとユニットの間には既にgapで無音を
+# 挟んでいるが、それとは別に「そのユニット自身の音声データの先頭」に無音マージンを
+# 焼き込むことで、TTS自体のアタック欠けを吸収する。全ユニットに掛かるため、
+# 語あたりのユニット数(3〜8個程度)を考慮してやや短めの値にしてある。
+_LEAD_IN_SECONDS = 0.15
 
 _REQUIRED_CONTENT_FIELDS = ("collocations", "example_en", "example_ja")
 
@@ -141,17 +142,27 @@ def build_slides(
             parts.append(out)
             gaps.append(gap)
 
-        lead_in = audio_dir / f"{review_id}.leadin.wav"
-        _write_silence_wav(parts[0], _LEAD_IN_SECONDS, lead_in)
+        # 各ユニット(単語/意味/コロケーション/例文…すべて)の頭に、そのユニット専用の
+        # 無音マージンを1つずつ挟む(2026-08-18、ユーザー報告: 先頭の代表単語だけで
+        # なく日本語パートでも稀に頭が欠けることがあるとのこと。最初は全体トラックの
+        # 先頭だけに助走を入れていたが、切れは英語/日本語どちらのユニットでも起こり
+        # 得るため、ユニットごとに個別のマージンを持たせる形に一般化した)。
+        pieces: list[tuple[Path, float]] = []
+        for part, gap in zip(parts, gaps):
+            lead_in = part.with_suffix(".leadin.wav")
+            _write_silence_wav(part, _LEAD_IN_SECONDS, lead_in)
+            pieces.append((lead_in, 0.0))
+            pieces.append((part, gap))
 
         merged = audio_dir / f"{review_id}.slide.wav"
-        concatenate_wav([(lead_in, 0.0), *zip(parts, gaps)], merged)
+        concatenate_wav(pieces, merged)
 
         durations = [_wav_seconds(p) for p in parts]
         captions_en: list[dict] = []
         captions_ja: list[dict] = []
-        cursor = _LEAD_IN_SECONDS
+        cursor = 0.0
         for (text, lang, gap), duration in zip(units, durations):
+            cursor += _LEAD_IN_SECONDS
             cue = {"start": round(cursor, 3), "end": round(cursor + duration, 3), "text": text}
             (captions_en if lang == "en" else captions_ja).append(cue)
             cursor += duration + gap
