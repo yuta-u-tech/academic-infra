@@ -64,7 +64,45 @@ def review_path(home: Path | None = None) -> Path:
     return (home or notes_home()) / MISC_DIR / REVIEW_FILENAME
 
 
-def fetch_wrong_items(connection: sqlite3.Connection, *, since_date: str | None = None) -> list[dict]:
+VIDEO_STATE_DIR = Path.home() / ".academic-english"
+VIDEO_STATE_FILENAME = "review-video-covered.json"
+
+
+def video_state_path() -> Path:
+    return VIDEO_STATE_DIR / VIDEO_STATE_FILENAME
+
+
+def load_video_covered(path: Path | None = None) -> dict[str, str]:
+    """`{review_id: covered_created_at}`。covered_created_at はその review_id を動画に
+    含めた時点の attempt.created_at（= どの試行までを見せ済みか）。"""
+    path = path or video_state_path()
+    if not path.exists():
+        return {}
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def mark_video_covered(items: list[dict], path: Path | None = None) -> None:
+    """`items`: `fetch_wrong_items()` が返した行のリスト（動画に実際に含めたもの）。
+    その review_id の created_at を「ここまでは動画で見せた」印として保存する。
+    同じ試行がFormの回収遅れ等で後日 attempt.created_at が変わっても、この印より
+    新しい created_at の試行が現れない限り再度は対象にならない
+    （逆に印より新しい created_at で不正解になれば、動画化後に本当に再度間違えた
+    ということなので次回また対象になる）。
+    """
+    path = path or video_state_path()
+    covered = load_video_covered(path)
+    for item in items:
+        covered[item["review_id"]] = item["created_at"]
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(covered, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
+
+
+def fetch_wrong_items(
+    connection: sqlite3.Connection,
+    *,
+    since_date: str | None = None,
+    exclude_covered: dict[str, str] | None = None,
+) -> list[dict]:
     """今も間違えたままのTOEIC問題を返す（review_id単位、最新試行が不正解のものだけ）。
 
     `since_date`（"YYYY-MM-DD"）を渡すと、その日以降に解答した試行だけに絞る。
@@ -73,6 +111,15 @@ def fetch_wrong_items(connection: sqlite3.Connection, *, since_date: str | None 
     対象にする設計**（2026-08-14、間違えて全期間分（55問）を1本の動画にしてしまい、
     レンダラーが長時間ジョブでハングする不具合を誘発した反省から明確化。動画生成の
     呼び出し側は必ず`since_date=today`を渡すこと）。
+
+    **注意（2026-08-17発覚）**: `attempt.created_at` は「その試行がDBに記録された日時」
+    であり、Google Formの回収（`toeic_forms_cli.py record`）が遅れると「実際に解いた日」
+    とズレる。この結果、数日前に解いて既に動画化済みの問題が、回収が遅れただけで
+    `since_date=今日` に引っかかり、同じ内容の動画がもう一本できてしまう事故が
+    実際に起きた。**動画生成の呼び出し側は `since_date` だけに頼らず、必ず
+    `exclude_covered=load_video_covered()` も渡すこと。** 動画公開後は
+    `mark_video_covered()` で実際に使った items を記録する（「回収日」と
+    「復習動画で見せ済みかどうか」を別々の状態として管理する）。
     """
     rows = connection.execute(
         """
@@ -91,6 +138,11 @@ def fetch_wrong_items(connection: sqlite3.Connection, *, since_date: str | None 
     wrong = [row for row in latest.values() if not row["correct"]]
     if since_date is not None:
         wrong = [row for row in wrong if row["created_at"][:10] >= since_date]
+    if exclude_covered:
+        wrong = [
+            row for row in wrong
+            if row["created_at"] > exclude_covered.get(row["review_id"], "")
+        ]
     wrong.sort(key=lambda row: row["created_at"], reverse=True)
     return wrong
 

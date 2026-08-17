@@ -226,6 +226,26 @@ def _cmd_note_draft(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_toeic_review_video_candidates(args: argparse.Namespace) -> int:
+    with connect(args.db) as connection:
+        covered = {} if args.include_covered else toeic_review.load_video_covered()
+        items = toeic_review.fetch_wrong_items(connection, since_date=args.since, exclude_covered=covered)
+    if args.domain:
+        domains = set(args.domain.split(","))
+        items = [item for item in items if item["domain"] in domains]
+    args.out.parent.mkdir(parents=True, exist_ok=True)
+    args.out.write_text(json.dumps(items, ensure_ascii=False, indent=2), encoding="utf-8")
+    print(f"復習動画の対象候補 {len(items)}件を書き出し: {args.out}")
+    return 0
+
+
+def _cmd_toeic_review_video_mark_covered(args: argparse.Namespace) -> int:
+    items = json.loads(args.file.read_text(encoding="utf-8"))
+    toeic_review.mark_video_covered(items)
+    print(f"{len(items)}件を動画化済みとして記録: {toeic_review.video_state_path()}")
+    return 0
+
+
 def _cmd_toeic_review(args: argparse.Namespace) -> int:
     with connect(args.db) as connection:
         path = toeic_review.write_review(connection, args.notes_home)
@@ -322,6 +342,23 @@ def main() -> int:
     toeic_review_parser.add_argument("--pdf-out", type=Path, help="指定すると同じ内容のPDF(toeic-review.pdf)もここに書く")
     toeic_review_parser.add_argument("--playlist-url", help="復習動画プレイリストのURL。PDF本文の先頭に埋め込む（--pdf-out指定時のみ有効）")
     toeic_review_parser.set_defaults(func=_cmd_toeic_review)
+
+    video_candidates = subparsers.add_parser(
+        "toeic-review-video-candidates",
+        help="復習動画の対象問題を出す（sinceで絞った上、既に動画化済み(video-mark-coveredで記録済み)のものは除外）",
+    )
+    video_candidates.add_argument("--since", required=True, help="YYYY-MM-DD（attemptが記録された日。Form回収が遅れると実際に解いた日とズレる点に注意）")
+    video_candidates.add_argument("--domain", help="カンマ区切り（grammar/reading/listening/vocabulary等）。省略時は全ドメイン")
+    video_candidates.add_argument("--include-covered", action="store_true", help="既に動画化済みのreview_idも含める（デバッグ用）")
+    video_candidates.add_argument("--out", type=Path, required=True)
+    video_candidates.set_defaults(func=_cmd_toeic_review_video_candidates)
+
+    video_mark_covered = subparsers.add_parser(
+        "toeic-review-video-mark-covered",
+        help="動画に実際に使ったitems JSON(toeic-review-video-candidatesの出力と同じ形)を渡し、動画化済みとして記録する",
+    )
+    video_mark_covered.add_argument("--file", type=Path, required=True)
+    video_mark_covered.set_defaults(func=_cmd_toeic_review_video_mark_covered)
 
     status = subparsers.add_parser("status", help="DBの件数を見る")
     status.set_defaults(func=_cmd_status)
