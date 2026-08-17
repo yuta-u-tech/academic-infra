@@ -45,7 +45,8 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from datetime import datetime, timezone
+from datetime import datetime
+from zoneinfo import ZoneInfo
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -54,11 +55,13 @@ from acenglish.db import connect  # noqa: E402
 from acenglish.vocab_quiz import build_choices, load_pool, next_batch, weak_review_ids  # noqa: E402
 from toeic_reading.vocab_render import QuizQuestion, build_pdf, render_md, render_tex  # noqa: E402
 
+JST = ZoneInfo("Asia/Tokyo")
+
 DEFAULT_DRIVE_FOLDER_NAME = "TOEIC/vocabulary"
 
 
 def _cmd_build(args: argparse.Namespace) -> int:
-    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    today = datetime.now(JST).strftime("%Y-%m-%d")
     title = args.title or f"語彙テスト {today}"
 
     with connect(args.db) as connection:
@@ -169,7 +172,7 @@ def _cmd_publish(args: argparse.Namespace) -> int:
     if not args.pdf.exists():
         raise FileNotFoundError(f"{args.pdf} がありません。先に build を実行してください。")
 
-    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    today = datetime.now(JST).strftime("%Y-%m-%d")
     drive_name = args.name or f"{today}.pdf"
     folder_names = [part for part in args.folder_name.split("/") if part]
     drive_path = "/".join([*folder_names, drive_name])

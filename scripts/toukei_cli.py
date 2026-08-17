@@ -33,7 +33,8 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from datetime import datetime, timezone
+from datetime import datetime
+from zoneinfo import ZoneInfo
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -44,6 +45,8 @@ from toukei_study.reading import build_chapter_pdf, mark_delivered, next_chapter
 from toukei_study.render import build_pdf as render_build_pdf  # noqa: E402
 from toukei_study.render import render_generated_tex  # noqa: E402
 from toukei_study.study import ingest_problems, next_batch, record_attempt, status  # noqa: E402
+
+JST = ZoneInfo("Asia/Tokyo")
 
 COMPETENCY_IDS = (
     "toukei.probability_distribution",
@@ -125,7 +128,7 @@ def _cmd_worksheet(args: argparse.Namespace) -> int:
         print("出題できる問題がありません。先に ingest してください。", file=sys.stderr)
         return 1
 
-    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    today = datetime.now(JST).strftime("%Y-%m-%d")
     title = f"{COMPETENCY_TITLES.get(args.competency, args.competency)} {today}"
     # Drive上の他教材（TOEIC Part5/7・リスニング冊子）と同じhouse styleで組む。
     tex_content = render_generated_tex(title, selected)
@@ -146,7 +149,7 @@ def _cmd_publish(args: argparse.Namespace) -> int:
     if not args.pdf.exists():
         raise FileNotFoundError(f"{args.pdf} がありません。先に worksheet を実行してください。")
 
-    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    today = datetime.now(JST).strftime("%Y-%m-%d")
     drive_name = args.name or f"{today}.pdf"
     folder_names = [part for part in args.folder_name.split("/") if part]
     drive_path = "/".join([*folder_names, drive_name])

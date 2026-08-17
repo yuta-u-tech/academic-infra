@@ -23,10 +23,13 @@ import argparse
 import json
 import random
 import sys
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+JST = ZoneInfo("Asia/Tokyo")
 
 from acenglish.db import connect  # noqa: E402
 from acenglish.fetch import import_toeic_part5, import_toeic_part6, import_toeic_part7  # noqa: E402
@@ -49,7 +52,7 @@ DEFAULT_DRIVE_FOLDER_NAME = "TOEIC/reading/part5"
 
 def _load_items(path: Path) -> tuple[str, list[GrammarItem]]:
     payload = json.loads(path.read_text(encoding="utf-8"))
-    title = payload.get("title") or f"Part5 {datetime.now(timezone.utc):%Y-%m-%d}"
+    title = payload.get("title") or f"Part5 {datetime.now(JST):%Y-%m-%d}"
     try:
         items = [GrammarItem.model_validate(entry) for entry in payload["items"]]
     except ValidationError as error:
@@ -319,7 +322,7 @@ def _cmd_publish(args: argparse.Namespace) -> int:
     if not args.pdf.exists():
         raise FileNotFoundError(f"{args.pdf} がありません。先に worksheet を実行してください。")
 
-    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    today = datetime.now(JST).strftime("%Y-%m-%d")
     drive_name = args.name or f"{today}.pdf"
     folder_names = [part for part in args.folder_name.split("/") if part]
     drive_path = "/".join([*folder_names, drive_name])

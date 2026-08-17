@@ -20,7 +20,8 @@ import random
 import re
 import sys
 from dataclasses import asdict
-from datetime import datetime, timezone
+from datetime import datetime
+from zoneinfo import ZoneInfo
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -67,6 +68,8 @@ from academic_audio.vocab import VocabFetchError  # noqa: E402
 from academic_audio.video import VideoError  # noqa: E402
 from academic_audio.worksheet import WorksheetError, build_pdf, render_passage_tex, render_tex  # noqa: E402
 from _youtube_common import YouTubeConfigError, resolve_credentials as resolve_youtube_credentials  # noqa: E402
+
+JST = ZoneInfo("Asia/Tokyo")
 
 
 def _source_args(parser: argparse.ArgumentParser) -> None:
@@ -224,7 +227,7 @@ def _cmd_listening_publish(args: argparse.Namespace) -> int:
 
     # 日次更新を想定し、投稿日を先頭に付ける。同じ set-dir を別日に publish しても
     # 上書きにならず、Drive 上で「いつの分か」が一目でわかる。
-    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    today = datetime.now(JST).strftime("%Y-%m-%d")
     descriptive_name = _JOB_TIMESTAMP_PREFIX.sub("", args.set_dir.name)
     folder_names = [part for part in args.folder_name.split("/") if part]
     # TOEIC は Part ごとにサブフォルダへ分ける（Part2/3/4 が同じ場所に混ざると探しにくいため）。
