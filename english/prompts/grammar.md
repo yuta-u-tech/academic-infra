@@ -123,7 +123,11 @@ Form作成のいずれよりも前に、必ず `toeic_reading_cli.py shuffle --i
   `prospective`/`perspective`, `momentous`/`momentary`, `intensive`/`intense`,
   `discreet`/`discrete`, `ingenious`/`ingenuous`, `tentative`/`tenacious`/`tenable`,
   `redundant`/`abundant`, `informed`/`informative`, `transparent`/`translucent`
-  （2026-08-17追加）
+  （2026-08-17追加）,
+  `persuasive`/`pervasive`, `conducive`/`conductive`, `lucrative`/`lucid`,
+  `meticulous`/`meritorious`, `exempt`/`exemplary`, `provisional`/`provincial`,
+  `substantive`/`substantial`, `indispensable`/`dispensable`, `ambiguous`/`ambitious`
+  （2026-08-18追加）
 - パターンC（コロケーション）: `raise concerns`, `meet the deadline`, `place an order`,
   `conduct a survey`, `reach a consensus`, `submit an application`, `issue a refund`,
   `extend an invitation`, `address a complaint`, `renew a contract`, `postpone`（文脈適合）,
@@ -141,7 +145,10 @@ Form作成のいずれよりも前に、必ず `toeic_reading_cli.py shuffle --i
   （2026-08-15追加）,
   `incur a penalty`, `launch an initiative`, `impose restrictions`, `fill a vacancy`,
   `assume responsibility`, `broker a deal`, `bolster confidence`, `overhaul a system`,
-  `oversee operations`, `spearhead a campaign`, `waive a requirement`（2026-08-17追加）
+  `oversee operations`, `spearhead a campaign`, `waive a requirement`（2026-08-17追加）,
+  `defray expenses`, `forge a partnership`, `tender a resignation`, `levy a tax`,
+  `accrue interest`, `divert resources`, `underwrite a loan`, `relinquish control`,
+  `commission a study`, `sever ties`（2026-08-18追加）
 
 ## sentence
 
