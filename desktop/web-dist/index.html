@@ -647,7 +647,16 @@ function renderQuestion(item) {
   const point = p.point || item.sub_skill;
   let body, keys;
 
-  if (item.kind === "vocab") {
+  if (item.kind === "vocab" && item.sub_skill === "recognition") {
+    body = `<h1 class="stem en">${esc(p.word)}</h1>
+      <div class="well" id="recognitionAnswer" hidden></div>
+      <button class="primary" id="revealAnswer">答えを見る</button>
+      <div id="selfGrade" hidden>
+        <button data-self-grade="true">分かった</button>
+        <button data-self-grade="false">分からなかった</button>
+      </div>`;
+    keys = "答えを開いて自己採点";
+  } else if (item.kind === "vocab") {
     typing.reset(p.answer_pattern);
     // 出題中は品詞まで。collocations は答え合わせ後にだけ出す。
     const sub = p.part_of_speech ? `<p class="eyebrow" style="margin:calc(var(--s5) * -1) 0 var(--s4)">
@@ -681,7 +690,21 @@ function renderQuestion(item) {
   if (passage && passage.scrollHeight > passage.clientHeight + 1) {
     passage.closest(".well").classList.add("is-clipped");
   }
-  if (item.kind === "vocab") { paintTypeLine(); focusCatcher(); }
+  if (item.kind === "vocab" && item.sub_skill === "recognition") {
+    $("revealAnswer").onclick = () => revealRecognition().catch(fail);
+  } else if (item.kind === "vocab") { paintTypeLine(); focusCatcher(); }
+}
+
+async function revealRecognition() {
+  const answer = await api(`/api/reveal?item_id=${state.current.item_id}`);
+  $("recognitionAnswer").innerHTML = `<h2>${esc(answer.meaning)}</h2>${answer.example
+    ? `<p class="answer">${esc(answer.example)}</p>` : ""}`;
+  $("recognitionAnswer").hidden = false;
+  $("revealAnswer").hidden = true;
+  $("selfGrade").hidden = false;
+  document.querySelectorAll("[data-self-grade]").forEach((button) => {
+    button.onclick = () => submitSelfGrade(button.dataset.selfGrade === "true").catch(fail);
+  });
 }
 
 function focusCatcher() { $("typeCatcher").focus({ preventScroll: true }); }
@@ -722,6 +745,20 @@ async function submit(response) {
     elapsed_ms: Math.round(performance.now() - state.shownAt),
     hint_used: state.hintUsed,
     retry_count: state.misses,
+  });
+  state.answered.push(state.current.item_id);
+  if (result.correct) state.correct += 1;
+  state.lastAttemptId = result.attempt_id;
+  renderVerdict(result);
+}
+
+async function submitSelfGrade(correct) {
+  clearInterval(state.budgetTimer);
+  const response = correct ? "分かった" : "分からなかった";
+  const result = await post("/api/answer", {
+    session_id: state.sessionId, item_id: state.current.item_id, response,
+    correct_override: correct,
+    elapsed_ms: Math.round(performance.now() - state.shownAt),
   });
   state.answered.push(state.current.item_id);
   if (result.correct) state.correct += 1;
@@ -853,6 +890,7 @@ document.addEventListener("keydown", (event) => {
   }
   if (state.phase !== "question" || !state.current) return;
 
+  if (state.current.kind === "vocab" && state.current.sub_skill === "recognition") return;
   if (state.current.kind === "vocab") {
     if (event.key === "Escape") { event.preventDefault(); return void submit("").catch(fail); }
     if (event.key === "Tab") { event.preventDefault(); return void revealHint().catch(fail); }
@@ -885,7 +923,8 @@ document.addEventListener("keydown", (event) => {
 
 // 語彙タイピング中はどこをクリックしてもキーを拾えるようにしておく。
 document.addEventListener("click", () => {
-  if (state.phase === "question" && state.current?.kind === "vocab") focusCatcher();
+  if (state.phase === "question" && state.current?.kind === "vocab"
+      && state.current?.sub_skill !== "recognition") focusCatcher();
 });
 
 renderDashboard().catch(fail);

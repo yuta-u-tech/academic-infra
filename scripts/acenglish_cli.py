@@ -194,6 +194,13 @@ def _cmd_fetch_toeic(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_duplicate_vocab_direction(args: argparse.Namespace) -> int:
+    with connect(args.db) as connection:
+        result = fetch.duplicate_vocab_direction(connection, args.source, args.to)
+    print(json.dumps(result, ensure_ascii=False))
+    return 0
+
+
 def _cmd_voa(args: argparse.Namespace) -> int:
     if args.url:
         with connect(args.db) as connection:
@@ -317,6 +324,12 @@ def main() -> int:
     fetch_toeic.add_argument("--deck", help=f"カンマ区切り（既定: 全部）対応: {', '.join(studyforge.DECKS)}")
     fetch_toeic.add_argument("--limit", type=int, help="各デッキの先頭N語だけ")
     fetch_toeic.set_defaults(func=_cmd_fetch_toeic)
+
+    duplicate_direction = subparsers.add_parser(
+        "duplicate-vocab-direction", help="語彙を別の出題方向へ冪等複製する")
+    duplicate_direction.add_argument("--source", required=True, choices=["toeic"])
+    duplicate_direction.add_argument("--to", required=True, choices=["recognition"])
+    duplicate_direction.set_defaults(func=_cmd_duplicate_vocab_direction)
 
     voa_parser = subparsers.add_parser("voa", help="VOA Learning English（URL省略で記事一覧）")
     voa_parser.add_argument("--url", help="記事URL。省略するとRSSから一覧を出す")

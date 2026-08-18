@@ -66,6 +66,7 @@ class AnswerRequest(BaseModel):
     hint_used: bool = False
     retry_count: int = Field(default=0, ge=0)
     cause_override: str | None = None
+    correct_override: bool | None = None
 
 
 class GradeRequest(BaseModel):
@@ -166,6 +167,7 @@ def create_app(db_path: Path | None = None) -> FastAPI:
                     hint_used=request.hint_used,
                     retry_count=request.retry_count,
                     cause_override=request.cause_override,
+                    correct_override=request.correct_override,
                 )
             except LookupError as error:
                 raise HTTPException(status_code=404, detail=str(error)) from error
@@ -200,9 +202,22 @@ def create_app(db_path: Path | None = None) -> FastAPI:
                 _, item = study.load_item(connection, item_id)
             except LookupError as error:
                 raise HTTPException(status_code=404, detail=str(error)) from error
-        if not hasattr(item, "word"):
+        if not hasattr(item, "word") or item.sub_skill == "recognition":
             raise HTTPException(status_code=422, detail="この種別にヒントはありません。")
         return {"hint": study.hint_for(item.word)}
+
+    @app.get("/api/reveal")
+    def reveal(item_id: int) -> dict:
+        """recognitionカードの答えを自己採点の直前に開示する。"""
+        with db() as connection:
+            try:
+                _, item = study.load_item(connection, item_id)
+            except LookupError as error:
+                raise HTTPException(status_code=404, detail=str(error)) from error
+        if not hasattr(item, "word") or item.sub_skill != "recognition":
+            raise HTTPException(status_code=422, detail="このカードは開示式ではありません。")
+        return {"meaning": item.meaning, "example": item.example,
+                "collocations": item.collocations}
 
     @app.post("/api/grade")
     def set_grade(request: GradeRequest) -> dict:

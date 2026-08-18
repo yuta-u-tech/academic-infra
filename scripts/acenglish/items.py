@@ -23,6 +23,13 @@ class _Strict(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+class VocabCollocation(_Strict):
+    """toeic_collocation_cli.py ingest が書き込むコロケーション1件（見出し語と結びつく定型表現）。"""
+
+    phrase: str = Field(min_length=1, max_length=200)
+    phrase_ja: str = Field(min_length=1, max_length=200)
+
+
 class VocabItem(_Strict):
     """専門語彙カード。goigoi の word.schema.json v1 へ写せる形に揃えてある。"""
 
@@ -34,6 +41,9 @@ class VocabItem(_Strict):
     example: str | None = Field(default=None, max_length=1000)
     part_of_speech: str | None = Field(default=None, max_length=40)
     collocations: list[str] = Field(default_factory=list, max_length=10)
+    # toeic_collocation_cli.py ingest が後から書き足す拡張コロケーション（動画生成パイプライン用）。
+    # 既存の collocations（空配列のまま運用）とは別に持つため v2 のキー名になっている。
+    collocations_v2: list[VocabCollocation] | None = Field(default=None, max_length=10)
 
     def prompt(self) -> str:
         return self.word

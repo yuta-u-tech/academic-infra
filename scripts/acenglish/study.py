@@ -28,10 +28,10 @@ _ITEM_TYPES = {
 }
 # 出題時に隠すフィールド。答えと解説が UI に流れると、正誤の記録が意味をなくなる。
 _HIDDEN_FIELDS = {
-    # example と collocations は見出し語をそのまま含む（"preside over a meeting"）。
+    # example と collocations/collocations_v2 は見出し語をそのまま含む（"preside over a meeting"）。
     # 語義だけ見て思い出す問題なので、これを出したら答えを見せているのと変わらない。
     # 答え合わせのときに返す。
-    "vocab": ("word", "example", "collocations"),
+    "vocab": ("word", "example", "collocations", "collocations_v2"),
     "reading": ("answer_index", "explanation"),
     "grammar": ("answer_index", "explanation"),
     "listening": ("answer_index", "explanation"),
@@ -383,10 +383,13 @@ def item_for_ui(connection: sqlite3.Connection, item_id: int) -> dict[str, Any]:
     """出題用。答え（answer_index / word / explanation）は含めない。"""
     row, item = load_item(connection, item_id)
     payload = json.loads(row["payload"])
-    if row["kind"] == "vocab":
+    hidden_fields = _HIDDEN_FIELDS.get(row["kind"], ())
+    if row["kind"] == "vocab" and item.sub_skill == "recognition":
+        hidden_fields = ("meaning", "example", "collocations", "collocations_v2")
+    elif row["kind"] == "vocab":
         # 綴りは伏せるが、何語で何文字かは打つ前に要る情報なので渡す。
         payload["answer_pattern"] = answer_pattern(item.word)
-    for field in _HIDDEN_FIELDS.get(row["kind"], ()):
+    for field in hidden_fields:
         payload.pop(field, None)
     return {
         "item_id": item_id,

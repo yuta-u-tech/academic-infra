@@ -163,6 +163,46 @@ def test_the_hint_opens_only_the_first_letters(client):
     assert client.get(f"/api/hint?item_id={item['item_id']}").json()["hint"] == "l····· l···"
 
 
+def test_recognition_api_flow(tmp_path):
+    import json
+
+    db_path = tmp_path / "recognition.db"
+    connection = connect(db_path)
+    generate.upsert_material(connection, TARGET)
+    item_id = generate.ingest(connection, _result())[0]
+    row = connection.execute("SELECT payload FROM generated_item WHERE id=?", (item_id,)).fetchone()
+    payload = json.loads(row["payload"])
+    payload["sub_skill"] = "recognition"
+    connection.execute("UPDATE generated_item SET payload=? WHERE id=?",
+                       (json.dumps(payload), item_id))
+    connection.commit()
+    connection.close()
+    recognition_client = TestClient(create_app(db_path))
+
+    card = next(i for i in recognition_client.get("/api/queue?course=dsa").json()["items"]
+                if i["item_id"] == item_id)
+    assert card["payload"]["word"] == "linked list"
+    assert "meaning" not in card["payload"]
+    assert "example" not in card["payload"]
+    assert "answer_pattern" not in card["payload"]
+    assert recognition_client.get(f"/api/hint?item_id={item_id}").status_code == 422
+    assert recognition_client.get(f"/api/reveal?item_id={item_id}").json()["meaning"] == "線形リスト"
+
+    session_id = recognition_client.post(
+        "/api/sessions", json={"course_id": "dsa"}).json()["session_id"]
+    answer = recognition_client.post("/api/answer", json={
+        "session_id": session_id, "item_id": item_id, "response": "分からなかった",
+        "elapsed_ms": 1200, "correct_override": False,
+    }).json()
+    assert answer["correct"] is False
+    with connect(db_path) as connection:
+        attempt = connection.execute("SELECT * FROM attempt WHERE id=?",
+                                     (answer["attempt_id"],)).fetchone()
+        assert attempt["response"] == "分からなかった"
+        assert attempt["correct"] == 0
+        assert attempt["sub_skill"] == "recognition"
+
+
 def test_asking_for_a_hint_on_a_choice_question_is_refused(client):
     item = next(i for i in client.get("/api/queue?course=dsa").json()["items"]
                 if i["kind"] == "reading")

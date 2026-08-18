@@ -284,7 +284,33 @@ def due_items(
     # 種別ごとに別々に引く。1本のクエリから間引く方式では、語彙が数千件あると
     # 上位が全部語彙で埋まり、読解・文法が母数にすら入らない。
     available = kinds or _available_kinds(connection, course_id)
-    per_kind = {kind: run("AND gi.kind = ?", [kind], limit) for kind in available}
+    per_kind: dict[str, list[dict]] = {}
+    for kind in available:
+        if kind != "vocab":
+            per_kind[kind] = run("AND gi.kind = ?", [kind], limit)
+            continue
+        # 語彙は recall / recognition も交互にする。kind だけで混ぜると、古い
+        # recall 行が数千件並んだ後に追加した recognition へ到達できない。
+        sub_skills = [
+            row["sub_skill"]
+            for row in connection.execute(
+                """SELECT DISTINCT COALESCE(json_extract(payload, '$.sub_skill'), 'recall')
+                          AS sub_skill
+                   FROM generated_item
+                   WHERE kind = 'vocab' AND retired_at IS NULL
+                     AND (? IS NULL OR course_id = ?)
+                   ORDER BY sub_skill""",
+                (course_id, course_id),
+            )
+        ]
+        per_sub_skill = {
+            sub_skill: run(
+                "AND gi.kind = ? AND COALESCE(json_extract(gi.payload, '$.sub_skill'), 'recall') = ?",
+                [kind, sub_skill], limit,
+            )
+            for sub_skill in sub_skills
+        }
+        per_kind[kind] = _interleave(per_sub_skill, limit)
     return _interleave(per_kind, limit)
 
 

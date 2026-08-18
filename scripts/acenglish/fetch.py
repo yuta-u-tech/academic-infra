@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import json
 import sqlite3
 
 from academic_audio.items import ListeningSet, PassageSet
@@ -16,6 +17,63 @@ from .sources import ExternalMaterial
 from .sources import studyforge, ted, toeic_listening, toeic_part5, toeic_part6, toeic_part7, voa
 from .sources.toeic_part6 import Part6Passage
 from .sources.toeic_part7 import Part7Passage
+
+
+def duplicate_vocab_direction(
+    connection: sqlite3.Connection, source: str, to_sub_skill: str
+) -> dict[str, int]:
+    """TOEIC語彙を別方向の独立したSRSカードとして冪等複製する。"""
+    if source != "toeic" or to_sub_skill != "recognition":
+        raise ValueError("現在は --source toeic --to recognition のみ対応しています。")
+
+    rows = connection.execute(
+        "SELECT * FROM generated_item WHERE kind = 'vocab' "
+        "AND review_id LIKE 'toeic.%' AND review_id NOT LIKE '%.recog' "
+        "AND retired_at IS NULL ORDER BY id"
+    ).fetchall()
+    duplicated = skipped = 0
+    for row in rows:
+        target_review_id = f"{row['review_id']}.recog"
+        if connection.execute(
+            "SELECT 1 FROM generated_item WHERE review_id = ? AND kind = 'vocab' LIMIT 1",
+            (target_review_id,),
+        ).fetchone():
+            skipped += 1
+            continue
+        material = connection.execute(
+            "SELECT * FROM material WHERE review_id = ?", (row["review_id"],)
+        ).fetchone()
+        if material is None:
+            raise LookupError(f"material {row['review_id']} がありません。")
+        connection.execute(
+            """INSERT OR IGNORE INTO material
+               (review_id, course_id, title, source_file, section_file, source_commit,
+                updated_at, source, origin)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (target_review_id, material["course_id"], material["title"],
+             material["source_file"], material["section_file"], material["source_commit"],
+             material["updated_at"], material["source"], material["origin"]),
+        )
+        payload = json.loads(row["payload"])
+        payload["sub_skill"] = to_sub_skill
+        connection.execute(
+            """INSERT INTO generated_item
+               (kind, review_id, course_id, payload, difficulty, reason, generated_by,
+                prompt_version, source_commit, is_ephemeral, created_at, verified_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (row["kind"], target_review_id, row["course_id"],
+             json.dumps(payload, ensure_ascii=False), row["difficulty"], row["reason"],
+             row["generated_by"], row["prompt_version"], row["source_commit"],
+             row["is_ephemeral"], row["created_at"], row["verified_at"]),
+        )
+        duplicated += 1
+    connection.commit()
+    recognition = connection.execute(
+        "SELECT COUNT(*) AS n FROM generated_item WHERE kind='vocab' "
+        "AND review_id LIKE 'toeic.%.recog' AND retired_at IS NULL"
+    ).fetchone()["n"]
+    return {"duplicated": duplicated, "skipped": skipped,
+            "recall": len(rows), "recognition": recognition}
 
 
 def import_toeic_deck(connection: sqlite3.Connection, deck: str, limit: int | None = None) -> int:
