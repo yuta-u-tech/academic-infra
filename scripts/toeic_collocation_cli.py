@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -22,12 +23,20 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from acenglish.db import connect  # noqa: E402
 
+# `toeic.<deck>.NNNN` の基本形だけを対象にする。同じ語について
+# `toeic.<deck>.NNNN.recog` のような別sub_skill(recognition等)のバリアントが
+# 別review_idとして存在することがあり(duplicate_vocab_direction機能)、これを
+# 除外しないと同じ単語で2本コロケーション動画を作ってしまう事故になる
+# (2026-08-19発覚。satisfy等で実際に総語数が単純倍増して見えていた)。
+_BASE_REVIEW_ID = re.compile(r"^toeic\.[a-zA-Z0-9-]+\.\d{4}$")
+
 
 def _iter_all_rows(connection):
     rows = connection.execute(
         "SELECT review_id, payload FROM generated_item WHERE kind = 'vocab' AND review_id LIKE 'toeic.%' "
         "ORDER BY review_id"
     ).fetchall()
+    rows = [row for row in rows if _BASE_REVIEW_ID.match(row[0])]
     for review_id, payload_raw in rows:
         yield review_id, json.loads(payload_raw)
 
