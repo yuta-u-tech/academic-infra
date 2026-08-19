@@ -203,6 +203,13 @@ def _cmd_import_tex_vocab(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_dedupe_vocab(args: argparse.Namespace) -> int:
+    with connect(args.db) as connection:
+        result = fetch.dedupe_vocab(connection)
+    print(json.dumps(result, ensure_ascii=False, indent=2))
+    return 0
+
+
 def _cmd_duplicate_vocab_direction(args: argparse.Namespace) -> int:
     with connect(args.db) as connection:
         result = fetch.duplicate_vocab_direction(connection, args.source, args.to)
@@ -333,6 +340,10 @@ def main() -> int:
     fetch_toeic.add_argument("--deck", help=f"カンマ区切り（既定: 全部）対応: {', '.join(studyforge.DECKS)}")
     fetch_toeic.add_argument("--limit", type=int, help="各デッキの先頭N語だけ")
     fetch_toeic.set_defaults(func=_cmd_fetch_toeic)
+
+    dedupe_vocab = subparsers.add_parser(
+        "dedupe-vocab", help="同じ語が複数デッキに重複登録されている分を統合する")
+    dedupe_vocab.set_defaults(func=_cmd_dedupe_vocab)
 
     duplicate_direction = subparsers.add_parser(
         "duplicate-vocab-direction", help="語彙を別の出題方向へ冪等複製する")

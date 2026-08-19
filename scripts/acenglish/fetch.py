@@ -12,6 +12,7 @@ from pathlib import Path
 
 from academic_audio.items import ListeningSet, PassageSet
 
+from .db import now_iso
 from .generate import ingest, upsert_material
 from .items import GrammarItem
 from .sources import ExternalMaterial
@@ -84,6 +85,61 @@ def duplicate_vocab_direction(
     ).fetchone()["n"]
     return {"duplicated": duplicated, "skipped": skipped,
             "recall": len(rows), "recognition": recognition}
+
+
+def dedupe_vocab(connection: sqlite3.Connection) -> dict:
+    """同じ語（casefold）が複数のTOEICデッキに重複登録されている分を統合する。
+
+    study-forgeの複数デッキ（words1-400/401-700/.../supplement1-3）は独立に作られて
+    いるため、同じ語が別々のreview_idで複数回登録されていることがある
+    （2026-08-19、8%程度の重複を確認）。recall行1件につき「残す1件」を選び、
+    それ以外はrecall行・対応するrecognition行(`.recog`)ともretired_atを立てて
+    ソフト削除する（履歴(attempt/skill_state)は残したまま、以後は出題されなくなる）。
+
+    残す1件の選び方: 例文がある方を優先 > 意味が長い方を優先 > review_idの辞書順が
+    小さい方（決定論的にするため）。
+    """
+    rows = connection.execute(
+        "SELECT id, review_id, payload FROM generated_item WHERE kind = 'vocab' "
+        "AND review_id LIKE 'toeic.%' AND review_id NOT LIKE '%.recog' "
+        "AND retired_at IS NULL ORDER BY review_id"
+    ).fetchall()
+
+    groups: dict[str, list[dict]] = {}
+    for row in rows:
+        payload = json.loads(row["payload"])
+        key = payload["word"].strip().casefold()
+        groups.setdefault(key, []).append({
+            "review_id": row["review_id"],
+            "example": payload.get("example") or "",
+            "meaning": payload.get("meaning") or "",
+        })
+
+    retired_groups = 0
+    retired_rows = 0
+    for entries in groups.values():
+        if len(entries) < 2:
+            continue
+        entries.sort(key=lambda e: (
+            0 if e["example"] else 1, -len(e["meaning"]), e["review_id"],
+        ))
+        keeper = entries[0]
+        losers = entries[1:]
+        retired_groups += 1
+        for loser in losers:
+            for review_id in (loser["review_id"], f"{loser['review_id']}.recog"):
+                cursor = connection.execute(
+                    "UPDATE generated_item SET retired_at = ? "
+                    "WHERE review_id = ? AND kind = 'vocab' AND retired_at IS NULL",
+                    (now_iso(), review_id),
+                )
+                retired_rows += cursor.rowcount
+        _ = keeper  # 選定結果は残す側なので何もしない（可読性のため変数だけ残す）
+    connection.commit()
+    return {
+        "duplicate_word_groups": retired_groups,
+        "retired_rows": retired_rows,
+    }
 
 
 def import_toeic_deck(connection: sqlite3.Connection, deck: str, limit: int | None = None) -> int:
