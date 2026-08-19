@@ -245,6 +245,7 @@ def due_items(
     limit: int = 20,
     kinds: list[str] | None = None,
     mix: bool = True,
+    vocab_direction: str | None = None,
 ) -> list[dict]:
     """今日出す問題を選ぶ。
 
@@ -254,6 +255,10 @@ def due_items(
 
     `mix=True` のときは種別を round-robin で混ぜる。ID 順のままだと語彙2,282件の後ろに
     読解・文法が並び、実際には永久に到達しない。
+
+    `vocab_direction` に `"recall"`（日→英）または `"recognition"`（英→日）を渡すと、
+    語彙(`kind=vocab`)をその方向だけに絞る。未指定（既定）なら従来通り両方向を
+    round-robin で混ぜる。語彙以外の種別には影響しない。
     """
     query = """
         SELECT gi.*, rq.next_review, rq.interval, rq.repetitions
@@ -291,18 +296,21 @@ def due_items(
             continue
         # 語彙は recall / recognition も交互にする。kind だけで混ぜると、古い
         # recall 行が数千件並んだ後に追加した recognition へ到達できない。
-        sub_skills = [
-            row["sub_skill"]
-            for row in connection.execute(
-                """SELECT DISTINCT COALESCE(json_extract(payload, '$.sub_skill'), 'recall')
-                          AS sub_skill
-                   FROM generated_item
-                   WHERE kind = 'vocab' AND retired_at IS NULL
-                     AND (? IS NULL OR course_id = ?)
-                   ORDER BY sub_skill""",
-                (course_id, course_id),
-            )
-        ]
+        if vocab_direction:
+            sub_skills = [vocab_direction]
+        else:
+            sub_skills = [
+                row["sub_skill"]
+                for row in connection.execute(
+                    """SELECT DISTINCT COALESCE(json_extract(payload, '$.sub_skill'), 'recall')
+                              AS sub_skill
+                       FROM generated_item
+                       WHERE kind = 'vocab' AND retired_at IS NULL
+                         AND (? IS NULL OR course_id = ?)
+                       ORDER BY sub_skill""",
+                    (course_id, course_id),
+                )
+            ]
         per_sub_skill = {
             sub_skill: run(
                 "AND gi.kind = ? AND COALESCE(json_extract(gi.payload, '$.sub_skill'), 'recall') = ?",

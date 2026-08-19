@@ -33,3 +33,32 @@ def test_duplicate_vocab_direction_is_idempotent(tmp_path):
                          for row in due_items(connection, "english", limit=2, kinds=["vocab"])]
     assert queued_sub_skills == ["recall", "recognition"]
     connection.close()
+
+
+def test_due_items_vocab_direction_filters_to_one_direction(tmp_path):
+    connection = connect(tmp_path / "english.db")
+    target = ExternalMaterial(
+        review_id="toeic.words1-400.0001", title="word", body="word",
+        source_file="study-forge", source_commit="deck-v1", source="toeic",
+        origin="study-forge",
+    )
+    generate.upsert_material(connection, target)
+    result = _result().model_copy(update={
+        "review_id": target.review_id, "course_id": "english", "source_commit": "deck-v1"})
+    generate.ingest(connection, result)
+    fetch.duplicate_vocab_direction(connection, "toeic", "recognition")
+
+    recall_only = [json.loads(row["payload"])["sub_skill"] for row in
+                   due_items(connection, "english", limit=10, kinds=["vocab"],
+                             vocab_direction="recall")]
+    assert recall_only == ["recall"]
+
+    recognition_only = [json.loads(row["payload"])["sub_skill"] for row in
+                         due_items(connection, "english", limit=10, kinds=["vocab"],
+                                   vocab_direction="recognition")]
+    assert recognition_only == ["recognition"]
+
+    mixed = [json.loads(row["payload"])["sub_skill"] for row in
+             due_items(connection, "english", limit=10, kinds=["vocab"])]
+    assert sorted(mixed) == ["recall", "recognition"]
+    connection.close()

@@ -468,7 +468,7 @@ const DEFAULT_GRADE = 2;
 const state = {
   sessionId: null, queue: [], current: null, answered: [], correct: 0,
   shownAt: 0, misses: 0, hintUsed: false, chosen: null,
-  budgetTimer: null, breakTimer: null, sessionStartedAt: 0,
+  budgetTimer: null, breakTimer: null, sessionStartedAt: 0, vocabDirection: "",
   lastAttemptId: null, phase: "dashboard", dashboardCourseId: null,
 };
 
@@ -588,6 +588,12 @@ async function renderSetup() {
             <option value="grammar">文法</option>
             <option value="reading,grammar">読解＋文法</option>
           </select></label>
+        <label id="vocabDirectionRow"><span class="meta">語彙の方向</span>
+          <select id="vocabDirection">
+            <option value="">両方混ぜる</option>
+            <option value="recall">日→英のみ</option>
+            <option value="recognition">英→日のみ</option>
+          </select></label>
         <div><button class="primary" id="start">開始</button>
           <span class="meta" style="margin-left:var(--s3)">↵</span></div>
       </div>
@@ -595,7 +601,14 @@ async function renderSetup() {
   setKeybar("<kbd>↵</kbd> 開始");
   $("toDash").onclick = () => renderDashboard().catch(fail);
   $("start").onclick = () => start().catch(fail);
+  $("kinds").onchange = updateVocabDirectionVisibility;
+  updateVocabDirectionVisibility();
   $("start").focus();
+}
+
+function updateVocabDirectionVisibility() {
+  const kinds = $("kinds").value;
+  $("vocabDirectionRow").hidden = !(kinds === "" || kinds === "vocab");
 }
 
 async function start() {
@@ -604,6 +617,7 @@ async function start() {
     sessionStartedAt: performance.now() });
   startBreakReminders();
   state.kinds = $("kinds").value;
+  state.vocabDirection = $("vocabDirectionRow").hidden ? "" : $("vocabDirection").value;
   state.courseId = $("course").value;
   state.queue = await fetchQueue();
   next();
@@ -627,6 +641,7 @@ function dismissBreakReminder() { $("breakReminder").hidden = true; }
 async function fetchQueue() {
   const params = new URLSearchParams({ course: state.courseId, limit: "20" });
   if (state.kinds) params.set("kinds", state.kinds);
+  if (state.vocabDirection) params.set("vocab_direction", state.vocabDirection);
   if (state.answered.length) params.set("exclude", state.answered.join(","));
   const { items } = await api(`/api/queue?${params}`);
   return items;

@@ -142,14 +142,22 @@ def create_app(db_path: Path | None = None) -> FastAPI:
         limit: int = 20,
         kinds: str | None = None,
         exclude: str | None = None,
+        vocab_direction: str | None = None,
     ) -> dict:
-        """出題キュー。`exclude` は同一セッションで解き終えた item_id（再出題しない）。"""
+        """出題キュー。`exclude` は同一セッションで解き終えた item_id（再出題しない）。
+
+        `vocab_direction` に `recall`/`recognition` を渡すと、語彙をその方向だけに絞る
+        （未指定なら従来通り両方向を混ぜる。語彙以外の種別には影響しない）。
+        """
         wanted = [k.strip() for k in kinds.split(",") if k.strip()] if kinds else None
         answered = {int(i) for i in exclude.split(",") if i.strip().isdigit()} if exclude else set()
 
         with db() as connection:
             # 解き終えた分を差し引いても補充できるよう、多めに引いてから間引く。
-            rows = due_items(connection, course, limit + len(answered), wanted)
+            rows = due_items(
+                connection, course, limit + len(answered), wanted,
+                vocab_direction=vocab_direction or None,
+            )
             fresh = [row for row in rows if row["id"] not in answered][:limit]
             return {"items": [study.item_for_ui(connection, row["id"]) for row in fresh]}
 
