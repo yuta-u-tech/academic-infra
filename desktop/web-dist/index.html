@@ -932,7 +932,10 @@ function fail(error) {
   $("app").innerHTML = `<section class="card">
     <p class="eyebrow">error</p>
     <h1 class="stem">つながらない</h1>
-    <p class="meta">${esc(error.message)}</p></section>`;
+    <p class="meta">${esc(error.message)}</p>
+    <p style="margin-top:var(--s5)"><button class="primary" id="retryConnect">もう一度試す</button></p>
+    </section>`;
+  $("retryConnect").onclick = () => renderDashboard(state.dashboardCourseId).catch(fail);
 }
 
 // ── キーボード ──────────────────────────────────────────────
@@ -1000,7 +1003,23 @@ document.addEventListener("click", () => {
 $("continueStudy").onclick = dismissBreakReminder;
 $("endStudy").onclick = () => renderSummary().catch(fail);
 
-renderDashboard().catch(fail);
+// sidecar(PyInstaller onefile)は展開に数秒〜十数秒かかることがあり、Rust側の
+// wait_for_health()を抜けて画面が読み込まれた直後でもAPIがまだ応答しないことがある。
+// 起動直後の1回きりの失敗でエラー画面に固定されないよう、最初の描画だけは
+// 軽くリトライする。
+async function bootstrap(retriesLeft = 10) {
+  try {
+    await renderDashboard();
+  } catch (error) {
+    if (retriesLeft > 0) {
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      return bootstrap(retriesLeft - 1);
+    }
+    fail(error);
+  }
+}
+
+bootstrap();
 state.phase = "dashboard";
 </script>
 </body>
