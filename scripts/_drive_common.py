@@ -182,6 +182,37 @@ def upload_file(service, parent_id: str, path: Path, mime_type: str, name: str |
     return created["id"]
 
 
+def list_files(service, parent_id: str) -> list[dict]:
+    """`parent_id` 直下のファイル一覧（サブフォルダは含めない、trashedは除く）。"""
+    response = (
+        service.files()
+        .list(
+            q=f"'{parent_id}' in parents and trashed = false and mimeType != '{_FOLDER_MIME}'",
+            fields="files(id,name,modifiedTime,mimeType,size)",
+            orderBy="modifiedTime desc",
+            pageSize=1000,
+            supportsAllDrives=True,
+            includeItemsFromAllDrives=True,
+        )
+        .execute()
+    )
+    return response.get("files", [])
+
+
+def download_file(service, file_id: str, out_path: Path) -> Path:
+    """`file_id` の中身を `out_path` に保存する。"""
+    from googleapiclient.http import MediaIoBaseDownload
+
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    request = service.files().get_media(fileId=file_id, supportsAllDrives=True)
+    with open(out_path, "wb") as file:
+        downloader = MediaIoBaseDownload(file, request)
+        done = False
+        while not done:
+            _status, done = downloader.next_chunk()
+    return out_path
+
+
 def grant_anyone_reader(service, file_id: str) -> None:
     """`file_id`(通常はフォルダ)を「リンクを知っている全員が閲覧可」にする。
 
@@ -215,3 +246,49 @@ def find_course_pdf_file_id(service, parent_folder_id: str, course: CourseEntry)
     if pdf_id is None:
         raise DriveConfigError(f"{course.drive_folder}/latest.pdf が見つかりません。先に公開してください。")
     return pdf_id
+
+
+DRAFT_COMMENT_EXTENSIONS = ("pdf", "md")
+
+
+def find_course_draft_files(
+    service,
+    parent_folder_id: str,
+    course: CourseEntry,
+    extensions: tuple[str, ...] = DRAFT_COMMENT_EXTENSIONS,
+) -> dict[int, dict[str, str]]:
+    """Draftsフォルダにある `<course_id>-NN.<ext>` を講義回ごとに集める。
+
+    lecture-capture の Draft公開（`{course_id}-{lecture:02d}.{pdf,md,manifest.json}`）は
+    PDF と Markdown の両方を同名で置く。閲覧者・自分のコメントはどちらのファイルにも
+    独立して付く（circuit-01は.md側のみに9件付いていたのに.pdfしか見ておらず集計漏れが起きた）
+    ため、両方を返して呼び出し側で必ず両方チェックさせる。
+    """
+    drafts_folder_id = find_child(service, parent_folder_id, "Drafts", _FOLDER_MIME)
+    if drafts_folder_id is None:
+        raise DriveConfigError("Drive上にDraftsフォルダが見つかりません。")
+    response = (
+        service.files()
+        .list(
+            q=f"'{drafts_folder_id}' in parents and trashed = false",
+            fields="files(id,name)",
+            pageSize=1000,
+            supportsAllDrives=True,
+            includeItemsFromAllDrives=True,
+        )
+        .execute()
+    )
+    prefix = f"{course.course_id}-"
+    result: dict[int, dict[str, str]] = {}
+    for f in response.get("files", []):
+        name = f["name"]
+        if not name.startswith(prefix):
+            continue
+        stem, _, ext = name.rpartition(".")
+        if ext not in extensions:
+            continue
+        num_part = stem[len(prefix):]
+        if not num_part.isdigit():
+            continue
+        result.setdefault(int(num_part), {})[ext] = f["id"]
+    return result

@@ -108,3 +108,23 @@ def test_find_course_pdf_file_id_missing_folder_raises() -> None:
     )
     with pytest.raises(drive_common.DriveConfigError):
         drive_common.find_course_pdf_file_id(_FakeService(), "parent-id", course)
+
+
+def test_list_files_returns_files_excluding_folders() -> None:
+    captured = {}
+
+    class _FakeService:
+        def files(self):
+            return self
+
+        def list(self, **kwargs):
+            captured.update(kwargs)
+            return self
+
+        def execute(self):
+            return {"files": [{"id": "f1", "name": "flashcards.pdf"}]}
+
+    result = drive_common.list_files(_FakeService(), "parent-id")
+    assert result == [{"id": "f1", "name": "flashcards.pdf"}]
+    assert "'parent-id' in parents" in captured["q"]
+    assert drive_common._FOLDER_MIME in captured["q"]
