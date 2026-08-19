@@ -40,11 +40,40 @@ class VocabEntry:
 
 
 def load_pool(connection: sqlite3.Connection) -> list[VocabEntry]:
-    """TOEIC語彙プールを読む（VOA/TED経由で取り込まれた雑多な語彙は対象外）。"""
+    """TOEIC語彙プールを読む（VOA/TED経由で取り込まれた雑多な語彙は対象外）。
+
+    recall/recognition両方向の行をそのまま返す（同じ語が2行になりうる）。
+    1語1行で欲しい場合は `load_pool_by_direction()` を使う。
+    """
     rows = connection.execute(
         "SELECT review_id, payload FROM generated_item "
         "WHERE kind = 'vocab' AND review_id LIKE 'toeic.%' AND retired_at IS NULL "
         "ORDER BY review_id"
+    ).fetchall()
+    pool = []
+    for row in rows:
+        payload = json.loads(row["payload"])
+        pool.append(VocabEntry(
+            review_id=row["review_id"],
+            word=payload["word"],
+            meaning=payload["meaning"],
+            example=payload.get("example") or "",
+        ))
+    return pool
+
+
+def load_pool_by_direction(connection: sqlite3.Connection, sub_skill: str) -> list[VocabEntry]:
+    """指定した方向（recall/recognition）の行だけを、1語1行で返す。
+
+    単語帳PDF（flashcards）のように「プール全体を1つの冊子にまとめる」用途では、
+    recall/recognitionの両方を混ぜると同じ語が2回出てしまうため、方向を1つに絞る。
+    """
+    rows = connection.execute(
+        "SELECT review_id, payload FROM generated_item "
+        "WHERE kind = 'vocab' AND review_id LIKE 'toeic.%' AND retired_at IS NULL "
+        "AND COALESCE(json_extract(payload, '$.sub_skill'), 'recall') = ? "
+        "ORDER BY review_id",
+        (sub_skill,),
     ).fetchall()
     pool = []
     for row in rows:

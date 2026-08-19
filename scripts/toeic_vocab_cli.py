@@ -53,7 +53,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from acenglish import study  # noqa: E402
 from acenglish.db import connect  # noqa: E402
-from acenglish.vocab_quiz import build_choices, load_pool, next_batch, weak_review_ids  # noqa: E402
+from acenglish.vocab_quiz import (  # noqa: E402
+    build_choices,
+    load_pool,
+    load_pool_by_direction,
+    next_batch,
+    weak_review_ids,
+)
 from toeic_reading.flashcard_record import read_checked_review_ids, reset_checkboxes  # noqa: E402
 from toeic_reading.flashcard_render import (  # noqa: E402
     FlashcardEntry,
@@ -176,27 +182,28 @@ def _cmd_attach_form_url(args: argparse.Namespace) -> int:
 
 
 def _cmd_flashcards(args: argparse.Namespace) -> int:
-    """チェックボックス付き単語帳PDFを組む（プールの読み進み位置を1回分進める）。
+    """プール全体を1つのチェックボックス付き単語帳PDFにまとめる（ローテーションしない）。
 
-    build（4択・Forms提出）と同じrotation/weak-wordロジックをそのまま使う
-    （同じ状態ファイルを共有するため、1日に build と flashcards を両方叩くと
-    読み進み位置を2回分消費する。どちらか片方を毎日の入口にする運用を想定）。
+    build（4択・Forms提出、1日分だけを毎日ローテーションする別機能）とは違い、
+    語彙プールに登録済みの全語を毎回1冊にまとめる。単語が増える（import-tex-vocab等）
+    たびに実行し直せば、その時点の全語を反映した1冊に更新される。
+    「英単語を見て意味を思い出せるか」を試す形（推奨→自己採点recognition方向）なので、
+    既定では sub_skill=recognition の行だけを対象にする（1語1行になる。recall方向の
+    複製行まで混ぜると同じ語が2回出てしまうため）。
     """
-    today = datetime.now(JST).strftime("%Y-%m-%d")
-    title = args.title or f"単語帳 {today}"
+    title = args.title or "TOEIC 単語帳（全語）"
 
     with connect(args.db) as connection:
-        pool = load_pool(connection)
+        pool = load_pool_by_direction(connection, args.direction)
         if not pool:
             raise SystemExit(
-                "語彙プールが空です。先に `acenglish_cli.py fetch-toeic` で取り込んでください。"
+                "語彙プールが空です。先に `acenglish_cli.py fetch-toeic` "
+                "（および必要なら duplicate-vocab-direction）で取り込んでください。"
             )
-        weak_ids = weak_review_ids(connection, limit=args.weak_count) if args.weak_count > 0 else []
-        batch, state = next_batch(pool, args.count, home=args.home, weak_ids=weak_ids)
 
     entries = [
         FlashcardEntry(review_id=e.review_id, word=e.word, meaning=e.meaning, example=e.example)
-        for e in batch
+        for e in pool
     ]
 
     args.out.mkdir(parents=True, exist_ok=True)
@@ -205,7 +212,6 @@ def _cmd_flashcards(args: argparse.Namespace) -> int:
         json.dumps(
             {
                 "title": title,
-                "cycle": state["cycle"],
                 "entries": [
                     {"review_id": e.review_id, "word": e.word, "meaning": e.meaning, "example": e.example}
                     for e in entries
@@ -222,15 +228,13 @@ def _cmd_flashcards(args: argparse.Namespace) -> int:
     md_path = args.out / "flashcards.md"
     md_path.write_text(render_flashcard_md(title, entries), encoding="utf-8")
 
-    included_weak = [e.review_id for e in entries if e.review_id in set(weak_ids)]
     print(json.dumps(
         {
             "pdf": str(pdf_path),
             "md": str(md_path),
             "items": str(items_path),
             "count": len(entries),
-            "cycle": state["cycle"],
-            "weak_included": len(included_weak),
+            "direction": args.direction,
         },
         ensure_ascii=False, indent=2))
     return 0
@@ -350,7 +354,19 @@ def _cmd_publish(args: argparse.Namespace) -> int:
 
     md_path = args.pdf.with_suffix(".md")
     md_folder_names = [*folder_names[:-1], "MDs"] if len(folder_names) > 1 else ["MDs"]
-    md_drive_name = f"{today}.md"
+    # --name で固定ファイル名を指定した場合（flashcards/review-flashcardsのように
+    # 上書き更新する運用）は、MD側もPDFと同じstemに揃える。日付固定のままだと
+    # 更新のたびにMDだけ増え続けてしまう。MDは複数フォルダ分を共有の「MDs」1箇所へ
+    # 集約するため、フォルダ名（例: vocabulary/review）をstemの前に付けて衝突を避ける
+    # （2026-08-19、vocabulary用とreview用が両方 "flashcards.md" になり、後勝ちで
+    # 上書き事故が実際に発生した）。
+    part_label = folder_names[-1] if folder_names else None
+    if args.name and part_label:
+        md_drive_name = f"{part_label}-{Path(drive_name).stem}.md"
+    elif args.name:
+        md_drive_name = f"{Path(drive_name).stem}.md"
+    else:
+        md_drive_name = f"{today}.md"
     md_drive_path = "/".join([*md_folder_names, md_drive_name]) if md_path.exists() else None
 
     if args.dry_run:
@@ -429,17 +445,15 @@ def build_parser() -> argparse.ArgumentParser:
     publish.set_defaults(func=_cmd_publish)
 
     flashcards = sub.add_parser(
-        "flashcards", help="チェックボックス付き単語帳PDFを組む（状態を1回分進める）"
+        "flashcards", help="プール全体を1冊のチェックボックス付き単語帳PDFにまとめる"
     )
-    flashcards.add_argument("--count", type=int, default=100, help="1回の収録数（既定100）")
     flashcards.add_argument(
-        "--weak-count", type=int, default=20,
-        help="直近の回答が不正解だった語を優先的に混ぜる件数（既定20。0で無効化）",
+        "--direction", default="recognition", choices=["recall", "recognition"],
+        help="収録する方向（既定: recognition＝英単語を見て意味を思い出す形）",
     )
     flashcards.add_argument("--out", type=Path, required=True, help="出力先ディレクトリ")
-    flashcards.add_argument("--title", help="既定: 単語帳 <日付>")
+    flashcards.add_argument("--title", help="既定: TOEIC 単語帳（全語）")
     flashcards.add_argument("--db", type=Path, default=None, help="既定: ~/.academic-english/english.db")
-    flashcards.add_argument("--home", type=Path, default=None, help="状態ファイルの置き場所。既定: ~/.academic-english")
     flashcards.set_defaults(func=_cmd_flashcards)
 
     review_flashcards = sub.add_parser(
