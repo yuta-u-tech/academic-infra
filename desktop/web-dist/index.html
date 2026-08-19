@@ -725,6 +725,15 @@ function renderQuestion(item) {
       '<span class="blank">____</span>')}</h1>
       ${choiceList(p.choices, true)}`;
     keys = "<kbd>1</kbd>–<kbd>4</kbd> 選択 　<kbd>↵</kbd> 決定";
+  } else if (item.kind === "reading_blank") {
+    const marker = `[${p.blank_number}]`;
+    const label = p.blank_type === "sentence" ? `${marker} に入る文` : `${marker} に入る語句`;
+    body = `<div class="well"><p class="passage" tabindex="0" role="group"
+        aria-label="本文">${esc(p.passage).replace(marker,
+          `<span class="blank">${marker}</span>`)}</p></div>
+      <h1 class="stem">${esc(label)}</h1>
+      ${choiceList(p.choices, true)}`;
+    keys = "<kbd>1</kbd>–<kbd>4</kbd> 選択 　<kbd>↵</kbd> 決定";
   } else {
     // passage は面の中でスクロールさせる。ページを送らずに選択肢へ届く。
     body = `<div class="well"><p class="passage" tabindex="0" role="group"
