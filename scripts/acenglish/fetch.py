@@ -8,13 +8,23 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from pathlib import Path
 
 from academic_audio.items import ListeningSet, PassageSet
 
 from .generate import ingest, upsert_material
 from .items import GrammarItem
 from .sources import ExternalMaterial
-from .sources import studyforge, ted, toeic_listening, toeic_part5, toeic_part6, toeic_part7, voa
+from .sources import (
+    personal_notes,
+    studyforge,
+    ted,
+    toeic_listening,
+    toeic_part5,
+    toeic_part6,
+    toeic_part7,
+    voa,
+)
 from .sources.toeic_part6 import Part6Passage
 from .sources.toeic_part7 import Part7Passage
 
@@ -103,6 +113,43 @@ def import_toeic_deck(connection: sqlite3.Connection, deck: str, limit: int | No
         )
         imported += 1
     return imported
+
+
+def import_personal_notes_tex(connection: sqlite3.Connection, path: Path) -> dict[str, int]:
+    """個人のTeX単語ノート（`\\card{}` マクロ形式）から、既存プールに無い語だけ取り込む。
+
+    重複判定は語（casefold）のみで行う（同じ語が別の意味で載っていても、既にプールに
+    その語があれば重複扱いにする——学習ループのreview_idは語単位で一意である前提のため）。
+    再実行しても、その回で新規に見つかった語だけを追加する（冪等ではあるが、
+    ファイル中の並びが変わるとreview_idの採番がずれる点は import_toeic_deck と異なるので
+    注意——毎回全文を読み直して「今のプールに無い語」だけを採番し直す設計）。
+    """
+    from .vocab_quiz import load_pool
+
+    known_words = {entry.word.strip().casefold() for entry in load_pool(connection)}
+    tex = path.read_text(encoding="utf-8")
+    cards = personal_notes.parse_cards(tex)
+
+    imported = 0
+    for material, item in personal_notes.iter_materials(path, cards, known_words):
+        upsert_material(connection, material)
+        existing = connection.execute(
+            "SELECT 1 FROM generated_item WHERE review_id = ? AND kind = 'vocab'"
+            " AND retired_at IS NULL LIMIT 1",
+            (material.review_id,),
+        ).fetchone()
+        if existing:
+            continue
+        ingest(
+            connection,
+            personal_notes.build_result(material, item, f"個人ノート {path.name} からの取り込み"),
+        )
+        imported += 1
+    return {
+        "total_cards_in_file": len(cards),
+        "imported": imported,
+        "skipped_duplicate_or_existing": len(cards) - imported,
+    }
 
 
 def import_toeic_part5(connection: sqlite3.Connection, set_id: str, items: list[GrammarItem]) -> int:

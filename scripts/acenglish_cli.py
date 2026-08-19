@@ -194,6 +194,15 @@ def _cmd_fetch_toeic(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_import_tex_vocab(args: argparse.Namespace) -> int:
+    with connect(args.db) as connection:
+        result = fetch.import_personal_notes_tex(connection, args.path)
+        if result["imported"] and not args.no_recognition:
+            result["recognition"] = fetch.duplicate_vocab_direction(connection, "toeic", "recognition")
+    print(json.dumps(result, ensure_ascii=False, indent=2))
+    return 0
+
+
 def _cmd_duplicate_vocab_direction(args: argparse.Namespace) -> int:
     with connect(args.db) as connection:
         result = fetch.duplicate_vocab_direction(connection, args.source, args.to)
@@ -330,6 +339,17 @@ def main() -> int:
     duplicate_direction.add_argument("--source", required=True, choices=["toeic"])
     duplicate_direction.add_argument("--to", required=True, choices=["recognition"])
     duplicate_direction.set_defaults(func=_cmd_duplicate_vocab_direction)
+
+    import_tex_vocab = subparsers.add_parser(
+        "import-tex-vocab",
+        help="個人のTeX単語ノート(\\card{語}{品詞}{意味}{例文}形式)から未収録の語だけ取り込む",
+    )
+    import_tex_vocab.add_argument("--path", type=Path, required=True)
+    import_tex_vocab.add_argument(
+        "--no-recognition", action="store_true",
+        help="取り込んだ語の英→日(recognition)方向カードを自動生成しない",
+    )
+    import_tex_vocab.set_defaults(func=_cmd_import_tex_vocab)
 
     voa_parser = subparsers.add_parser("voa", help="VOA Learning English（URL省略で記事一覧）")
     voa_parser.add_argument("--url", help="記事URL。省略するとRSSから一覧を出す")
