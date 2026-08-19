@@ -28,7 +28,19 @@ from acenglish.db import connect  # noqa: E402
 # 別review_idとして存在することがあり(duplicate_vocab_direction機能)、これを
 # 除外しないと同じ単語で2本コロケーション動画を作ってしまう事故になる
 # (2026-08-19発覚。satisfy等で実際に総語数が単純倍増して見えていた)。
-_BASE_REVIEW_ID = re.compile(r"^toeic\.[a-zA-Z0-9-]+\.\d{4}$")
+#
+# さらに`toeic.`prefixは金フレ(study-forge)由来のデッキ専用ではなく、
+# ユーザーの個人ノート(`toeic.personal-notes.*`、`local-tex:TOEIC 単語・
+# イディオム集.tex`から取り込まれたもの)にも使われていることが発覚した
+# (2026-08-19、同日発覚)。「金フレのデータベースで」という依頼のスコープ外
+# なので、study-forgeの実際のデッキ名だけをホワイトリストで許可する。
+_KINFURE_DECKS = (
+    "words1-400", "words401-700", "words701-900", "words901-1000",
+    "supplement1", "supplement2", "supplement3",
+)
+_BASE_REVIEW_ID = re.compile(
+    r"^toeic\.(" + "|".join(re.escape(d) for d in _KINFURE_DECKS) + r")\.\d{4}$"
+)
 
 
 def _iter_all_rows(connection):
