@@ -1,6 +1,7 @@
 """ローカルAPI。認証を持たないので、バインド先の制約をテストで固定する。"""
 
 import pytest
+from pathlib import Path
 from fastapi.testclient import TestClient
 
 from acenglish import generate
@@ -149,6 +150,22 @@ def test_the_ui_ships_without_any_external_request(client):
     assert page.count("<script") == 1
 
 
+def test_vocab_ui_uses_flashcards_for_both_directions():
+    page = (Path(__file__).parents[1] / "desktop/web-dist/index.html").read_text()
+    assert '["recall", "recognition"].includes(item.sub_skill)' in page
+    assert "revealVocab" in page
+    assert 'correct_override: correct' in page
+
+
+def test_break_reminder_repeats_only_during_an_active_session():
+    page = (Path(__file__).parents[1] / "desktop/web-dist/index.html").read_text()
+    assert "const BREAK_INTERVAL_MS = 15 * 60 * 1000" in page
+    assert "setInterval(showBreakReminder, BREAK_INTERVAL_MS)" in page
+    assert '["question", "verdict", "moving"].includes(state.phase)' in page
+    assert '$("continueStudy").onclick = dismissBreakReminder' in page
+    assert '$("endStudy").onclick = () => renderSummary()' in page
+
+
 def test_the_vocab_question_shows_length_but_not_spelling(client):
     """綴りを伏せたまま、何語で何文字かだけ渡す。"""
     item = next(i for i in client.get("/api/queue?course=dsa").json()["items"]
@@ -161,6 +178,15 @@ def test_the_hint_opens_only_the_first_letters(client):
     item = next(i for i in client.get("/api/queue?course=dsa").json()["items"]
                 if i["kind"] == "vocab")
     assert client.get(f"/api/hint?item_id={item['item_id']}").json()["hint"] == "l····· l···"
+
+
+def test_recall_vocab_can_be_revealed_for_self_grading(client):
+    item = next(i for i in client.get("/api/queue?course=dsa").json()["items"]
+                if i["kind"] == "vocab")
+    revealed = client.get(f"/api/reveal?item_id={item['item_id']}")
+    assert revealed.status_code == 200
+    assert revealed.json()["word"] == "linked list"
+    assert revealed.json()["meaning"] == "線形リスト"
 
 
 def test_recognition_api_flow(tmp_path):

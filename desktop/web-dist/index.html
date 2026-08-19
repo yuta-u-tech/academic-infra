@@ -266,6 +266,17 @@ kbd {
 }
 #typeCatcher { position: absolute; opacity: 0; width: 1px; height: 1px; pointer-events: none; }
 
+/* セッション状態を壊さず、画面下に区切りの機会だけを差し込む。 */
+.break-reminder {
+  position: fixed; z-index: 10; inset: auto var(--s5) var(--s5) auto;
+  width: min(420px, calc(100vw - var(--s5) * 2)); padding: var(--s4) var(--s5);
+  border-radius: var(--rad-card); background: linear-gradient(180deg, var(--sheet), #0B0F14);
+  box-shadow: 0 0 0 1px var(--edge-hi), 0 18px 55px rgba(0,0,0,.55);
+}
+.break-reminder p { margin: 0 0 var(--s3); }
+.break-actions { display: flex; gap: var(--s2); justify-content: flex-end; }
+.break-actions button { min-height: 40px; }
+
 /* ── キーマップ。下端に固定。面ではなく、底へ溶ける光の帯にする。 ── */
 .keybar {
   position: fixed; inset: auto 0 0 0; z-index: 5;
@@ -405,6 +416,14 @@ select:focus-visible { outline: 2px solid var(--accent-line); outline-offset: 2p
 <div id="progress"></div>
 <main id="app" aria-live="polite"></main>
 <footer class="keybar meta" id="keybar" hidden><div></div></footer>
+<aside class="break-reminder" id="breakReminder" hidden aria-live="polite">
+  <p><b><span id="breakElapsed">15</span>分学習しています。</b><br>
+    <span class="meta">少し区切りますか？</span></p>
+  <div class="break-actions">
+    <button id="continueStudy">続ける</button>
+    <button class="primary" id="endStudy">ここで終わる</button>
+  </div>
+</aside>
 <input id="typeCatcher" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false"
        aria-label="英語を入力">
 
@@ -436,6 +455,7 @@ const typing = {
 
 // ── 状態 ────────────────────────────────────────────────────
 const MISS_FLASH_MS = 160;
+const BREAK_INTERVAL_MS = 15 * 60 * 1000;
 const BUDGET_MS = { vocabulary: 6000, grammar: 10000, reading: 45000 };
 const GRADES = [
   { value: 0, label: "もう一度", key: "1" },
@@ -448,7 +468,8 @@ const DEFAULT_GRADE = 2;
 const state = {
   sessionId: null, queue: [], current: null, answered: [], correct: 0,
   shownAt: 0, misses: 0, hintUsed: false, chosen: null,
-  budgetTimer: null, lastAttemptId: null, phase: "dashboard", dashboardCourseId: null,
+  budgetTimer: null, breakTimer: null, sessionStartedAt: 0,
+  lastAttemptId: null, phase: "dashboard", dashboardCourseId: null,
 };
 
 // ── ダッシュボード ──────────────────────────────────────────
@@ -579,12 +600,29 @@ async function renderSetup() {
 
 async function start() {
   const { session_id } = await post("/api/sessions", { course_id: $("course").value });
-  Object.assign(state, { sessionId: session_id, answered: [], correct: 0 });
+  Object.assign(state, { sessionId: session_id, answered: [], correct: 0,
+    sessionStartedAt: performance.now() });
+  startBreakReminders();
   state.kinds = $("kinds").value;
   state.courseId = $("course").value;
   state.queue = await fetchQueue();
   next();
 }
+
+function startBreakReminders() {
+  clearInterval(state.breakTimer);
+  $("breakReminder").hidden = true;
+  state.breakTimer = setInterval(showBreakReminder, BREAK_INTERVAL_MS);
+}
+
+function showBreakReminder() {
+  if (!state.sessionId || !["question", "verdict", "moving"].includes(state.phase)) return;
+  $("breakElapsed").textContent = String(Math.max(15,
+    Math.floor((performance.now() - state.sessionStartedAt) / 60000)));
+  $("breakReminder").hidden = false;
+}
+
+function dismissBreakReminder() { $("breakReminder").hidden = true; }
 
 async function fetchQueue() {
   const params = new URLSearchParams({ course: state.courseId, limit: "20" });
@@ -647,9 +685,11 @@ function renderQuestion(item) {
   const point = p.point || item.sub_skill;
   let body, keys;
 
-  if (item.kind === "vocab" && item.sub_skill === "recognition") {
-    body = `<h1 class="stem en">${esc(p.word)}</h1>
-      <div class="well" id="recognitionAnswer" hidden></div>
+  if (item.kind === "vocab" && ["recall", "recognition"].includes(item.sub_skill)) {
+    const prompt = item.sub_skill === "recognition" ? p.word : p.meaning;
+    const promptClass = item.sub_skill === "recognition" ? "stem en" : "stem";
+    body = `<h1 class="${promptClass}">${esc(prompt)}</h1>
+      <div class="well" id="vocabAnswer" hidden></div>
       <button class="primary" id="revealAnswer">答えを見る</button>
       <div id="selfGrade" hidden>
         <button data-self-grade="true">分かった</button>
@@ -690,16 +730,17 @@ function renderQuestion(item) {
   if (passage && passage.scrollHeight > passage.clientHeight + 1) {
     passage.closest(".well").classList.add("is-clipped");
   }
-  if (item.kind === "vocab" && item.sub_skill === "recognition") {
-    $("revealAnswer").onclick = () => revealRecognition().catch(fail);
+  if (item.kind === "vocab" && ["recall", "recognition"].includes(item.sub_skill)) {
+    $("revealAnswer").onclick = () => revealVocab().catch(fail);
   } else if (item.kind === "vocab") { paintTypeLine(); focusCatcher(); }
 }
 
-async function revealRecognition() {
+async function revealVocab() {
   const answer = await api(`/api/reveal?item_id=${state.current.item_id}`);
-  $("recognitionAnswer").innerHTML = `<h2>${esc(answer.meaning)}</h2>${answer.example
+  const revealed = state.current.sub_skill === "recognition" ? answer.meaning : answer.word;
+  $("vocabAnswer").innerHTML = `<h2>${esc(revealed)}</h2>${answer.example
     ? `<p class="answer">${esc(answer.example)}</p>` : ""}`;
-  $("recognitionAnswer").hidden = false;
+  $("vocabAnswer").hidden = false;
   $("revealAnswer").hidden = true;
   $("selfGrade").hidden = false;
   document.querySelectorAll("[data-self-grade]").forEach((button) => {
@@ -831,6 +872,10 @@ async function applyGrade(value) {
 }
 
 async function renderSummary() {
+  clearInterval(state.breakTimer);
+  state.breakTimer = null;
+  dismissBreakReminder();
+  clearInterval(state.budgetTimer);
   state.phase = "summary";
   setProgress(1, 0);
   const done = state.answered.length;
@@ -890,7 +935,8 @@ document.addEventListener("keydown", (event) => {
   }
   if (state.phase !== "question" || !state.current) return;
 
-  if (state.current.kind === "vocab" && state.current.sub_skill === "recognition") return;
+  if (state.current.kind === "vocab"
+      && ["recall", "recognition"].includes(state.current.sub_skill)) return;
   if (state.current.kind === "vocab") {
     if (event.key === "Escape") { event.preventDefault(); return void submit("").catch(fail); }
     if (event.key === "Tab") { event.preventDefault(); return void revealHint().catch(fail); }
@@ -924,8 +970,11 @@ document.addEventListener("keydown", (event) => {
 // 語彙タイピング中はどこをクリックしてもキーを拾えるようにしておく。
 document.addEventListener("click", () => {
   if (state.phase === "question" && state.current?.kind === "vocab"
-      && state.current?.sub_skill !== "recognition") focusCatcher();
+      && !["recall", "recognition"].includes(state.current?.sub_skill)) focusCatcher();
 });
+
+$("continueStudy").onclick = dismissBreakReminder;
+$("endStudy").onclick = () => renderSummary().catch(fail);
 
 renderDashboard().catch(fail);
 state.phase = "dashboard";

@@ -208,15 +208,15 @@ def create_app(db_path: Path | None = None) -> FastAPI:
 
     @app.get("/api/reveal")
     def reveal(item_id: int) -> dict:
-        """recognitionカードの答えを自己採点の直前に開示する。"""
+        """語彙フラッシュカードの答えを自己採点の直前に開示する。"""
         with db() as connection:
             try:
                 _, item = study.load_item(connection, item_id)
             except LookupError as error:
                 raise HTTPException(status_code=404, detail=str(error)) from error
-        if not hasattr(item, "word") or item.sub_skill != "recognition":
+        if not hasattr(item, "word") or item.sub_skill not in {"recall", "recognition"}:
             raise HTTPException(status_code=422, detail="このカードは開示式ではありません。")
-        return {"meaning": item.meaning, "example": item.example,
+        return {"word": item.word, "meaning": item.meaning, "example": item.example,
                 "collocations": item.collocations}
 
     @app.post("/api/grade")
