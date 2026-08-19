@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import ipaddress
+import random
 import sqlite3
 import sys
 from contextlib import contextmanager
@@ -159,6 +160,11 @@ def create_app(db_path: Path | None = None) -> FastAPI:
                 vocab_direction=vocab_direction or None,
             )
             fresh = [row for row in rows if row["id"] not in answered][:limit]
+            # due_items() は未出題を gi.id（=投入順）のまま返すため、単語帳の並びで
+            # 隣接登録された類語（assure/ensure/insure 等）が連続して出てしまい、
+            # 前の問題が次の問題のヒントになる。復習優先の選定自体は due_items() 側で
+            # 既に済んでいるので、ここでは提示順だけをシャッフルする。
+            random.shuffle(fresh)
             return {"items": [study.item_for_ui(connection, row["id"]) for row in fresh]}
 
     @app.post("/api/answer")
