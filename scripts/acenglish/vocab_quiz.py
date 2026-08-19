@@ -88,6 +88,9 @@ def weak_review_ids(connection: sqlite3.Connection, limit: int = 20) -> list[str
 
     同じreview_idに複数回答があっても最新の1件だけを見る。最新が正解に変わっていれば
     対象から外れる（一度克服した語をいつまでも「苦手」扱いし続けないため）。
+    「最新」は `id`（自動採番、厳密に単調増加）で判定する — `created_at` は秒精度
+    しかなく、同じ秒内に同じ語へ複数回答すると同点になり、古い誤答が新しい正答を
+    追い越して残ってしまうため（record-flashcardsのやり直し等で実際に起こりうる）。
 
     語彙のreview_idは `toeic.words1-400.*` / `toeic.supplement1.*` など出典によって
     プレフィックスが揃っていないため、review_idの文字列パターンでは絞り込まず、
@@ -98,8 +101,8 @@ def weak_review_ids(connection: sqlite3.Connection, limit: int = 20) -> list[str
         SELECT a.review_id FROM attempt a
         JOIN generated_item g ON g.review_id = a.review_id
         WHERE g.kind = 'vocab'
-          AND a.created_at = (
-              SELECT MAX(created_at) FROM attempt b WHERE b.review_id = a.review_id
+          AND a.id = (
+              SELECT MAX(b.id) FROM attempt b WHERE b.review_id = a.review_id
           )
           AND a.correct = 0
         ORDER BY a.created_at DESC

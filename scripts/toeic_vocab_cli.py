@@ -51,13 +51,22 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+from acenglish import study  # noqa: E402
 from acenglish.db import connect  # noqa: E402
 from acenglish.vocab_quiz import build_choices, load_pool, next_batch, weak_review_ids  # noqa: E402
+from toeic_reading.flashcard_record import read_checked_review_ids, reset_checkboxes  # noqa: E402
+from toeic_reading.flashcard_render import (  # noqa: E402
+    FlashcardEntry,
+    build_pdf as build_flashcard_pdf,
+    render_flashcard_md,
+    render_flashcard_tex,
+)
 from toeic_reading.vocab_render import QuizQuestion, build_pdf, render_md, render_tex  # noqa: E402
 
 JST = ZoneInfo("Asia/Tokyo")
 
 DEFAULT_DRIVE_FOLDER_NAME = "TOEIC/vocabulary"
+REVIEW_DRIVE_FOLDER_NAME = "TOEIC/review"
 
 
 def _cmd_build(args: argparse.Namespace) -> int:
@@ -166,6 +175,168 @@ def _cmd_attach_form_url(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_flashcards(args: argparse.Namespace) -> int:
+    """チェックボックス付き単語帳PDFを組む（プールの読み進み位置を1回分進める）。
+
+    build（4択・Forms提出）と同じrotation/weak-wordロジックをそのまま使う
+    （同じ状態ファイルを共有するため、1日に build と flashcards を両方叩くと
+    読み進み位置を2回分消費する。どちらか片方を毎日の入口にする運用を想定）。
+    """
+    today = datetime.now(JST).strftime("%Y-%m-%d")
+    title = args.title or f"単語帳 {today}"
+
+    with connect(args.db) as connection:
+        pool = load_pool(connection)
+        if not pool:
+            raise SystemExit(
+                "語彙プールが空です。先に `acenglish_cli.py fetch-toeic` で取り込んでください。"
+            )
+        weak_ids = weak_review_ids(connection, limit=args.weak_count) if args.weak_count > 0 else []
+        batch, state = next_batch(pool, args.count, home=args.home, weak_ids=weak_ids)
+
+    entries = [
+        FlashcardEntry(review_id=e.review_id, word=e.word, meaning=e.meaning, example=e.example)
+        for e in batch
+    ]
+
+    args.out.mkdir(parents=True, exist_ok=True)
+    items_path = args.out / "items.json"
+    items_path.write_text(
+        json.dumps(
+            {
+                "title": title,
+                "cycle": state["cycle"],
+                "entries": [
+                    {"review_id": e.review_id, "word": e.word, "meaning": e.meaning, "example": e.example}
+                    for e in entries
+                ],
+            },
+            ensure_ascii=False, indent=2,
+        ),
+        encoding="utf-8",
+    )
+
+    tex_path = args.out / "flashcards.tex"
+    tex_path.write_text(render_flashcard_tex(title, entries), encoding="utf-8")
+    pdf_path = build_flashcard_pdf(tex_path)
+    md_path = args.out / "flashcards.md"
+    md_path.write_text(render_flashcard_md(title, entries), encoding="utf-8")
+
+    included_weak = [e.review_id for e in entries if e.review_id in set(weak_ids)]
+    print(json.dumps(
+        {
+            "pdf": str(pdf_path),
+            "md": str(md_path),
+            "items": str(items_path),
+            "count": len(entries),
+            "cycle": state["cycle"],
+            "weak_included": len(included_weak),
+        },
+        ensure_ascii=False, indent=2))
+    return 0
+
+
+def _cmd_review_flashcards(args: argparse.Namespace) -> int:
+    """「分からなかった」（直近の回答が不正解）の語だけを集めた復習単語帳を組む。
+
+    プールの読み進み位置（next_batch の state）は一切動かさない。record-flashcards で
+    正解に変わった語は weak_review_ids() から自然に外れるため、ここを実行するたびに
+    その時点の最新状態を反映した単語帳になる（TOEIC/review へは固定ファイル名で
+    publish する運用を想定 — 日付ではなく上書きで「更新していく」）。
+    """
+    with connect(args.db) as connection:
+        pool = load_pool(connection)
+        by_id = {e.review_id: e for e in pool}
+        weak_ids = weak_review_ids(connection, limit=args.limit)
+
+    entries = [
+        FlashcardEntry(
+            review_id=rid, word=by_id[rid].word, meaning=by_id[rid].meaning, example=by_id[rid].example
+        )
+        for rid in weak_ids if rid in by_id
+    ]
+    if not entries:
+        print(json.dumps({"count": 0, "message": "現在、要復習の単語はありません。"}, ensure_ascii=False))
+        return 0
+
+    title = args.title or "TOEIC 復習単語帳"
+    args.out.mkdir(parents=True, exist_ok=True)
+    items_path = args.out / "items.json"
+    items_path.write_text(
+        json.dumps(
+            {
+                "title": title,
+                "entries": [
+                    {"review_id": e.review_id, "word": e.word, "meaning": e.meaning, "example": e.example}
+                    for e in entries
+                ],
+            },
+            ensure_ascii=False, indent=2,
+        ),
+        encoding="utf-8",
+    )
+
+    tex_path = args.out / "flashcards.tex"
+    tex_path.write_text(render_flashcard_tex(title, entries), encoding="utf-8")
+    pdf_path = build_flashcard_pdf(tex_path)
+    md_path = args.out / "flashcards.md"
+    md_path.write_text(render_flashcard_md(title, entries), encoding="utf-8")
+
+    print(json.dumps(
+        {"pdf": str(pdf_path), "md": str(md_path), "items": str(items_path), "count": len(entries)},
+        ensure_ascii=False, indent=2))
+    return 0
+
+
+def _cmd_record_flashcards(args: argparse.Namespace) -> int:
+    """チェック済みの単語帳PDFを読み、学習ループへ記録する。
+
+    「分からなかった」にチェック=不正解、無印=正解として correct_override 経路で
+    記録する（record_form_response と同じ、study.answer() の閉ループを通す）。
+    記録後、正誤に関わらずチェック状態を全て空にしたコピーを --reset-out に書き出せる
+    （同じPDFファイルを次のラウンドでも使い回したい場合用）。
+    """
+    payload = json.loads(args.items.read_text(encoding="utf-8"))
+    entries = payload["entries"]
+    checked = read_checked_review_ids(args.pdf)
+
+    connection = connect(args.db) if args.db else connect()
+    try:
+        session_id = study.start_session(connection, args.course_id, note=f"flashcards:{args.pdf.name}")
+        results = []
+        for entry in entries:
+            review_id = entry["review_id"]
+            correct = review_id not in checked
+            response = "分からなかった" if not correct else "分かった"
+            try:
+                outcome = study.record_form_response(
+                    connection, session_id, review_id, response, correct_override=correct,
+                )
+            except LookupError as error:
+                results.append({"review_id": review_id, "error": str(error)})
+                continue
+            results.append({"review_id": review_id, "correct": outcome.correct})
+        study.end_session(connection, session_id)
+    finally:
+        connection.close()
+
+    reset_pdf = None
+    if args.reset_out:
+        review_ids = [e["review_id"] for e in entries]
+        reset_pdf = str(reset_checkboxes(args.pdf, args.reset_out, review_ids))
+
+    print(json.dumps(
+        {
+            "recorded": len(results),
+            "known": sum(1 for r in results if r.get("correct") is True),
+            "unknown": sum(1 for r in results if r.get("correct") is False),
+            "results": results,
+            "reset_pdf": reset_pdf,
+        },
+        ensure_ascii=False, indent=2))
+    return 0
+
+
 def _cmd_publish(args: argparse.Namespace) -> int:
     import _drive_common
 
@@ -256,6 +427,45 @@ def build_parser() -> argparse.ArgumentParser:
     publish.add_argument("--parent-id", help="既定は GDRIVE_PARENT_FOLDER_ID")
     publish.add_argument("--dry-run", action="store_true")
     publish.set_defaults(func=_cmd_publish)
+
+    flashcards = sub.add_parser(
+        "flashcards", help="チェックボックス付き単語帳PDFを組む（状態を1回分進める）"
+    )
+    flashcards.add_argument("--count", type=int, default=100, help="1回の収録数（既定100）")
+    flashcards.add_argument(
+        "--weak-count", type=int, default=20,
+        help="直近の回答が不正解だった語を優先的に混ぜる件数（既定20。0で無効化）",
+    )
+    flashcards.add_argument("--out", type=Path, required=True, help="出力先ディレクトリ")
+    flashcards.add_argument("--title", help="既定: 単語帳 <日付>")
+    flashcards.add_argument("--db", type=Path, default=None, help="既定: ~/.academic-english/english.db")
+    flashcards.add_argument("--home", type=Path, default=None, help="状態ファイルの置き場所。既定: ~/.academic-english")
+    flashcards.set_defaults(func=_cmd_flashcards)
+
+    review_flashcards = sub.add_parser(
+        "review-flashcards",
+        help="直近の回答が不正解だった語だけの復習単語帳を組む（読み進み位置は動かさない）",
+    )
+    review_flashcards.add_argument("--limit", type=int, default=200, help="収録件数の上限（既定200）")
+    review_flashcards.add_argument("--out", type=Path, required=True, help="出力先ディレクトリ")
+    review_flashcards.add_argument("--title", help="既定: TOEIC 復習単語帳")
+    review_flashcards.add_argument("--db", type=Path, default=None, help="既定: ~/.academic-english/english.db")
+    review_flashcards.set_defaults(func=_cmd_review_flashcards)
+
+    record_flashcards = sub.add_parser(
+        "record-flashcards", help="チェック済みの単語帳PDFを読み、学習ループへ記録する"
+    )
+    record_flashcards.add_argument("--pdf", type=Path, required=True, help="チェックを入れて保存したPDF")
+    record_flashcards.add_argument(
+        "--items", type=Path, required=True, help="flashcards/review-flashcards が出力した items.json"
+    )
+    record_flashcards.add_argument("--course-id", default="english")
+    record_flashcards.add_argument("--db", type=Path, default=None, help="既定: ~/.academic-english/english.db")
+    record_flashcards.add_argument(
+        "--reset-out", type=Path, default=None,
+        help="指定すると、集計後に全チェックを外したコピーをこのパスへ書き出す（同じPDFの使い回し用）",
+    )
+    record_flashcards.set_defaults(func=_cmd_record_flashcards)
 
     return parser
 
