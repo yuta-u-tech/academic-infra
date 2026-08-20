@@ -67,6 +67,7 @@ from toeic_reading.flashcard_render import (  # noqa: E402
     render_flashcard_md,
     render_flashcard_tex,
 )
+from toeic_reading.flashcard_reveal import build_dual_checkbox_flashcards  # noqa: E402
 from toeic_reading.vocab_render import QuizQuestion, build_pdf, render_md, render_tex  # noqa: E402
 
 JST = ZoneInfo("Asia/Tokyo")
@@ -182,14 +183,21 @@ def _cmd_attach_form_url(args: argparse.Namespace) -> int:
 
 
 def _cmd_flashcards(args: argparse.Namespace) -> int:
-    """プール全体を1つのチェックボックス付き単語帳PDFにまとめる（ローテーションしない）。
+    """プールの一部または全部を、開閉式(タップで訳を表示)＋自己採点チェック付きの単語帳PDFにまとめる。
 
     build（4択・Forms提出、1日分だけを毎日ローテーションする別機能）とは違い、
-    語彙プールに登録済みの全語を毎回1冊にまとめる。単語が増える（import-tex-vocab等）
+    語彙プールに登録済みの語をまとめて1冊にする。単語が増える（import-tex-vocab等）
     たびに実行し直せば、その時点の全語を反映した1冊に更新される。
     「英単語を見て意味を思い出せるか」を試す形（推奨→自己採点recognition方向）なので、
     既定では sub_skill=recognition の行だけを対象にする（1語1行になる。recall方向の
     複製行まで混ぜると同じ語が2回出てしまうため）。
+
+    **章分け（2026-08-20追加）**: `--start`/`--limit` でプール中の範囲を切り出せる。
+    Google Driveアプリ内蔵のPDFフォーム入力機能で1ファイル4000語超のAcroFormを編集すると、
+    保存時にフィールド対応がずれて無関係な語のチェック状態が壊れる事故が実際に起きたため
+    （2026-08-20実機確認）、数百語単位で複数ファイルに分けて配布する運用に切り替える。
+    章ごとに `items.json` も分かれるため、`record-flashcards` はその章の語だけを対象に
+    記録する（未着手の章の語を「正解」と誤記録する心配がない）。
     """
     title = args.title or "TOEIC 単語帳（全語）"
 
@@ -201,9 +209,15 @@ def _cmd_flashcards(args: argparse.Namespace) -> int:
                 "（および必要なら duplicate-vocab-direction）で取り込んでください。"
             )
 
+    start = max(args.start - 1, 0)
+    end = start + args.limit if args.limit else len(pool)
+    chapter = pool[start:end]
+    if not chapter:
+        raise SystemExit(f"--start {args.start} はプール件数({len(pool)})の範囲外です。")
+
     entries = [
         FlashcardEntry(review_id=e.review_id, word=e.word, meaning=e.meaning, example=e.example)
-        for e in pool
+        for e in chapter
     ]
 
     args.out.mkdir(parents=True, exist_ok=True)
@@ -212,6 +226,7 @@ def _cmd_flashcards(args: argparse.Namespace) -> int:
         json.dumps(
             {
                 "title": title,
+                "start": args.start,
                 "entries": [
                     {"review_id": e.review_id, "word": e.word, "meaning": e.meaning, "example": e.example}
                     for e in entries
@@ -222,9 +237,7 @@ def _cmd_flashcards(args: argparse.Namespace) -> int:
         encoding="utf-8",
     )
 
-    tex_path = args.out / "flashcards.tex"
-    tex_path.write_text(render_flashcard_tex(title, entries), encoding="utf-8")
-    pdf_path = build_flashcard_pdf(tex_path)
+    pdf_path = build_dual_checkbox_flashcards(title, entries, args.out)
     md_path = args.out / "flashcards.md"
     md_path.write_text(render_flashcard_md(title, entries), encoding="utf-8")
 
@@ -234,6 +247,7 @@ def _cmd_flashcards(args: argparse.Namespace) -> int:
             "md": str(md_path),
             "items": str(items_path),
             "count": len(entries),
+            "start": args.start,
             "direction": args.direction,
         },
         ensure_ascii=False, indent=2))
@@ -445,11 +459,19 @@ def build_parser() -> argparse.ArgumentParser:
     publish.set_defaults(func=_cmd_publish)
 
     flashcards = sub.add_parser(
-        "flashcards", help="プール全体を1冊のチェックボックス付き単語帳PDFにまとめる"
+        "flashcards", help="プールの一部/全部を開閉式チェックボックス付き単語帳PDFにまとめる"
     )
     flashcards.add_argument(
         "--direction", default="recognition", choices=["recall", "recognition"],
         help="収録する方向（既定: recognition＝英単語を見て意味を思い出す形）",
+    )
+    flashcards.add_argument(
+        "--start", type=int, default=1,
+        help="プール中の開始位置（1始まり、既定1）。章分けするときに使う",
+    )
+    flashcards.add_argument(
+        "--limit", type=int, default=None,
+        help="この章に含める件数（既定: 開始位置から最後まで全部）",
     )
     flashcards.add_argument("--out", type=Path, required=True, help="出力先ディレクトリ")
     flashcards.add_argument("--title", help="既定: TOEIC 単語帳（全語）")
