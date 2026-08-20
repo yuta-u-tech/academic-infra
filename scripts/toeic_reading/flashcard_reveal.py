@@ -48,8 +48,9 @@ _MEANING_PAGE = r"""\documentclass[10pt]{{ltjsarticle}}
 \usepackage[paperwidth={width_mm}mm,paperheight={height_mm}mm,margin=0mm]{{geometry}}
 \pagestyle{{empty}}
 \setlength{{\parindent}}{{0pt}}
+\sloppy
 \begin{{document}}
-\noindent {meaning}
+\noindent\raggedright {meaning}
 \end{{document}}
 """
 
@@ -60,10 +61,43 @@ _PT_TO_MM = 25.4 / 72.0
 # 意味PDFのページ幅がRectの実幅より大きいと、その分だけ文字が縮小されて表示されてしまう
 # （2026-08-19、実際に訳の文字だけ小さく見える不具合として発覚）。ページ幅をRect幅と
 # 一致させ、余計な縮小が起きないようにする。高さは表の行が自然に取る高さ(実測25pt前後)に
-# 合わせた固定値を使う(単語が2行に折り返す行があると多少ずれる可能性はあるが、
-# 通常の1行の語ではズレない)。
+# 合わせた固定値を使う(1行に収まる語の場合)。
 _MEANING_WIDTH_MM = _REVEAL_WIDTH_PT * _PT_TO_MM
-_MEANING_HEIGHT_MM = 24.9 * _PT_TO_MM
+_REVEAL_BASE_HEIGHT_PT = 24.9  # 訳が1行に収まるときの行の高さ(実測)
+_REVEAL_LINE_HEIGHT_PT = 13.0  # 訳が2行目以降に折り返すたびに追加する高さ(10pt文字+行間の実測目安)
+
+# 訳の文字幅の概算。全角(かな/漢字/全角記号)は1em、それ以外(半角英数記号)は0.55emとして
+# 折り返し行数を見積もる(実際にLuaLaTeXで組む前にPythonだけで概算する。実測ではなく
+# 見積もりなので、大きめに出て損はないが小さく出て文字が箱からはみ出るのは避けたいため、
+# 使える幅に少し余裕(0.9倍)を持たせてある)。
+def _is_wide_char(ch: str) -> bool:
+    cp = ord(ch)
+    return (
+        0x3000 <= cp <= 0x30FF  # CJK記号・ひらがな・カタカナ
+        or 0x3400 <= cp <= 0x4DBF  # CJK拡張A
+        or 0x4E00 <= cp <= 0x9FFF  # CJK統合漢字
+        or 0xFF00 <= cp <= 0xFFEF  # 全角英数・記号
+    )
+
+
+def _estimate_wrapped_line_count(text: str, width_pt: float, font_size_pt: float = 10.0) -> int:
+    usable_pt = width_pt * 0.9
+    line_width_pt = 0.0
+    lines = 1
+    for ch in text:
+        char_width_pt = font_size_pt * (1.0 if _is_wide_char(ch) else 0.55)
+        if line_width_pt + char_width_pt > usable_pt and line_width_pt > 0:
+            lines += 1
+            line_width_pt = char_width_pt
+        else:
+            line_width_pt += char_width_pt
+    return lines
+
+
+def _reveal_row_height_pt(meaning: str) -> float:
+    """訳の折り返し行数から、開閉ボックス(≒行全体)に必要な高さを見積もる。"""
+    lines = _estimate_wrapped_line_count(meaning, _REVEAL_WIDTH_PT)
+    return _REVEAL_BASE_HEIGHT_PT + max(0, lines - 1) * _REVEAL_LINE_HEIGHT_PT
 
 
 def reveal_field_name(review_id: str) -> str:
@@ -97,10 +131,16 @@ def _render_base_tex(title: str, entries: list[FlashcardEntry]) -> str:
         r"\begin{longtable}{@{} r @{\hspace{4pt}} p{58mm} @{\hspace{6pt}} l @{\hspace{10pt}} l @{}}",
     ]
     for index, entry in enumerate(entries, start=1):
+        # 訳が長くて1行に収まらない語は、その分だけ開閉ボックスの高さを増やす
+        # （2026-08-20、訳が横に切れて読めない指摘を受けて対応。高さの見積もりは
+        # _reveal_row_height_pt 参照）。CheckBoxのheightオプションは行の自然な高さの
+        # 下限にしかならないため、これを大きくすれば行自体もその分だけ縦に伸びる。
+        row_height_pt = _reveal_row_height_pt(entry.meaning)
+        checkbox_height_pt = _REVEAL_HEIGHT_PT + (row_height_pt - _REVEAL_BASE_HEIGHT_PT)
         lines.append(
             rf"{index}. & \textbf{{{escape(entry.word)}}} & "
             + r"\CheckBox[name=" + reveal_field_name(entry.review_id)
-            + rf",width={_REVEAL_WIDTH_PT}pt,height={_REVEAL_HEIGHT_PT}pt,bordercolor=0 0 0]{{}}"
+            + rf",width={_REVEAL_WIDTH_PT}pt,height={checkbox_height_pt:.2f}pt,bordercolor=0 0 0]{{}}"
             + r" & 分からなかった\ "
             + r"\CheckBox[name=" + field_name(entry.review_id)
             + r",width=7pt,height=7pt,bordercolor=0 0 0]{} \\[7pt]"
@@ -146,11 +186,16 @@ def build_dual_checkbox_flashcards(
     meaning_pdfs: dict[str, Path] = {}
     for index, entry in enumerate(entries, start=1):
         tex_path = meanings_dir / f"m{index:04d}.tex"
+        # 素の "/" はLaTeXの行分割候補にならず、区切りに"/"を多用する訳(例:
+        # 「参照する/言及する」)が折り返せずに箱からはみ出すことがある。\slashなら
+        # 見た目は"/"のまま、直後での改行を許可できる。
+        meaning_text = escape(entry.meaning).replace("/", r"\slash{}")
+        row_height_pt = _reveal_row_height_pt(entry.meaning)
         tex_path.write_text(
             _MEANING_PAGE.format(
-                meaning=escape(entry.meaning),
+                meaning=meaning_text,
                 width_mm=f"{_MEANING_WIDTH_MM:.2f}",
-                height_mm=f"{_MEANING_HEIGHT_MM:.2f}",
+                height_mm=f"{row_height_pt * _PT_TO_MM:.2f}",
             ),
             encoding="utf-8",
         )
