@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """『TOEIC上級単語.pdf』OCR取り込み用ステージングDB CLI（Issue #9）。
 
-本番 `english.db` とはファイルごと独立した `staging-toeic-advanced.db` を操作する。
+本番 `english.db`（~/.academic-english/）とはファイルごと独立した
+`.toeic-advanced-vocab/staging-toeic-advanced.db`（リポジトリ直下、.gitignore済み）を操作する。
 ここでの承認（approved）は「本番へマージしてよい」の意思表示に過ぎず、実際の
 `generated_item` への書き込み（マージ処理）はまだ実装していない（Issue #9 の非スコープ）。
 
@@ -130,7 +131,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
-    parser.add_argument("--db", type=Path, default=None, help="既定は ~/.academic-english/staging-toeic-advanced.db")
+    parser.add_argument("--db", type=Path, default=None, help="既定は .toeic-advanced-vocab/staging-toeic-advanced.db（リポジトリ直下）")
     sub = parser.add_subparsers(dest="command", required=True)
 
     sub.add_parser("init", help="DBを初期化する").set_defaults(func=_cmd_init)

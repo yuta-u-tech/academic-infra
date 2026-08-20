@@ -1,13 +1,21 @@
 """『TOEIC上級単語.pdf』OCR取り込み専用のステージングDB。
 
-`english.db`（本番）とはファイルごと独立させてある。本番へマージする前提の
-レビュー待ちデータ（OCR誤読・品詞/意味の要確認）を本番の `generated_item` /
-`material` と混在させたくないため。テーブル構成も本番のスキーマは流用せず、
-`page_number`（元スキャンへ戻れるように）と `status`（pending→approved/rejected→merged
-の一方向遷移）を主軸にした専用スキーマにしてある。詳細は Issue #9 参照。
+`english.db`（本番、個人の学習履歴・~/.academic-english/ 配下）とはファイルごと
+独立させてある。ただし置き場所は本番と違い、**academic-infaryリポジトリ直下**
+（`.toeic-advanced-vocab/`、`.gitignore`済み）にする。理由は本番の語彙DBとは
+性質が違うため:
 
-本番へのマージ（`ocr_candidate` → `VocabItem` への変換・`generated_item` 書き込み）は
-このモジュールの範囲外（まだ実装しない。Issue #9 の非スコープに明記済み）。
+- `english.db` は個人の学習履歴そのもの（誰の誤答か・いつ解いたか）なので
+  publicリポジトリの外に完全に出す必要がある
+- こちらは市販本からOCRで起こした「これから学習材料になる素材」で、academic-infra
+  （このマージ作業をする場所）から直接見えている方が都合がよい。ただしOCR元は
+  購入した書籍のコンテンツなので、git管理下（=GitHubでpublicに見える状態）には
+  絶対に置かない。`.gitignore`でリポジトリ直下からは除外しつつ、ファイルシステム上は
+  リポジトリの中に置く、という折衷にしてある
+
+レビュー（pending→approved/rejected）を経て本番へマージしたら、
+`private academic-english-data` 側へ移す想定（このモジュールはマージ処理も
+その移動処理も持たない。まだ実装しない。Issue #9 の非スコープに明記済み）。
 """
 
 from __future__ import annotations
@@ -17,9 +25,9 @@ import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
 
-DEFAULT_HOME_ENV = "ACADEMIC_ENGLISH_HOME"
+DEFAULT_HOME_ENV = "TOEIC_ADVANCED_VOCAB_HOME"
 DB_FILENAME = "staging-toeic-advanced.db"
-_DEFAULT_HOME = Path.home() / ".academic-english"
+_DEFAULT_HOME = Path(__file__).resolve().parent.parent.parent / ".toeic-advanced-vocab"
 
 SCHEMA_VERSION = 1
 

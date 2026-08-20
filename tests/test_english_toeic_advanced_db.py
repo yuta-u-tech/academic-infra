@@ -4,10 +4,12 @@ from pathlib import Path
 
 from acenglish.toeic_advanced_db import (
     DB_FILENAME,
+    DEFAULT_HOME_ENV,
     SCHEMA_VERSION,
     add_candidate,
     connect,
     database_path,
+    default_home,
     list_candidates,
     migrate,
     set_review,
@@ -18,9 +20,18 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 
 
 def test_the_staging_database_is_a_separate_file_from_the_production_database(monkeypatch, tmp_path):
-    monkeypatch.setenv("ACADEMIC_ENGLISH_HOME", str(tmp_path))
+    monkeypatch.setenv(DEFAULT_HOME_ENV, str(tmp_path))
     assert database_path().name == DB_FILENAME
     assert database_path().name != "english.db"
+
+
+def test_the_default_location_is_inside_this_repository_and_gitignored(monkeypatch):
+    """english.db と違い、これは購入書籍からのOCR素材＝academic-infra側で作業を続けるものなので、
+    本番のように完全にリポジトリ外へ出す必要はない。ただしgit管理下には置かない。"""
+    monkeypatch.delenv(DEFAULT_HOME_ENV, raising=False)
+    assert default_home() == REPO_ROOT / ".toeic-advanced-vocab"
+    gitignore = (REPO_ROOT / ".gitignore").read_text(encoding="utf-8")
+    assert ".toeic-advanced-vocab/" in gitignore
 
 
 def test_connecting_twice_does_not_re_run_migrations(tmp_path):
