@@ -228,6 +228,27 @@ def move_file(service, file_id: str, from_parent_id: str, to_parent_id: str) -> 
     ).execute()
 
 
+def try_delete_file(service, file_id: str) -> bool:
+    """`file_id` の完全削除を試みる。成功したら True、権限不足なら False を返す。
+
+    通常このAPI認証情報は他人がアップロードしたファイルを削除できない
+    （move_file() のdocstring参照）。ただしユーザーがDrive上でファイルの所有権を
+    このアカウントへ個別に譲渡した場合は削除が成功する（2026-08-20、実際に確認済み）。
+    自動的な所有権移譲の手段は無い（共有ドライブの作成は個人Gmailアカウントでは
+    不可、`canAcceptOwnership` も既定でFalseだった）ため、削除したい場合は
+    ユーザーに都度そのファイルの所有権を渡してもらう必要がある。
+    """
+    from googleapiclient.errors import HttpError
+
+    try:
+        service.files().delete(fileId=file_id, supportsAllDrives=True).execute()
+        return True
+    except HttpError as error:
+        if error.resp.status == 403:
+            return False
+        raise
+
+
 def grant_anyone_reader(service, file_id: str) -> None:
     """`file_id`(通常はフォルダ)を「リンクを知っている全員が閲覧可」にする。
 

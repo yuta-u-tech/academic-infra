@@ -17,14 +17,17 @@ TOEIC単語帳のチェック済みPDFに限らず、今後の演習自動採点
     # 直下の全ファイルをまとめて取得
     python3 scripts/drive_inbox_cli.py fetch-all --out-dir /tmp/inbox
 
-    # 取得と同時に「回収/processed」へアーカイブ（--archiveを両コマンドに付けられる）
-    python3 scripts/drive_inbox_cli.py fetch --name flashcards.pdf --out /tmp/flashcards.pdf --archive
+    # 取得後に片付ける（--cleanupを両コマンドに付けられる）
+    python3 scripts/drive_inbox_cli.py fetch --name flashcards.pdf --out /tmp/flashcards.pdf --cleanup
 
-削除ではなくアーカイブなのは、ユーザー本人がDriveへ直接アップロードしたファイルの所有権は
-アップロードした本人に残る仕様のため、こちらのAPI認証情報では削除・ゴミ箱移動ができない
-（2026-08-20、実際に403で確認済み）。親フォルダの付け替え（移動）は所有権と無関係に行える
-ため、「回収」直下を常に未処理のみにし、処理済みは「回収/processed」へ移すことで実質的な
-削除フローの代わりにする。
+`--cleanup` はまず完全削除を試み、権限不足なら自動で「回収/processed」への移動に
+フォールバックする。ユーザー本人がDriveへ直接アップロードしたファイルの所有権は
+アップロードした本人に残る仕様のため、通常はこちらのAPI認証情報では削除できない
+（2026-08-20、実際に403で確認済み）。**ユーザーがDrive上でそのファイルの所有権を
+このアカウント（`GDRIVE_OAUTH_*` の認証先）へ個別に譲渡した場合は削除が成功する**
+（実際に確認済み）。自動的な所有権移譲の手段は無い（個人Gmailアカウントでは共有ドライブを
+作成できずWorkspace機能も使えない）ため、削除したい場合はユーザーに都度その旨を伝えて
+もらう運用になる。
 """
 
 from __future__ import annotations
@@ -70,6 +73,36 @@ def _archive_folder_id(service, drive_common, folder_id: str) -> str:
     return drive_common.ensure_folder(service, folder_id, "processed")
 
 
+def _cleanup_file(service, drive_common, file_id: str, folder_id: str, file_name: str) -> str:
+    """削除を試み、権限不足なら「回収/processed」へ移動する。実際に行った処理名を返す。
+
+    削除に失敗した場合（＝ファイルの所有権がまだこちらのアカウントに譲渡されていない）は、
+    その旨をメールで通知する（gmail-send-secrets.env が未設定ならbest-effortで無視する。
+    詳細は _gmail_common.py 参照）。所有権を譲渡してもらえれば、次回の --cleanup で
+    自動的に完全削除される。
+    """
+    if drive_common.try_delete_file(service, file_id):
+        return "deleted"
+    archive_id = _archive_folder_id(service, drive_common, folder_id)
+    drive_common.move_file(service, file_id, folder_id, archive_id)
+    try:
+        import _gmail_common as gmail_common
+        gmail_common.try_notify(
+            subject=f"[回収] {file_name} を処理しました（削除には所有権の譲渡が必要）",
+            body=(
+                f"「{file_name}」の内容は処理済みです。\n"
+                "このファイルはあなたのアカウントが所有しているため、こちらのAPIからは"
+                "削除できず「回収/processed」へ移動しました。\n\n"
+                "完全に削除したい場合は、Drive上でこのファイルの所有権を "
+                "ueno.academic.materials@gmail.com へ譲渡してください。"
+                "次回の --cleanup 実行時に自動で削除されます。"
+            ),
+        )
+    except Exception:
+        pass  # 通知はbest-effort。失敗してもアーカイブ自体は成功しているので処理を止めない。
+    return "archived"
+
+
 def _cmd_fetch(args: argparse.Namespace) -> int:
     drive_common, service, folder_id = _connect(args)
     files = drive_common.list_files(service, folder_id)
@@ -78,13 +111,9 @@ def _cmd_fetch(args: argparse.Namespace) -> int:
         raise SystemExit(f"「{args.folder_name}」に '{args.name}' が見つかりません。")
     file_id = matches[0]["id"]
     out_path = drive_common.download_file(service, file_id, args.out)
-    archived = False
-    if args.archive:
-        archive_id = _archive_folder_id(service, drive_common, folder_id)
-        drive_common.move_file(service, file_id, folder_id, archive_id)
-        archived = True
+    cleanup = _cleanup_file(service, drive_common, file_id, folder_id, args.name) if args.cleanup else None
     print(json.dumps(
-        {"downloaded": str(out_path), "file_id": file_id, "archived": archived},
+        {"downloaded": str(out_path), "file_id": file_id, "cleanup": cleanup},
         ensure_ascii=False, indent=2))
     return 0
 
@@ -93,15 +122,16 @@ def _cmd_fetch_all(args: argparse.Namespace) -> int:
     drive_common, service, folder_id = _connect(args)
     files = drive_common.list_files(service, folder_id)
     downloaded = []
-    archive_id = _archive_folder_id(service, drive_common, folder_id) if args.archive else None
+    cleanup_results = {}
     for entry in files:
         out_path = args.out_dir / entry["name"]
         drive_common.download_file(service, entry["id"], out_path)
         downloaded.append(str(out_path))
-        if archive_id:
-            drive_common.move_file(service, entry["id"], folder_id, archive_id)
+        if args.cleanup:
+            cleanup_results[entry["name"]] = _cleanup_file(
+                service, drive_common, entry["id"], folder_id, entry["name"])
     print(json.dumps(
-        {"downloaded": downloaded, "archived": args.archive}, ensure_ascii=False, indent=2))
+        {"downloaded": downloaded, "cleanup": cleanup_results or None}, ensure_ascii=False, indent=2))
     return 0
 
 
@@ -121,8 +151,8 @@ def build_parser() -> argparse.ArgumentParser:
     fetch.add_argument("--name", required=True, help="Drive上のファイル名")
     fetch.add_argument("--out", type=Path, required=True, help="保存先ローカルパス")
     fetch.add_argument(
-        "--archive", action="store_true",
-        help="取得後、ファイルを「回収/processed」へ移動する（削除ではなくアーカイブ）",
+        "--cleanup", action="store_true",
+        help="取得後、削除を試み、権限不足なら「回収/processed」へ移動する",
     )
     fetch.set_defaults(func=_cmd_fetch)
 
@@ -131,8 +161,8 @@ def build_parser() -> argparse.ArgumentParser:
     fetch_all.add_argument("--parent-id", help="既定は GDRIVE_PARENT_FOLDER_ID")
     fetch_all.add_argument("--out-dir", type=Path, required=True)
     fetch_all.add_argument(
-        "--archive", action="store_true",
-        help="取得後、ファイルを「回収/processed」へ移動する（削除ではなくアーカイブ）",
+        "--cleanup", action="store_true",
+        help="取得後、削除を試み、権限不足なら「回収/processed」へ移動する",
     )
     fetch_all.set_defaults(func=_cmd_fetch_all)
 
