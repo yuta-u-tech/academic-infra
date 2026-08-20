@@ -16,6 +16,15 @@ TOEIC単語帳のチェック済みPDFに限らず、今後の演習自動採点
 
     # 直下の全ファイルをまとめて取得
     python3 scripts/drive_inbox_cli.py fetch-all --out-dir /tmp/inbox
+
+    # 取得と同時に「回収/processed」へアーカイブ（--archiveを両コマンドに付けられる）
+    python3 scripts/drive_inbox_cli.py fetch --name flashcards.pdf --out /tmp/flashcards.pdf --archive
+
+削除ではなくアーカイブなのは、ユーザー本人がDriveへ直接アップロードしたファイルの所有権は
+アップロードした本人に残る仕様のため、こちらのAPI認証情報では削除・ゴミ箱移動ができない
+（2026-08-20、実際に403で確認済み）。親フォルダの付け替え（移動）は所有権と無関係に行える
+ため、「回収」直下を常に未処理のみにし、処理済みは「回収/processed」へ移すことで実質的な
+削除フローの代わりにする。
 """
 
 from __future__ import annotations
@@ -57,6 +66,10 @@ def _cmd_list(args: argparse.Namespace) -> int:
     return 0
 
 
+def _archive_folder_id(service, drive_common, folder_id: str) -> str:
+    return drive_common.ensure_folder(service, folder_id, "processed")
+
+
 def _cmd_fetch(args: argparse.Namespace) -> int:
     drive_common, service, folder_id = _connect(args)
     files = drive_common.list_files(service, folder_id)
@@ -65,7 +78,14 @@ def _cmd_fetch(args: argparse.Namespace) -> int:
         raise SystemExit(f"「{args.folder_name}」に '{args.name}' が見つかりません。")
     file_id = matches[0]["id"]
     out_path = drive_common.download_file(service, file_id, args.out)
-    print(json.dumps({"downloaded": str(out_path), "file_id": file_id}, ensure_ascii=False, indent=2))
+    archived = False
+    if args.archive:
+        archive_id = _archive_folder_id(service, drive_common, folder_id)
+        drive_common.move_file(service, file_id, folder_id, archive_id)
+        archived = True
+    print(json.dumps(
+        {"downloaded": str(out_path), "file_id": file_id, "archived": archived},
+        ensure_ascii=False, indent=2))
     return 0
 
 
@@ -73,11 +93,15 @@ def _cmd_fetch_all(args: argparse.Namespace) -> int:
     drive_common, service, folder_id = _connect(args)
     files = drive_common.list_files(service, folder_id)
     downloaded = []
+    archive_id = _archive_folder_id(service, drive_common, folder_id) if args.archive else None
     for entry in files:
         out_path = args.out_dir / entry["name"]
         drive_common.download_file(service, entry["id"], out_path)
         downloaded.append(str(out_path))
-    print(json.dumps({"downloaded": downloaded}, ensure_ascii=False, indent=2))
+        if archive_id:
+            drive_common.move_file(service, entry["id"], folder_id, archive_id)
+    print(json.dumps(
+        {"downloaded": downloaded, "archived": args.archive}, ensure_ascii=False, indent=2))
     return 0
 
 
@@ -96,12 +120,20 @@ def build_parser() -> argparse.ArgumentParser:
     fetch.add_argument("--parent-id", help="既定は GDRIVE_PARENT_FOLDER_ID")
     fetch.add_argument("--name", required=True, help="Drive上のファイル名")
     fetch.add_argument("--out", type=Path, required=True, help="保存先ローカルパス")
+    fetch.add_argument(
+        "--archive", action="store_true",
+        help="取得後、ファイルを「回収/processed」へ移動する（削除ではなくアーカイブ）",
+    )
     fetch.set_defaults(func=_cmd_fetch)
 
     fetch_all = sub.add_parser("fetch-all", help="回収フォルダ直下の全ファイルを取得")
     fetch_all.add_argument("--folder-name", default=DEFAULT_FOLDER_NAME)
     fetch_all.add_argument("--parent-id", help="既定は GDRIVE_PARENT_FOLDER_ID")
     fetch_all.add_argument("--out-dir", type=Path, required=True)
+    fetch_all.add_argument(
+        "--archive", action="store_true",
+        help="取得後、ファイルを「回収/processed」へ移動する（削除ではなくアーカイブ）",
+    )
     fetch_all.set_defaults(func=_cmd_fetch_all)
 
     return parser

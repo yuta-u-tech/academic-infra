@@ -213,6 +213,21 @@ def download_file(service, file_id: str, out_path: Path) -> Path:
     return out_path
 
 
+def move_file(service, file_id: str, from_parent_id: str, to_parent_id: str) -> None:
+    """`file_id` の親フォルダを付け替える(削除ではなく移動)。
+
+    Driveでは「共有フォルダにアップロードしたファイルの所有権はアップロードした本人に残る」
+    仕様のため、他人がアップロードしたファイルはこちらのAPI側の認証情報では削除・ゴミ箱移動
+    ができない（2026-08-20、回収フォルダのファイル削除を試みて403で確認済み）。
+    親フォルダの変更（移動）は所有権と無関係に行えるため、「回収→回収/processed」のような
+    アーカイブ運用はこちらで代替する。
+    """
+    service.files().update(
+        fileId=file_id, addParents=to_parent_id, removeParents=from_parent_id,
+        supportsAllDrives=True, fields="id,parents",
+    ).execute()
+
+
 def grant_anyone_reader(service, file_id: str) -> None:
     """`file_id`(通常はフォルダ)を「リンクを知っている全員が閲覧可」にする。
 
