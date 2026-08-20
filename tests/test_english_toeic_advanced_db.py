@@ -10,11 +10,17 @@ from acenglish.toeic_advanced_db import (
     connect,
     database_path,
     default_home,
+    detect_duplicates,
     list_candidates,
+    merge_approved,
     migrate,
     set_review,
     stats,
 )
+from acenglish.db import connect as connect_english
+from acenglish.generate import ingest, upsert_material
+from acenglish.items import GeneratedItem, GenerationResult, VocabItem
+from acenglish.sources.base import ExternalMaterial
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
@@ -96,3 +102,111 @@ def test_stats_counts_candidates_by_status(tmp_path):
     connection.close()
 
     assert result == {"pending": 1, "approved": 1}
+
+
+def _seed_vocab(connection, review_id: str, word: str, meaning: str = "既存語") -> None:
+    material = ExternalMaterial(
+        review_id=review_id,
+        source="toeic",
+        title=word,
+        body=f"{word}\n{meaning}",
+        origin="test",
+        source_file="notes/vocabulary/toeic.md",
+        source_commit="test",
+        chapter_title="test",
+    )
+    upsert_material(connection, material)
+    ingest(
+        connection,
+        GenerationResult(
+            review_id=review_id,
+            course_id="english",
+            source_commit="test",
+            generated_by="test",
+            prompt_version="test",
+            is_ephemeral=False,
+            items=[
+                GeneratedItem(
+                    difficulty=3,
+                    reason="test",
+                    item=VocabItem(word=word, meaning=meaning),
+                )
+            ],
+        ),
+    )
+
+
+def test_detect_duplicates_marks_candidates_with_the_existing_review_id(tmp_path):
+    staging = connect(tmp_path / DB_FILENAME)
+    production = connect_english(tmp_path / "english.db")
+    _seed_vocab(production, "toeic.words1-400.0001", "Cashier")
+    candidate_id = add_candidate(staging, page_number=1, word="cashier", meaning="レジ係")
+
+    result = detect_duplicates(staging, production)
+    row = staging.execute("SELECT * FROM ocr_candidate WHERE id = ?", (candidate_id,)).fetchone()
+    staging.close()
+    production.close()
+
+    assert result["detected"] == 1
+    assert row["dup_of_review_id"] == "toeic.words1-400.0001"
+    assert row["status"] == "pending"
+
+
+def test_merge_approved_imports_non_duplicate_candidates_and_marks_them_merged(tmp_path):
+    staging = connect(tmp_path / DB_FILENAME)
+    production = connect_english(tmp_path / "english.db")
+    candidate_id = add_candidate(
+        staging,
+        page_number=12,
+        word="aberration",
+        meaning="逸脱、異常",
+        part_of_speech="n.",
+        example="a temporary aberration",
+    )
+    set_review(staging, candidate_id, status="approved")
+
+    result = merge_approved(staging, production)
+    staged = staging.execute("SELECT * FROM ocr_candidate WHERE id = ?", (candidate_id,)).fetchone()
+    material = production.execute(
+        "SELECT * FROM material WHERE review_id = ?", ("toeic.toeic-advanced-vocab.0001",)
+    ).fetchone()
+    generated = production.execute(
+        "SELECT * FROM generated_item WHERE review_id = ? AND kind = 'vocab'",
+        ("toeic.toeic-advanced-vocab.0001",),
+    ).fetchone()
+    staging.close()
+    production.close()
+
+    assert result == {
+        "approved_checked": 1,
+        "merged": 1,
+        "skipped_duplicate": 0,
+        "skipped_existing": 0,
+    }
+    assert staged["status"] == "merged"
+    assert staged["merged_review_id"] == "toeic.toeic-advanced-vocab.0001"
+    assert material["source"] == "toeic"
+    assert material["origin"] == "toeic-advanced-vocab:page-12#candidate-1"
+    assert generated["generated_by"] == "import:toeic-advanced-vocab"
+
+
+def test_merge_approved_skips_candidates_that_now_duplicate_production(tmp_path):
+    staging = connect(tmp_path / DB_FILENAME)
+    production = connect_english(tmp_path / "english.db")
+    _seed_vocab(production, "toeic.personal-notes.0001", "cashier")
+    candidate_id = add_candidate(staging, page_number=1, word="Cashier", meaning="レジ係")
+    set_review(staging, candidate_id, status="approved")
+
+    result = merge_approved(staging, production)
+    row = staging.execute("SELECT * FROM ocr_candidate WHERE id = ?", (candidate_id,)).fetchone()
+    merged_rows = production.execute(
+        "SELECT COUNT(*) AS n FROM generated_item WHERE review_id LIKE 'toeic.toeic-advanced-vocab.%'"
+    ).fetchone()["n"]
+    staging.close()
+    production.close()
+
+    assert result["merged"] == 0
+    assert result["skipped_duplicate"] == 1
+    assert row["status"] == "approved"
+    assert row["dup_of_review_id"] == "toeic.personal-notes.0001"
+    assert merged_rows == 0

@@ -3,8 +3,8 @@
 
 本番 `english.db`（~/.academic-english/）とはファイルごと独立した
 `.toeic-advanced-vocab/staging-toeic-advanced.db`（リポジトリ直下、.gitignore済み）を操作する。
-ここでの承認（approved）は「本番へマージしてよい」の意思表示に過ぎず、実際の
-`generated_item` への書き込み（マージ処理）はまだ実装していない（Issue #9 の非スコープ）。
+ここでの承認（approved）は「本番へマージしてよい」の意思表示。`merge-approved`
+で本番 `english.db` の `material` / `generated_item` へ取り込む。
 
     # DBを初期化するだけ（テーブルが無ければ作る。既にあれば何もしない）
     python3 scripts/toeic_advanced_vocab_cli.py init
@@ -25,6 +25,10 @@
 
     # 件数サマリ
     python3 scripts/toeic_advanced_vocab_cli.py stats
+
+    # 本番DBとの重複をステージング側へ記録し、approved候補を本番へマージ
+    python3 scripts/toeic_advanced_vocab_cli.py detect-duplicates
+    python3 scripts/toeic_advanced_vocab_cli.py merge-approved
 """
 
 from __future__ import annotations
@@ -39,10 +43,14 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from acenglish.toeic_advanced_db import (  # noqa: E402
     add_candidate,
     connect,
+    detect_duplicates,
     list_candidates,
+    merge_approved,
     set_review,
     stats as db_stats,
 )
+from acenglish import fetch  # noqa: E402
+from acenglish.db import connect as connect_english  # noqa: E402
 
 
 def _cmd_init(args: argparse.Namespace) -> int:
@@ -127,11 +135,44 @@ def _cmd_stats(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_detect_duplicates(args: argparse.Namespace) -> int:
+    staging = connect(args.db)
+    production = connect_english(args.english_db)
+    result = detect_duplicates(staging, production)
+    production.close()
+    staging.close()
+    print(json.dumps(result, ensure_ascii=False, indent=2))
+    return 0
+
+
+def _cmd_merge_approved(args: argparse.Namespace) -> int:
+    staging = connect(args.db)
+    production = connect_english(args.english_db)
+    result = merge_approved(staging, production)
+    if not args.no_dedupe_after and result["merged"]:
+        result["dedupe_after"] = fetch.dedupe_vocab(production)
+    production.close()
+    staging.close()
+    print(json.dumps(result, ensure_ascii=False, indent=2))
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
-    parser.add_argument("--db", type=Path, default=None, help="既定は .toeic-advanced-vocab/staging-toeic-advanced.db（リポジトリ直下）")
+    parser.add_argument(
+        "--db",
+        type=Path,
+        default=None,
+        help="既定は .toeic-advanced-vocab/staging-toeic-advanced.db（リポジトリ直下）",
+    )
+    parser.add_argument(
+        "--english-db",
+        type=Path,
+        default=None,
+        help="本番english.dbのパス（既定: ~/.academic-english/english.db）",
+    )
     sub = parser.add_subparsers(dest="command", required=True)
 
     sub.add_parser("init", help="DBを初期化する").set_defaults(func=_cmd_init)
@@ -161,6 +202,21 @@ def build_parser() -> argparse.ArgumentParser:
     review.set_defaults(func=_cmd_review)
 
     sub.add_parser("stats", help="ステータス別件数").set_defaults(func=_cmd_stats)
+
+    sub.add_parser(
+        "detect-duplicates",
+        help="pending/approved候補を本番語彙プールと突き合わせ、重複review_idを記録",
+    ).set_defaults(func=_cmd_detect_duplicates)
+
+    merge = sub.add_parser(
+        "merge-approved", help="approvedかつ重複なしの候補を本番 material/generated_item へマージ"
+    )
+    merge.add_argument(
+        "--no-dedupe-after",
+        action="store_true",
+        help="マージ後の通常 dedupe_vocab() を実行しない",
+    )
+    merge.set_defaults(func=_cmd_merge_approved)
 
     return parser
 
