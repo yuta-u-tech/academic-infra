@@ -90,3 +90,17 @@ courses:
       - astronomy
     drive_folder: 現代天文学
     status: pilot
+
+  nextjs-security:
+    course_name: Next.js Webアプリケーション開発とセキュリティ
+    repository: yuta-u-tech/nextjs-secure-web-development
+    visibility: private
+    aliases:
+      - Next.js
+      - Nextjs
+      - Webセキュリティ
+      - Webアプリ開発
+      - Next.jsセキュリティ
+      - secure web development
+    drive_folder: Next.js Webアプリケーション開発とセキュリティ
+    status: pilot
