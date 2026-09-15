@@ -153,3 +153,15 @@ courses:
       - optimization
     drive_folder: 数理最適化
     status: pilot
+
+  applied-math-b:
+    course_name: 応用数学B及び演習
+    repository: yuta-u-tech/Applied_Mathematics_B
+    visibility: public
+    aliases:
+      - 応用数学B
+      - 応用数学B及び演習
+      - applied mathematics b
+      - applied math b
+    drive_folder: 応用数学B及び演習
+    status: pilot
