@@ -165,3 +165,15 @@ courses:
       - applied math b
     drive_folder: 応用数学B及び演習
     status: pilot
+
+  probability-statistics:
+    course_name: 確率統計
+    repository: yuta-u-tech/Probability_And_Statistics
+    visibility: private
+    aliases:
+      - 確率統計
+      - 確率統計学
+      - probability and statistics
+      - prob stats
+    drive_folder: 確率統計
+    status: pilot
