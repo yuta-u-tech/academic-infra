@@ -104,3 +104,52 @@ courses:
       - secure web development
     drive_folder: Next.js Webアプリケーション開発とセキュリティ
     status: pilot
+
+  deep-generative-models:
+    course_name: 深層生成モデル
+    repository: yuta-u-tech/Deep_Generative_Models
+    visibility: private
+    aliases:
+      - 深層生成モデル
+      - 生成モデル
+      - deep generative models
+      - generative models
+    drive_folder: 深層生成モデル
+    status: pilot
+
+  network-design:
+    course_name: ネットワークデザイン
+    repository: yuta-u-tech/Network_Design
+    visibility: private
+    aliases:
+      - ネットワークデザイン
+      - ネットワーク
+      - network design
+      - network
+    drive_folder: ネットワークデザイン
+    status: pilot
+
+  oop-development:
+    course_name: オブジェクト指向開発
+    repository: yuta-u-tech/Object_Oriented_Development
+    visibility: private
+    aliases:
+      - オブジェクト指向開発
+      - オブジェクト指向
+      - object oriented development
+      - object oriented
+      - OOP
+    drive_folder: オブジェクト指向開発
+    status: pilot
+
+  mathematical-optimization:
+    course_name: 数理最適化
+    repository: yuta-u-tech/Mathematical_Optimization
+    visibility: public
+    aliases:
+      - 数理最適化
+      - 最適化
+      - mathematical optimization
+      - optimization
+    drive_folder: 数理最適化
+    status: pilot

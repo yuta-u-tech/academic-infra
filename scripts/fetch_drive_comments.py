@@ -20,6 +20,7 @@ from _drive_common import (  # noqa: E402
     CourseNotFoundError,
     DriveConfigError,
     build_service,
+    find_course_draft_files,
     find_course_pdf_file_id,
     resolve_course,
     resolve_credentials,
@@ -89,6 +90,14 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--course", required=True)
     parser.add_argument("--include-resolved", action="store_true", help="解決済みコメントも含める")
+    parser.add_argument(
+        "--from-lecture",
+        type=int,
+        help=(
+            "指定すると、公開済みlatest.pdfではなくDraftsフォルダの講義回別ファイル"
+            "（<course_id>-NN.pdf と <course_id>-NN.md の両方）をこの回番号以降すべて対象にする"
+        ),
+    )
     args = parser.parse_args()
 
     try:
@@ -97,25 +106,41 @@ def main() -> int:
         print(str(e), file=sys.stderr)
         return 1
 
+    processed = processed_ids(course.course_id)
+
     try:
         credentials_values = resolve_credentials()
         service = build_service(credentials_values)
-        pdf_id = find_course_pdf_file_id(service, credentials_values["GDRIVE_PARENT_FOLDER_ID"], course)
-        raw_comments = list_all_comments(service, pdf_id)
+        parent_folder_id = credentials_values["GDRIVE_PARENT_FOLDER_ID"]
+
+        if args.from_lecture is not None:
+            draft_files = find_course_draft_files(service, parent_folder_id, course)
+            by_lecture: dict[str, list[dict]] = {}
+            for lecture_number in sorted(draft_files):
+                if lecture_number < args.from_lecture:
+                    continue
+                lecture_comments = []
+                for ext, file_id in sorted(draft_files[lecture_number].items()):
+                    raw_comments = list_all_comments(service, file_id)
+                    filtered = filter_comments(raw_comments, processed, args.include_resolved)
+                    lecture_comments.extend(
+                        simplify_comment(comment, file_id) | {"source_ext": ext}
+                        for comment in filtered
+                    )
+                if lecture_comments:
+                    by_lecture[f"{course.course_id}-{lecture_number:02d}"] = lecture_comments
+            output = {"course": course.course_id, "repository": course.repository, "by_lecture": by_lecture}
+        else:
+            pdf_id = find_course_pdf_file_id(service, parent_folder_id, course)
+            raw_comments = list_all_comments(service, pdf_id)
+            filtered = filter_comments(raw_comments, processed, args.include_resolved)
+            simplified = [simplify_comment(comment, pdf_id) for comment in filtered]
+            output = {"course": course.course_id, "repository": course.repository, "comments": simplified}
     except DriveConfigError as e:
         print(str(e), file=sys.stderr)
         return 1
 
-    filtered = filter_comments(raw_comments, processed_ids(course.course_id), args.include_resolved)
-    simplified = [simplify_comment(comment, pdf_id) for comment in filtered]
-
-    print(
-        json.dumps(
-            {"course": course.course_id, "repository": course.repository, "comments": simplified},
-            ensure_ascii=False,
-            indent=2,
-        )
-    )
+    print(json.dumps(output, ensure_ascii=False, indent=2))
     return 0
 
 
