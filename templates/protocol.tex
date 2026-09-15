@@ -1,0 +1,158 @@
+% ==================================================
+% src/includes/protocol.tex
+%  - Basic Packages
+%  - Theorem-like environments (tcolorbox)
+% ==================================================
+
+% ----- 1. Basic Packages -----
+\usepackage{iftex}
+\ifLuaTeX
+  \usepackage{luatexja}
+  \usepackage[haranoaji]{luatexja-preset}
+\fi
+\usepackage{amsmath,amssymb,amsfonts,mathtools}
+\usepackage{amsthm}
+\usepackage{array}
+\usepackage{bm}
+\usepackage{booktabs}
+\usepackage{physics}
+\usepackage{siunitx}
+\usepackage{graphicx}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,positioning,shapes.geometric}
+\usepackage{float}
+\usepackage{here}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{subfiles}
+\usepackage{import}
+\usepackage{xparse}
+\usepackage{enumitem}
+\usepackage{url}
+\usepackage{cite}
+\ifLuaTeX
+  \usepackage[hidelinks]{hyperref}
+\else
+  \usepackage[dvipdfmx,hidelinks]{hyperref}
+\fi
+
+% ----- 2. Fixes & Settings -----
+\AtBeginDocument{\RenewCommandCopy\qty\SI}
+\captionsetup[figure]{labelformat=simple,labelsep=colon,name={図}}
+\captionsetup[table]{labelformat=simple,labelsep=colon,name={表}}
+
+% ----- 3. TColorBox Definitions (User Design) -----
+\usepackage{tcolorbox}
+\tcbuselibrary{skins,breakable,theorems}
+
+% =========================================
+% tcolorbox 互換パッチ
+% =========================================
+\makeatletter
+\pgfkeys{/tcb/.unknown/.code={%
+  \edef\TcbUnknownName{\pgfkeyscurrentname}%
+  \edef\TcbUnknownValue{\pgfkeyscurrentvalue}%
+  \ifx\TcbUnknownValue\@empty%
+    \tcbset{title={\TcbUnknownName}}%
+  \fi
+}}
+\makeatother
+
+% ===== Textbook boxes (tcolorbox) =====
+% --- palette ---
+\definecolor{TBteal}{HTML}{0EA5A4}
+\definecolor{TBblue}{HTML}{2563EB}
+\definecolor{TBgreen}{HTML}{16A34A}
+\definecolor{TBorange}{HTML}{F97316}
+\definecolor{TBred}{HTML}{DC2626}
+\definecolor{TBpurple}{HTML}{7C3AED}
+\definecolor{TBgray}{HTML}{374151}
+\definecolor{TByellow}{HTML}{FDE047}
+\definecolor{TBbrown}{HTML}{D97706}
+\definecolor{TBcyan}{HTML}{04F6F6}
+
+% --- base styles ---
+\tcbset{
+  tbBase/.style n args={1}{%
+    enhanced,
+    breakable,
+    boxrule=0.8pt,
+    arc=1.2mm,
+    left=1.4mm,right=1.4mm,top=1.1mm,bottom=1.1mm,
+    before skip=8pt, after skip=8pt,
+    colback=white,
+    fonttitle=\bfseries,
+    title={#1},
+  },
+  tbFrame/.style n args={2}{%
+    tbBase={#2},
+    frame hidden,
+    colback=#1!3,
+    borderline west={2.2pt}{0pt}{#1!80!black},
+    title filled,
+    colbacktitle=#1!12,
+    coltitle=#1!80!black,
+  },
+  tbSide/.style n args={2}{%
+    tbBase={#2},
+    frame hidden,
+    colback=#1!3,
+    borderline west={2.2pt}{0pt}{#1!80!black},
+    title filled,
+    colbacktitle=#1!12,
+    coltitle=#1!80!black,
+  },
+}
+
+% --- Guard for multiple loading ---
+\makeatletter
+\@ifundefined{protocol@loaded}{%
+  \def\protocol@loaded{}%
+}{%
+  \endinput
+}%
+\makeatother
+
+% --- Environments ---
+\NewDocumentEnvironment{sidebox}{ O{TBgray} m }
+  {\begin{tcolorbox}[tbSide={#1}{#2}]}
+  {\end{tcolorbox}}
+
+\newtcbtheorem[number within=section]{theorem}{定理}
+  {tbFrame={TBblue}{定理}}{th}
+
+\newtcbtheorem[number within=section]{definition}{定義}
+  {tbFrame={TBgreen}{定義}}{def}
+
+\newtcbtheorem[number within=section]{proposition}{命題}
+  {tbFrame={TBgreen}{命題}}{prop}
+
+\newtcbtheorem[number within=section]{example}{例}
+  {tbFrame={TBorange}{例}}{ex}
+
+\newtcbtheorem[number within=section]{remark}{注意}
+  {tbSide={TBred}{注意}}{rm}
+
+\newtcbtheorem[number within=section]{exercise}{演習}
+  {tbFrame={TBpurple}{演習}}{qs}
+
+\newtcbtheorem[number within=section]{exproblem}{例題}
+  {tbFrame={TBteal}{例題}}{exprob}
+
+\newtcbtheorem[number within=section]{character}{性質}
+  {tbFrame={TByellow}{性質}}{cha}
+
+\newtcbtheorem[no counter]{solution}{解答}
+  {tbSide={TBgray}{解答}}{sol}
+
+\newtcbtheorem[no counter]{tproof}{証明}
+  {tbFrame={TBbrown}{証明}}{prf}
+
+% 互換用 sbox
+\makeatletter
+\@ifundefined{sbox}{%
+  \NewDocumentEnvironment{sbox}{ O{TBgray} m }
+    {\begin{tcolorbox}[tbSide={#1}{#2}]}
+    {\end{tcolorbox}}%
+}{}%
+\makeatother

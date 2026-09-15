@@ -1,0 +1,85 @@
+
+% ==============================================
+% preamble.tex
+% ユーザー定義のコマンド、環境、レイアウト設定などを記述
+% ==============================================
+
+% ---- レイアウト設定 (geometry) ----
+\usepackage{geometry}
+\geometry{top=25mm,bottom=25mm,left=25mm,right=25mm}
+
+% ---- 数式番号を章ごとに (1.1) のようにする ----
+\numberwithin{equation}{section}
+
+% ---- mathpad: 数式ブロックにだけ余白を付ける環境 ----
+\newtcolorbox{mathpad}{%
+  enhanced,
+  frame hidden,
+  boxrule=0pt,
+  colback=white,
+  opacityback=0,
+  left=6mm,right=6mm,
+  top=2mm,bottom=2mm,
+  boxsep=0pt,
+  before skip=2pt,
+  after skip=2pt,
+  before upper={\setlength{\jot}{5pt}},
+}
+
+% ---- pstep: (1) みたいな手順表示 ----
+\newlength{\pstepindent}
+\setlength{\pstepindent}{3.2em}
+
+\NewDocumentEnvironment{pstep}{m}{%
+  \par\noindent
+  \makebox[\pstepindent][l]{\textbf{(#1)}}%
+  \par\noindent\hspace*{\pstepindent}%
+  \begin{minipage}[t]{\dimexpr\linewidth-\pstepindent\relax}%
+  \setlength{\abovedisplayskip}{2pt}%
+  \setlength{\belowdisplayskip}{2pt}%
+  \setlength{\abovedisplayshortskip}{1pt}%
+  \setlength{\belowdisplayshortskip}{1pt}%
+  \ignorespaces}
+  {%
+  \end{minipage}\par
+}
+
+% ---- \xoverline{...}: 少し長めの上線（複素共役などで使う） ----
+\makeatletter
+\newsavebox{\xoverline@boxA}
+\newsavebox{\xoverline@boxB}
+\newcommand*\xoverline[2][0.75]{%
+  \sbox{\xoverline@boxA}{$\m@th#2$}%
+  \setbox\xoverline@boxB\null%
+  \ht\xoverline@boxB=\ht\xoverline@boxA%
+  \dp\xoverline@boxB=\dp\xoverline@boxA%
+  \wd\xoverline@boxB=#1\wd\xoverline@boxA%
+  \sbox{\xoverline@boxB}{$\m@th\overline{\copy\xoverline@boxB}$}%
+  \setlength\@tempdima{\wd\xoverline@boxA}%
+  \addtolength\@tempdima{-\wd\xoverline@boxB}%
+  \ifdim\wd\xoverline@boxB<\wd\xoverline@boxA%
+    \rlap{\hskip 0.5\@tempdima\usebox{\xoverline@boxB}}%
+    \usebox{\xoverline@boxA}%
+  \else
+    \usebox{\xoverline@boxB}%
+  \fi
+}
+\makeatother
+
+% ---- tcolorbox 互換: \tcbbreak が無い環境用 ----
+\makeatletter
+\providecommand{\tcbbreak}[1][]{%
+  \par\pagebreak[2]\par
+}
+\makeatother
+
+% ---- その他 演算子定義 ----
+\DeclareMathOperator{\Arg}{Arg}
+
+\newcommand{\df}{\mathrel{\mathrm{df}}}
+\newcommand{\Int}{\mathrm{I}}
+\newcommand{\Up}{\mathrm{Up}}
+\newcommand{\Un}{\mathrm{Un}}
+\newcommand{\true}{\mathrm{真}}
+\newcommand{\false}{\mathrm{偽}}
+\newcommand{\logicnote}[1]{\textcolor{TBred}{#1}}

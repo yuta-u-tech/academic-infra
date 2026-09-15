@@ -1,0 +1,28 @@
+\documentclass[autodetect-engine,dvi=dvipdfmx,ja=standard]{bxjsarticle}
+\usepackage{subfiles}
+
+% =========================================
+% 【重要】パス解決の設定
+% main.tex (src直下) からでも chapters/*.tex からでも
+% 自動的に includes フォルダを探しに行けるようにする
+% =========================================
+\makeatletter
+\providecommand*{\input@path}{}
+\g@addto@macro\input@path{{./includes/}{../includes/}}
+\makeatother
+% =========================================
+
+% 設定読み込み (フォルダ名は不要)
+\input{protocol.tex}
+\input{preamble.tex}
+
+\title{{{COURSE_NAME}}}
+\author{上野優太}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+% 章を追加したらここに \subfile を足す
+
+\end{document}

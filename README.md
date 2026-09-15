@@ -36,19 +36,38 @@ PDF だけで運用しないのは、AI が検索・引用・要約しやすい�
 
 ## 新しい科目を追加する
 
-1. `courses.yml` にエントリを追加する
-2. 科目リポジトリのルートに `templates/academic.yml` をコピーして値を書き換える
-3. `templates/AGENTS.md` をコピーする（**`.gitignore` に入れないこと**。Codex から見えなくなる）
-4. `templates/document.yml` を `.github/workflows/document.yml` にコピーする
-5. `dist/` を `.gitignore` に追加する
-6. REVIEW-ID ヘッダを入れる:
+GitHub リポジトリの作成・`git clone` は事前に済ませておく（このスクリプトは行わない）。
+その上で `scripts/new_course.py` が以下を一括で行う:
 
-   ```bash
-   python3 scripts/add_review_headers.py --repo-root ../<repo> --dry-run   # 確認
-   python3 scripts/add_review_headers.py --repo-root ../<repo>             # 適用
-   ```
+```bash
+python3 scripts/new_course.py \
+  --id mathematical-optimization \
+  --name 数理最適化 \
+  --repo yuta-u-tech/Mathematical_Optimization \
+  --local-path ../Mathematical_Optimization \
+  --alias 最適化 --alias optimization \
+  --dry-run   # 確認してから --dry-run を外して実行
+```
 
-   章スラグを付けたい場合は、科目リポジトリのルートに `review-slugs.yml` を置く。
+- `courses.yml` にエントリを追加
+- `templates/academic.yml` を値を埋めてコピー
+- `templates/AGENTS.md` をコピー（**`.gitignore` に入れないこと**。Codex から見えなくなる）
+- `templates/document.yml` を `.github/workflows/document.yml` にコピー
+- `templates/main.tex` / `preamble.tex` / `protocol.tex` / `gitignore` から `src/` 一式を生成
+
+いずれも `templates/` 配下が正本。個々の科目リポジトリから手でコピーしない。
+
+実行後は `git add -A && git commit && git push`（科目リポジトリ側）と
+`git add courses.yml && git commit && git push`（このリポジトリ側）を自分で行う。
+
+章ができたら REVIEW-ID ヘッダを入れる:
+
+```bash
+python3 scripts/add_review_headers.py --repo-root ../<repo> --dry-run   # 確認
+python3 scripts/add_review_headers.py --repo-root ../<repo>             # 適用
+```
+
+章スラグを付けたい場合は、科目リポジトリのルートに `review-slugs.yml` を置く。
 
 ## ローカルで動かす
 
