@@ -177,3 +177,13 @@ courses:
       - prob stats
     drive_folder: 確率統計
     status: pilot
+
+  information-theory:
+    course_name: 情報理論
+    repository: yuta-u-tech/Information_Theory
+    visibility: private
+    aliases:
+      - 情報理論
+      - information theory
+    drive_folder: 情報理論
+    status: pilot
