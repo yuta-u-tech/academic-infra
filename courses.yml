@@ -187,3 +187,14 @@ courses:
       - information theory
     drive_folder: 情報理論
     status: pilot
+
+  computation-theory:
+    course_name: 計算理論および演習
+    repository: yuta-u-tech/Computation_Theory
+    visibility: private
+    aliases:
+      - 計算理論および演習
+      - 計算理論
+      - computation theory
+    drive_folder: 計算理論および演習
+    status: pilot
