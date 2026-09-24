@@ -127,7 +127,10 @@ Form作成のいずれよりも前に、必ず `toeic_reading_cli.py shuffle --i
   `persuasive`/`pervasive`, `conducive`/`conductive`, `lucrative`/`lucid`,
   `meticulous`/`meritorious`, `exempt`/`exemplary`, `provisional`/`provincial`,
   `substantive`/`substantial`, `indispensable`/`dispensable`, `ambiguous`/`ambitious`
-  （2026-08-18追加）
+  （2026-08-18追加）,
+  `precede`/`proceed`, `elicit`/`illicit`, `tangible`/`tangential`, `appraise`/`apprise`,
+  `dispense`/`disperse`, `historical`/`historic`, `preferential`/`preferable`,
+  `formerly`/`formally`, `latter`/`later`（2026-09-24追加）
 - パターンC（コロケーション）: `raise concerns`, `meet the deadline`, `place an order`,
   `conduct a survey`, `reach a consensus`, `submit an application`, `issue a refund`,
   `extend an invitation`, `address a complaint`, `renew a contract`, `postpone`（文脈適合）,
@@ -148,7 +151,10 @@ Form作成のいずれよりも前に、必ず `toeic_reading_cli.py shuffle --i
   `oversee operations`, `spearhead a campaign`, `waive a requirement`（2026-08-17追加）,
   `defray expenses`, `forge a partnership`, `tender a resignation`, `levy a tax`,
   `accrue interest`, `divert resources`, `underwrite a loan`, `relinquish control`,
-  `commission a study`, `sever ties`（2026-08-18追加）
+  `commission a study`, `sever ties`（2026-08-18追加）,
+  `abide by`, `garner support`, `strike a balance`, `lodge a complaint`, `reap the benefits`,
+  `capitalize on`, `field inquiries`, `tap into a market`, `contingent on`, `adhere to`,
+  `bear fruit`（2026-09-24追加）
 
 ## sentence
 
